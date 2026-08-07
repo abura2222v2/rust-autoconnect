@@ -364,50 +364,61 @@ class App(ctk.CTk):
             time.sleep(3.0)
 
     def check_rust_update(self):
-        try:
-            # 1. Fetch latest buildid from SteamCMD API
-            req = urllib.request.Request("https://api.steamcmd.net/v1/info/252490", headers={'User-Agent': 'Mozilla/5.0'})
-            res = urllib.request.urlopen(req, timeout=5.0)
-            data = json.loads(res.read())
-            latest_buildid = data['data']['252490']['depots']['branches']['public']['buildid']
-            
-            # 2. Find local appmanifest_252490.acf
-            local_buildid = None
-            steam_path = r"C:\Program Files (x86)\Steam"
+        while True:
+            if not self.auto_update.get():
+                time.sleep(60.0)
+                continue
+                
             try:
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
-                    steam_path, _ = winreg.QueryValueEx(key, "SteamPath")
+                # 1. Fetch latest buildid from SteamCMD API
+                req = urllib.request.Request("https://api.steamcmd.net/v1/info/252490", headers={'User-Agent': 'Mozilla/5.0'})
+                res = urllib.request.urlopen(req, timeout=5.0)
+                data = json.loads(res.read())
+                latest_buildid = data['data']['252490']['depots']['branches']['public']['buildid']
+                
+                # 2. Find local appmanifest_252490.acf
+                local_buildid = None
+                steam_path = r"C:\Program Files (x86)\Steam"
+                try:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
+                        steam_path, _ = winreg.QueryValueEx(key, "SteamPath")
+                except Exception:
+                    pass
+                    
+                manifest_path = os.path.join(steam_path, "steamapps", "appmanifest_252490.acf")
+                
+                # If not in main steamapps, check libraryfolders.vdf
+                if not os.path.exists(manifest_path):
+                    lib_folders = os.path.join(steam_path, "steamapps", "libraryfolders.vdf")
+                    if os.path.exists(lib_folders):
+                        with open(lib_folders, "r", encoding="utf-8", errors="ignore") as f:
+                            for line in f:
+                                match = re.search(r'"path"\s+"([^"]+)"', line)
+                                if match:
+                                    p = match.group(1).replace("\\\\", "\\")
+                                    test_path = os.path.join(p, "steamapps", "appmanifest_252490.acf")
+                                    if os.path.exists(test_path):
+                                        manifest_path = test_path
+                                        break
+                                        
+                if os.path.exists(manifest_path):
+                    with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                        match = re.search(r'"buildid"\s+"(\d+)"', content)
+                        if match:
+                            local_buildid = match.group(1)
+                
+                # 3. Compare
+                if local_buildid and latest_buildid and str(local_buildid) != str(latest_buildid):
+                    self.after(0, self.update_ready_label.pack, {"side": "left", "padx": 10})
+                    break # Stop checking once update is found
+                else:
+                    self.after(0, self.update_ready_label.pack_forget)
+                    
             except Exception:
                 pass
                 
-            manifest_path = os.path.join(steam_path, "steamapps", "appmanifest_252490.acf")
-            
-            # If not in main steamapps, check libraryfolders.vdf
-            if not os.path.exists(manifest_path):
-                lib_folders = os.path.join(steam_path, "steamapps", "libraryfolders.vdf")
-                if os.path.exists(lib_folders):
-                    with open(lib_folders, "r", encoding="utf-8", errors="ignore") as f:
-                        for line in f:
-                            match = re.search(r'"path"\s+"([^"]+)"', line)
-                            if match:
-                                p = match.group(1).replace("\\\\", "\\")
-                                test_path = os.path.join(p, "steamapps", "appmanifest_252490.acf")
-                                if os.path.exists(test_path):
-                                    manifest_path = test_path
-                                    break
-                                    
-            if os.path.exists(manifest_path):
-                with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
-                    match = re.search(r'"buildid"\s+"(\d+)"', content)
-                    if match:
-                        local_buildid = match.group(1)
-            
-            # 3. Compare
-            if local_buildid and latest_buildid and str(local_buildid) != str(latest_buildid):
-                self.after(0, self.update_ready_label.pack, {"side": "left", "padx": 10})
-        except Exception:
-            pass
+            time.sleep(60.0)
 
     def t(self, key):
         return LANGUAGES[self.lang].get(key, key)
