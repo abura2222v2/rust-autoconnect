@@ -18,3 +18,9 @@ All notable changes to this project will be documented in this file.
 - Language selector with full names in dropdown, short codes on button
 - Persistent settings and history in `data.json`
 - `run.bat` for quick launch on Windows
+
+## [0.5.6] - 2026-08-08
+
+### Fixed
+- Re-architected log watcher to aggressively loop and reconnect on ANY disconnection, acting as a relentless auto-connect loop.
+- Fixed log tailing blind spot caused by Windows file buffering. Now actively polling \os.path.getsize\ to guarantee immediate real-time reads of the Rust \Player.log\.

@@ -789,19 +789,15 @@ class App(ctk.CTk):
     def monitor_rust_logs(self, target_str):
         log_path = os.path.join(os.environ.get("USERPROFILE", ""), "AppData", "LocalLow", "Facepunch Studios LTD", "Rust", "Player.log")
         
-        # Ждем пока файл логов обновится (Раст запустится и начнет писать новый лог)
-        start_time = time.time()
-        file_ready = False
-        for _ in range(60): # Ждем до 60 секунд
+        # Ждем появления лог файла, если это абсолютно первый запуск игры
+        for _ in range(30):
             if not self.is_polling:
                 return
-            if os.path.exists(log_path) and os.path.getmtime(log_path) > start_time:
-                file_ready = True
+            if os.path.exists(log_path):
                 break
             time.sleep(1.0)
             
-        if not file_ready:
-            # Если лог так и не обновился (мб игра не запустилась), просто выходим
+        if not os.path.exists(log_path):
             return
 
         try:
@@ -810,28 +806,35 @@ class App(ctk.CTk):
                 f.seek(0, 2)
                 
                 while self.is_polling:
+                    try:
+                        current_size = os.path.getsize(log_path)
+                    except Exception:
+                        time.sleep(0.5)
+                        continue
+
                     where = f.tell()
+                    
+                    if current_size == where:
+                        time.sleep(0.5)
+                        continue
+                    elif current_size < where:
+                        # Файл был усечен (перезапуск игры)
+                        f.seek(0, 0)
+                        continue
+                        
+                    # Размер больше, значит есть новые данные
                     line = f.readline()
                     if not line:
-                        # Если файл обнулился (например, игра перезапустилась)
-                        try:
-                            if os.path.getsize(log_path) < where:
-                                f.seek(0, 0)
-                                continue
-                        except Exception:
-                            pass
-                            
-                        time.sleep(0.5)
-                        f.seek(where)
+                        time.sleep(0.1)
                         continue
-                    
-                    # Перехват любого дисконнекта, кика или отмены.
-                    disconnect_keywords = ["Disconnected", "Connection Attempt Failed", "Rejected", "Kicked", "User Cancelled", "Server Closed"]
+                        
+                    # Перехват любого дисконнекта
+                    disconnect_keywords = ["Disconnected", "Connection Attempt Failed", "Rejected", "Kicked", "User Cancelled", "Server Closed", "(disconnect)"]
                     if any(k in line for k in disconnect_keywords):
                         self.log_safe(self.t("log_err"))
                         time.sleep(2.0)
                         if self.is_polling:
-                            # Бот сам рестартует логику! Если сервер рипнулся на вайп, он начнет ждать онлайна.
+                            # Агрессивный рестарт!
                             threading.Thread(target=self.run_logic, args=(target_str,), daemon=True).start()
                             return # Завершаем этот поток мониторинга
         except Exception:

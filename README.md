@@ -7,6 +7,7 @@ A lightweight Windows desktop tool that automatically connects you to Rust game 
 - **Smart DNS Resolution** — paste a domain like `monday.eu.moose.gg:28010` and the app finds the real IP automatically
 - **Smart Query Port Detection** — scans multiple port offsets (+0, +3, +15, +123) to find the server's query port, even behind DDoS protection
 - **Auto-Connect via Steam** — launches Rust through `steam://run/252490//+connect IP:PORT` when the server responds
+- **Relentless Terminator Reconnect** — aggressively monitors `Player.log` in real-time. If the server crashes, wipes, or kicks you, the bot automatically intercepts the disconnect and instantly forces you back in the queue until you manually press Stop.
 - **Server History** — save servers with their names, click to re-select, delete old entries
 - **Rust Process Indicator** — real-time green/red status showing if Rust is currently running on your PC
 - **Multi-Language** — full interface localization: 🇷🇺 Russian, 🇬🇧 English, 🇪🇸 Spanish, 🇫🇷 French, 🇩🇪 German, 🇨🇳 Chinese
