@@ -11,7 +11,7 @@ import glob
 import winreg
 import urllib.request
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 # --- Translations ---
 LANGUAGES = {
     "RU": {
@@ -259,7 +259,7 @@ class App(ctk.CTk):
         self.lang = self.data.get("lang", "RU")
         self.history = self.data.get("history", [])
         self.favorites = self.data.get("favorites", [])
-        self.wait_wipe = ctk.BooleanVar(value=self.data.get("wait_wipe", False))
+        self.favorites = self.data.get("favorites", [])
 
         self.title(self.t("title"))
         self.geometry("800x480")
@@ -322,22 +322,20 @@ class App(ctk.CTk):
         self.connect_btn = ctk.CTkButton(self.input_frame, text=self.t("start"), command=self.start_process, width=120)
         self.connect_btn.grid(row=0, column=2, padx=10, pady=10)
 
-        self.check_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
-        self.check_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
+        # Bottom frame for Auto-Update (at the very bottom of right panel)
+        self.bottom_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
+        self.bottom_frame.grid(row=3, column=0, sticky="e", padx=20, pady=(0, 10))
         
-        self.wait_check = ctk.CTkCheckBox(self.check_frame, text=self.t("wait_wipe"), variable=self.wait_wipe, command=self.save_data)
-        self.wait_check.pack(side="left", padx=10)
-        
-        self.update_check = ctk.CTkCheckBox(self.check_frame, text="Auto-Update Rust", variable=self.auto_update, command=self.save_data)
-        self.update_check.pack(side="left", padx=10)
-        
-        self.update_ready_label = ctk.CTkLabel(self.check_frame, text="Update Ready!", text_color="#50C878", font=ctk.CTkFont(weight="bold"))
+        self.update_ready_label = ctk.CTkLabel(self.bottom_frame, text="Update Ready!", text_color="#50C878", font=ctk.CTkFont(weight="bold"))
         self.update_ready_label.pack(side="left", padx=10)
         self.update_ready_label.pack_forget() # Hide by default
 
-        # Log Frame
+        self.update_check = ctk.CTkCheckBox(self.bottom_frame, text="Auto-Update Rust", variable=self.auto_update, command=self.save_data)
+        self.update_check.pack(side="right", padx=10)
+
+        # Log Frame (Now taking row 1 and row 2 space)
         self.log_frame = ctk.CTkFrame(self.right_panel)
-        self.log_frame.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.log_frame.grid(row=1, column=0, rowspan=2, padx=20, pady=(0, 10), sticky="nsew")
         self.log_frame.grid_columnconfigure(0, weight=1)
         self.log_frame.grid_rowconfigure(0, weight=1)
 
@@ -376,7 +374,7 @@ class App(ctk.CTk):
     def is_force_wipe_window(self):
         # Force wipe is first Thursday of the month, ~18:00 UTC.
         # We consider the "window" to be from Thursday 12:00 UTC to Friday 12:00 UTC.
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Find first Thursday of current month
         first_day = now.replace(day=1)
         # weekday(): 0=Mon, 3=Thu
@@ -516,7 +514,6 @@ class App(ctk.CTk):
     def save_data(self):
         self.data["history"] = self.history
         self.data["favorites"] = self.favorites
-        self.data["wait_wipe"] = self.wait_wipe.get()
         self.data["auto_update"] = self.auto_update.get()
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=4)
@@ -688,7 +685,7 @@ class App(ctk.CTk):
             self.log_safe(self.t("dns_err").format(host=host))
 
         # 2. State Machine for Wipe / Connect
-        wait_wipe_mode = self.wait_wipe.get()
+        wait_wipe_mode = True # Default behavior now
         state = "CHECKING" # CHECKING, WAITING_OFFLINE, WAITING_ONLINE
         
         self.log_safe(self.t("ping_test").format(ip=real_ip, port=port))
