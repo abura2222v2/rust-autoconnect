@@ -731,8 +731,8 @@ class App(ctk.CTk):
             self.log_safe(self.t("dns_err").format(host=host))
 
         # 2. State Machine for Wipe / Connect
-        wait_wipe_mode = True # Default behavior now
-        state = "CHECKING" # CHECKING, WAITING_OFFLINE, WAITING_ONLINE
+        # В Варианте 1 мы больше не ждем, пока сервер выключится. Сразу ждем его онлайна (если он уже онлайн - зайдет).
+        state = "WAITING_ONLINE"
         
         self.log_safe(self.t("ping_test").format(ip=real_ip, port=port))
         
@@ -740,16 +740,7 @@ class App(ctk.CTk):
         is_alive, name, max_players = self.check_server_alive(real_ip, port)
         server_name = name if name else host
         
-        if wait_wipe_mode:
-            if is_alive:
-                state = "WAITING_OFFLINE"
-                self.log_safe(self.t("wait_mode"))
-            else:
-                state = "WAITING_ONLINE"
-                self.log_safe(self.t("wait_down"))
-        else:
-            state = "WAITING_ONLINE"
-            self.log_safe(self.t("start_poll").format(ip=real_ip, port=port))
+        self.log_safe(self.t("start_poll").format(ip=real_ip, port=port))
 
         if not self.is_polling: return
 
@@ -758,12 +749,7 @@ class App(ctk.CTk):
             is_alive, name, max_players = self.check_server_alive(real_ip, port)
             if name: server_name = name
             
-            if state == "WAITING_OFFLINE":
-                if not is_alive:
-                    state = "WAITING_ONLINE"
-                    self.log_safe(self.t("wait_down"))
-            
-            elif state == "WAITING_ONLINE":
+            if state == "WAITING_ONLINE":
                 if is_alive:
                     if max_players > 0:
                         success_count += 1
@@ -773,8 +759,7 @@ class App(ctk.CTk):
                         self.log_safe(self.t("wait_ready"))
                 else:
                     success_count = 0
-                    if not wait_wipe_mode:
-                        self.log_safe(self.t("poll_err").format(sec=POLL_INTERVAL))
+                    self.log_safe(self.t("poll_err").format(sec=POLL_INTERVAL))
                 
                 if success_count >= 2:
                     self.log_safe(self.t("stable"))
@@ -788,7 +773,7 @@ class App(ctk.CTk):
                     self.start_log_monitor(target_str)
                     break
 
-            current_interval = 30.0 if state == "WAITING_OFFLINE" else POLL_INTERVAL
+            current_interval = POLL_INTERVAL
             for _ in range(int(current_interval * 10)):
                 if not self.is_polling:
                     break
@@ -819,12 +804,14 @@ class App(ctk.CTk):
                         f.seek(where)
                         continue
                     
-                    if "Disconnected" in line or "Connection Attempt Failed" in line or "Rejected" in line:
-                        if "returning to main menu" in line or "Failed" in line or "EAC" in line:
+                    if "Disconnected" in line or "Connection Attempt Failed" in line or "Rejected" in line or "Kicked" in line:
+                        if "returning to main menu" in line or "Failed" in line or "EAC" in line or "Server Closed" in line:
                             self.log_safe(self.t("log_err"))
                             time.sleep(2.0)
                             if self.is_polling:
-                                self.launch_game(target_str)
+                                # Бот сам рестартует логику! Если сервер рипнулся на вайп, он начнет ждать онлайна.
+                                threading.Thread(target=self.run_logic, args=(target_str,), daemon=True).start()
+                                return # Завершаем этот поток мониторинга
         except Exception:
             pass
 
