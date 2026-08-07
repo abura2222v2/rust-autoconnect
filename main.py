@@ -828,8 +828,8 @@ class App(ctk.CTk):
                         time.sleep(0.1)
                         continue
                         
-                    # Перехват любого дисконнекта
-                    disconnect_keywords = ["Disconnected", "Connection Attempt Failed", "Rejected", "Kicked", "User Cancelled", "Server Closed", "(disconnect)"]
+                    # Перехват любого дисконнекта, кика, краша или закрытия игры
+                    disconnect_keywords = ["Disconnected", "Connection Attempt Failed", "Rejected", "Kicked", "User Cancelled", "Server Closed", "(disconnect)", "Quitting", "Exception", "Fatal error", "Crash"]
                     if any(k in line for k in disconnect_keywords):
                         self.log_safe(self.t("log_err"))
                         time.sleep(2.0)
