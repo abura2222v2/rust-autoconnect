@@ -11,6 +11,7 @@ import glob
 import winreg
 import urllib.request
 import re
+from datetime import datetime, timedelta
 # --- Translations ---
 LANGUAGES = {
     "RU": {
@@ -363,10 +364,42 @@ class App(ctk.CTk):
                 pass
             time.sleep(3.0)
 
+    def is_rust_running(self):
+        try:
+            if os.name == 'nt':
+                output = subprocess.check_output('tasklist /FI "IMAGENAME eq RustClient.exe" /NH', shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode(errors='ignore')
+                return "RustClient.exe" in output
+        except Exception:
+            pass
+        return False
+
+    def is_force_wipe_window(self):
+        # Force wipe is first Thursday of the month, ~18:00 UTC.
+        # We consider the "window" to be from Thursday 12:00 UTC to Friday 12:00 UTC.
+        now = datetime.utcnow()
+        # Find first Thursday of current month
+        first_day = now.replace(day=1)
+        # weekday(): 0=Mon, 3=Thu
+        days_to_thursday = (3 - first_day.weekday() + 7) % 7
+        first_thursday = first_day + timedelta(days=days_to_thursday)
+        # Window start: 12:00 UTC
+        window_start = first_thursday.replace(hour=12, minute=0, second=0, microsecond=0)
+        window_end = window_start + timedelta(days=1)
+        return window_start <= now <= window_end
+
     def check_rust_update(self):
         while True:
             if not self.auto_update.get():
                 time.sleep(60.0)
+                continue
+                
+            force_wipe = self.is_force_wipe_window()
+            interval = 60.0 if force_wipe else 1200.0 # 1 min on force wipe, 20 min normal
+            
+            # If not force wipe and Rust is running, do not spam API or do updates
+            rust_running = self.is_rust_running()
+            if not force_wipe and rust_running:
+                time.sleep(interval)
                 continue
                 
             try:
@@ -411,6 +444,13 @@ class App(ctk.CTk):
                 # 3. Compare
                 if local_buildid and latest_buildid and str(local_buildid) != str(latest_buildid):
                     self.after(0, self.update_ready_label.pack, {"side": "left", "padx": 10})
+                    
+                    if force_wipe and self.is_rust_running():
+                        self.log_safe("[!] ОБНАРУЖЕН ФОРС-ВАЙП АПДЕЙТ! Закрываем игру для обновления...")
+                        try:
+                            subprocess.run('taskkill /F /IM RustClient.exe', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                        except: pass
+                    
                     break # Stop checking once update is found
                 else:
                     self.after(0, self.update_ready_label.pack_forget)
@@ -418,7 +458,7 @@ class App(ctk.CTk):
             except Exception:
                 pass
                 
-            time.sleep(60.0)
+            time.sleep(interval)
 
     def t(self, key):
         return LANGUAGES[self.lang].get(key, key)
