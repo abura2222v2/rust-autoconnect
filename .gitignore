@@ -16,6 +16,9 @@ TEST_INFRA.md
 data.json
 history.json
 
+# EXE (distributed via GitHub Releases)
+RustAutoConnect.exe
+
 # Python
 __pycache__/
 *.py[cod]
