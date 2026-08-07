@@ -789,21 +789,39 @@ class App(ctk.CTk):
     def monitor_rust_logs(self, target_str):
         log_path = os.path.join(os.environ.get("USERPROFILE", ""), "AppData", "LocalLow", "Facepunch Studios LTD", "Rust", "Player.log")
         
-        # Give Rust a moment to potentially create/clear the log
-        time.sleep(2.0)
-        
-        if not os.path.exists(log_path):
+        # Ждем пока файл логов обновится (Раст запустится и начнет писать новый лог)
+        start_time = time.time()
+        file_ready = False
+        for _ in range(60): # Ждем до 60 секунд
+            if not self.is_polling:
+                return
+            if os.path.exists(log_path) and os.path.getmtime(log_path) > start_time:
+                file_ready = True
+                break
+            time.sleep(1.0)
+            
+        if not file_ready:
+            # Если лог так и не обновился (мб игра не запустилась), просто выходим
             return
 
         try:
             with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                # Прыгаем в конец нового файла
                 f.seek(0, 2)
                 
                 while self.is_polling:
                     where = f.tell()
                     line = f.readline()
                     if not line:
-                        time.sleep(0.1)
+                        # Если файл обнулился (например, игра перезапустилась)
+                        try:
+                            if os.path.getsize(log_path) < where:
+                                f.seek(0, 0)
+                                continue
+                        except Exception:
+                            pass
+                            
+                        time.sleep(0.5)
                         f.seek(where)
                         continue
                     
