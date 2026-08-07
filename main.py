@@ -7,6 +7,7 @@ import os
 import webbrowser
 import socket
 import subprocess
+import glob
 
 # --- Translations ---
 LANGUAGES = {
@@ -38,7 +39,13 @@ LANGUAGES = {
         "del": "Удалить",
         "rust_on": "Rust: Запущен 🟢",
         "rust_off": "Rust: Закрыт 🔴",
-        "save_ip": "[*] Сервер добавлен в историю."
+        "save_ip": "[*] Сервер добавлен в историю.",
+        "wait_wipe": "Ждать вайпа/рестарта",
+        "log_mon": "[*] Читаю логи Rust. При дисконнекте зайду снова мгновенно!",
+        "log_err": "[!] В логе замечен Disconnect! Переподключаюсь...",
+        "wait_mode": "[*] Режим ожидания. Сервер ОНЛАЙН. Ждем, пока он выключится...",
+        "wait_down": "[*] Сервер выключился! Ждем запуска и слотов...",
+        "wait_ready": "[+] Сервер запущен, но слоты 0/0. Ждем прогрузки карты..."
     },
     "EN": {
         "title": "Rust AutoConnect",
@@ -68,7 +75,13 @@ LANGUAGES = {
         "del": "Del",
         "rust_on": "Rust: Running 🟢",
         "rust_off": "Rust: Closed 🔴",
-        "save_ip": "[*] Server added to history."
+        "save_ip": "[*] Server added to history.",
+        "wait_wipe": "Wait for wipe/restart",
+        "log_mon": "[*] Reading Rust logs. Will instantly reconnect on disconnect!",
+        "log_err": "[!] Disconnect detected in log! Reconnecting...",
+        "wait_mode": "[*] Wait mode. Server is ONLINE. Waiting for it to go offline...",
+        "wait_down": "[*] Server went offline! Waiting for startup and slots...",
+        "wait_ready": "[+] Server is up, but slots are 0/0. Waiting for map to load..."
     },
     "ES": {
         "title": "Rust AutoConnect",
@@ -98,7 +111,13 @@ LANGUAGES = {
         "del": "X",
         "rust_on": "Rust: Abierto 🟢",
         "rust_off": "Rust: Cerrado 🔴",
-        "save_ip": "[*] Servidor añadido al historial."
+        "save_ip": "[*] Servidor añadido al historial.",
+        "wait_wipe": "Esperar wipe/reinicio",
+        "log_mon": "[*] Leyendo logs de Rust. ¡Reconectará al instante si te desconectas!",
+        "log_err": "[!] ¡Desconexión detectada! Reconectando...",
+        "wait_mode": "[*] Modo de espera. El servidor está EN LÍNEA. Esperando a que se apague...",
+        "wait_down": "[*] ¡El servidor se apagó! Esperando inicio y slots...",
+        "wait_ready": "[+] Servidor encendido, pero slots 0/0. Esperando mapa..."
     },
     "FR": {
         "title": "Rust AutoConnect",
@@ -128,7 +147,13 @@ LANGUAGES = {
         "del": "X",
         "rust_on": "Rust: Ouvert 🟢",
         "rust_off": "Rust: Fermé 🔴",
-        "save_ip": "[*] Serveur ajouté à l'historique."
+        "save_ip": "[*] Serveur ajouté à l'historique.",
+        "wait_wipe": "Attendre wipe/redémarrage",
+        "log_mon": "[*] Lecture des logs Rust. Reconnexion instantanée en cas de déconnexion !",
+        "log_err": "[!] Déconnexion détectée ! Reconnexion...",
+        "wait_mode": "[*] Mode attente. Serveur EN LIGNE. En attente de son arrêt...",
+        "wait_down": "[*] Le serveur s'est arrêté ! En attente du démarrage et des slots...",
+        "wait_ready": "[+] Serveur en ligne, mais slots 0/0. En attente de la carte..."
     },
     "DE": {
         "title": "Rust AutoConnect",
@@ -158,7 +183,13 @@ LANGUAGES = {
         "del": "X",
         "rust_on": "Rust: Offen 🟢",
         "rust_off": "Rust: Geschlossen 🔴",
-        "save_ip": "[*] Server zum Verlauf hinzugefügt."
+        "save_ip": "[*] Server zum Verlauf hinzugefügt.",
+        "wait_wipe": "Auf Wipe/Neustart warten",
+        "log_mon": "[*] Lese Rust-Logs. Bei Verbindungsabbruch sofortige Neuverbindung!",
+        "log_err": "[!] Verbindungsabbruch erkannt! Verbinde neu...",
+        "wait_mode": "[*] Wartemodus. Server ist ONLINE. Warte darauf, dass er offline geht...",
+        "wait_down": "[*] Server ist offline gegangen! Warte auf Start und Slots...",
+        "wait_ready": "[+] Server läuft, aber Slots 0/0. Warte auf Karte..."
     },
     "ZH": {
         "title": "Rust 自动连接",
@@ -188,7 +219,13 @@ LANGUAGES = {
         "del": "删",
         "rust_on": "Rust: 运行中 🟢",
         "rust_off": "Rust: 已关闭 🔴",
-        "save_ip": "[*] 服务器已添加到历史记录。"
+        "save_ip": "[*] 服务器已添加到历史记录。",
+        "wait_wipe": "等待删档/重启",
+        "log_mon": "[*] 正在读取 Rust 日志。断开时将立即重连！",
+        "log_err": "[!] 检测到断开连接！正在重连...",
+        "wait_mode": "[*] 等待模式。服务器在线。等待其离线...",
+        "wait_down": "[*] 服务器已离线！等待启动和槽位...",
+        "wait_ready": "[+] 服务器已启动，但槽位为 0/0。等待地图加载..."
     }
 }
 
@@ -201,8 +238,11 @@ LANG_MAP = {
     "ZH": "ZH - 中文"
 }
 
+import shutil
+
 # Settings
-DATA_FILE = "data.json"
+appdata_dir = os.path.join(os.environ.get("APPDATA", ""), "RustAutoConnect")
+DATA_FILE = os.path.join(appdata_dir, "data.json")
 POLL_INTERVAL = 3.0 # seconds
 
 ctk.set_appearance_mode("dark")
@@ -215,6 +255,7 @@ class App(ctk.CTk):
         self.data = self.load_data()
         self.lang = self.data.get("lang", "RU")
         self.history = self.data.get("history", [])
+        self.wait_wipe = ctk.BooleanVar(value=self.data.get("wait_wipe", False))
 
         self.title(self.t("title"))
         self.geometry("800x480")
@@ -261,7 +302,7 @@ class App(ctk.CTk):
 
         # Input Frame
         self.input_frame = ctk.CTkFrame(self.right_panel)
-        self.input_frame.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+        self.input_frame.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
         self.input_frame.grid_columnconfigure(0, weight=1)
 
         self.ip_entry = ctk.CTkEntry(self.input_frame, placeholder_text=self.t("placeholder"))
@@ -275,9 +316,16 @@ class App(ctk.CTk):
         self.connect_btn = ctk.CTkButton(self.input_frame, text=self.t("start"), command=self.start_process, width=120)
         self.connect_btn.grid(row=0, column=2, padx=10, pady=10)
 
+        # Checkbox Frame
+        self.check_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
+        self.check_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
+        
+        self.wait_check = ctk.CTkCheckBox(self.check_frame, text=self.t("wait_wipe"), variable=self.wait_wipe, command=self.save_data)
+        self.wait_check.pack(side="left", padx=10)
+
         # Log Frame
         self.log_frame = ctk.CTkFrame(self.right_panel)
-        self.log_frame.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.log_frame.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="nsew")
         self.log_frame.grid_columnconfigure(0, weight=1)
         self.log_frame.grid_rowconfigure(0, weight=1)
 
@@ -315,6 +363,7 @@ class App(ctk.CTk):
         self.title(self.t("title"))
         self.history_label.configure(text=self.t("history"))
         self.ip_entry.configure(placeholder_text=self.t("placeholder"))
+        self.wait_check.configure(text=self.t("wait_wipe"))
         if not self.is_polling:
             self.connect_btn.configure(text=self.t("start"))
         else:
@@ -330,6 +379,18 @@ class App(ctk.CTk):
 
     def load_data(self):
         data = {"lang": "RU", "history": []}
+        
+        # Ensure AppData directory exists
+        os.makedirs(appdata_dir, exist_ok=True)
+        
+        # Migration from old versions (if data.json exists in current folder, move it to AppData)
+        old_data_file = "data.json"
+        if os.path.exists(old_data_file) and not os.path.exists(DATA_FILE):
+            try:
+                shutil.copy2(old_data_file, DATA_FILE)
+            except Exception:
+                pass
+                
         if os.path.exists(DATA_FILE):
             try:
                 with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -346,6 +407,7 @@ class App(ctk.CTk):
 
     def save_data(self):
         self.data["history"] = self.history
+        self.data["wait_wipe"] = self.wait_wipe.get()
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=4)
 
@@ -421,7 +483,7 @@ class App(ctk.CTk):
             pass
         
         server_name = host
-        is_alive, name = self.check_server_alive(real_ip, port)
+        is_alive, name, max_players = self.check_server_alive(real_ip, port)
         if is_alive and name:
             server_name = name
             
@@ -458,17 +520,17 @@ class App(ctk.CTk):
         self.after(0, self.stop_polling)
 
     def check_server_alive(self, ip, base_port):
-        """ Умный поиск Query порта """
+        """ Умный поиск Query порта, возвращает (is_alive, name, max_players) """
         offsets = [0, 15, 3, 1, 123]
         for offset in offsets:
             try:
                 info = a2s.info((ip, base_port + offset), timeout=0.6)
-                return True, info.server_name
+                return True, info.server_name, info.max_players
             except a2s.exceptions.BrokenMessageError:
-                return True, None
+                return True, None, 1 # If BrokenMessage, we assume it's alive and ready
             except Exception:
                 continue
-        return False, None
+        return False, None, 0
 
     def run_logic(self, target):
         try:
@@ -489,54 +551,102 @@ class App(ctk.CTk):
         except socket.gaierror:
             self.log_safe(self.t("dns_err").format(host=host))
 
-        # 2. Initial Ping Check
-        server_name = host
-        self.log_safe(self.t("ping_test").format(ip=real_ip, port=port))
-        is_alive, name = self.check_server_alive(real_ip, port)
+        # 2. State Machine for Wipe / Connect
+        wait_wipe_mode = self.wait_wipe.get()
+        state = "CHECKING" # CHECKING, WAITING_OFFLINE, WAITING_ONLINE
         
-        if is_alive:
-            if name:
-                server_name = name
-                self.log_safe(self.t("server_found").format(name=server_name))
+        self.log_safe(self.t("ping_test").format(ip=real_ip, port=port))
+        
+        # Initial check
+        is_alive, name, max_players = self.check_server_alive(real_ip, port)
+        server_name = name if name else host
+        
+        if wait_wipe_mode:
+            if is_alive:
+                state = "WAITING_OFFLINE"
+                self.log_safe(self.t("wait_mode"))
             else:
-                self.log_safe(self.t("server_alive"))
+                state = "WAITING_ONLINE"
+                self.log_safe(self.t("wait_down"))
         else:
-            self.log_safe(self.t("server_timeout"))
+            state = "WAITING_ONLINE"
+            self.log_safe(self.t("start_poll").format(ip=real_ip, port=port))
 
         if not self.is_polling: return
 
-        # 3. Start Polling Loop
-        self.log_safe(self.t("start_poll").format(ip=real_ip, port=port))
         success_count = 0
-
         while self.is_polling:
-            is_alive, name = self.check_server_alive(real_ip, port)
+            is_alive, name, max_players = self.check_server_alive(real_ip, port)
+            if name: server_name = name
             
-            if is_alive:
-                if name:
-                    server_name = name
-                    self.log_safe(self.t("poll_ans").format(name=server_name))
+            if state == "WAITING_OFFLINE":
+                if not is_alive:
+                    state = "WAITING_ONLINE"
+                    self.log_safe(self.t("wait_down"))
+            
+            elif state == "WAITING_ONLINE":
+                if is_alive:
+                    if max_players > 0:
+                        success_count += 1
+                        self.log_safe(self.t("poll_ans").format(name=server_name))
+                    else:
+                        success_count = 0
+                        self.log_safe(self.t("wait_ready"))
                 else:
-                    self.log_safe(self.t("server_alive"))
-                success_count += 1
-            else:
-                success_count = 0
-                self.log_safe(self.t("poll_err").format(sec=POLL_INTERVAL))
-            
-            if success_count >= 2:
-                self.log_safe(self.t("stable"))
+                    success_count = 0
+                    if not wait_wipe_mode:
+                        self.log_safe(self.t("poll_err").format(sec=POLL_INTERVAL))
                 
-                target_str = f"{real_ip}:{port}"
-                self.after(0, self.add_to_history, target_str, server_name)
-                
-                self.launch_game(target_str)
-                self.stop_polling_safe()
-                break
+                if success_count >= 2:
+                    self.log_safe(self.t("stable"))
+                    
+                    target_str = f"{real_ip}:{port}"
+                    self.after(0, self.add_to_history, target_str, server_name)
+                    
+                    self.launch_game(target_str)
+                    
+                    # Instead of stopping, we transition to Log Monitoring mode
+                    self.start_log_monitor(target_str)
+                    break
 
             for _ in range(int(POLL_INTERVAL * 10)):
                 if not self.is_polling:
                     break
                 time.sleep(0.1)
+
+    def start_log_monitor(self, target_str):
+        self.log_safe(self.t("log_mon"))
+        threading.Thread(target=self.monitor_rust_logs, args=(target_str,), daemon=True).start()
+
+    def monitor_rust_logs(self, target_str):
+        log_path = os.path.join(os.environ.get("USERPROFILE", ""), "AppData", "LocalLow", "Facepunch Studios LTD", "Rust", "Player.log")
+        
+        # Give Rust a moment to potentially create/clear the log
+        time.sleep(2.0)
+        
+        if not os.path.exists(log_path):
+            return
+
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                f.seek(0, 2)
+                
+                while self.is_polling:
+                    where = f.tell()
+                    line = f.readline()
+                    if not line:
+                        time.sleep(0.1)
+                        f.seek(where)
+                        continue
+                    
+                    if "Disconnected" in line or "Connection Attempt Failed" in line or "Rejected" in line:
+                        if "returning to main menu" in line or "Failed" in line or "EAC" in line:
+                            self.log_safe(self.t("log_err"))
+                            time.sleep(2.0)
+                            if self.is_polling:
+                                self.launch_game(target_str)
+        except Exception:
+            pass
 
     def update_entry(self, text):
         state = self.ip_entry.cget("state")
