@@ -1,0 +1,562 @@
+import customtkinter as ctk
+import a2s
+import threading
+import time
+import json
+import os
+import webbrowser
+import socket
+import subprocess
+
+# --- Translations ---
+LANGUAGES = {
+    "RU": {
+        "title": "Rust AutoConnect",
+        "history": "История серверов",
+        "placeholder": "IP:PORT или Домен:PORT",
+        "start": "Запуск",
+        "stop": "Остановить",
+        "ready": "[i] Готово. Введите адрес и нажмите Запуск.",
+        "err_format": "[!] Ошибка: Введите корректный адрес (IP:PORT или Домен:PORT).",
+        "err_port": "[!] Ошибка: Порт должен быть числом.",
+        "dns_resolve": "[*] Резолвинг домена {host}...",
+        "dns_ok": "[✓] Домен разрешен в IP: {ip}",
+        "dns_err": "[x] Ошибка DNS: Не удалось найти IP для {host}",
+        "ping_test": "[-] Умный поиск порта для {ip}:{port}...",
+        "server_found": "[✓] Сервер найден! Имя: {name}",
+        "server_alive": "[✓] Сервер ответил (нестандартный пакет, но жив!).",
+        "server_timeout": "[x] Сервер пока не отвечает (возможно, оффлайн).",
+        "start_poll": "\n[*] Начинаем мониторинг сервера: {ip}:{port}",
+        "poll_stop": "[*] Мониторинг остановлен.",
+        "poll_ping": "[-] Опрос {ip}:{port}...",
+        "poll_ans": "[+] Ответил: {name}",
+        "poll_err": "[x] Нет ответа. Повтор через {sec} сек...",
+        "stable": "[✓] Сервер стабилен. Инициируем подключение...",
+        "launch": "[>] Выполняется команда: {url}",
+        "launch_ok": "[✓] Успешно отправлено в Steam!",
+        "launch_err": "[!] Ошибка запуска Steam: {err}",
+        "del": "Удалить",
+        "rust_on": "Rust: Запущен 🟢",
+        "rust_off": "Rust: Закрыт 🔴",
+        "save_ip": "[*] Сервер добавлен в историю."
+    },
+    "EN": {
+        "title": "Rust AutoConnect",
+        "history": "Server History",
+        "placeholder": "IP:PORT or Domain:PORT",
+        "start": "Start",
+        "stop": "Stop",
+        "ready": "[i] Ready. Enter server address and click Start.",
+        "err_format": "[!] Error: Enter a valid address (IP:PORT or Domain:PORT).",
+        "err_port": "[!] Error: Port must be a number.",
+        "dns_resolve": "[*] Resolving domain {host}...",
+        "dns_ok": "[✓] Domain resolved to IP: {ip}",
+        "dns_err": "[x] DNS Error: Could not find IP for {host}",
+        "ping_test": "[-] Smart port search for {ip}:{port}...",
+        "server_found": "[✓] Server found! Name: {name}",
+        "server_alive": "[✓] Server responded (non-standard packet, but alive!).",
+        "server_timeout": "[x] Server not responding yet (maybe offline).",
+        "start_poll": "\n[*] Starting server monitor: {ip}:{port}",
+        "poll_stop": "[*] Monitoring stopped.",
+        "poll_ping": "[-] Polling {ip}:{port}...",
+        "poll_ans": "[+] Responded: {name}",
+        "poll_err": "[x] No response. Retrying in {sec} sec...",
+        "stable": "[✓] Server stable. Initiating connection...",
+        "launch": "[>] Executing command: {url}",
+        "launch_ok": "[✓] Successfully sent to Steam!",
+        "launch_err": "[!] Steam launch error: {err}",
+        "del": "Del",
+        "rust_on": "Rust: Running 🟢",
+        "rust_off": "Rust: Closed 🔴",
+        "save_ip": "[*] Server added to history."
+    },
+    "ES": {
+        "title": "Rust AutoConnect",
+        "history": "Historial",
+        "placeholder": "IP:PORT o Dominio:PORT",
+        "start": "Iniciar",
+        "stop": "Detener",
+        "ready": "[i] Listo. Ingrese dirección y haga clic en Iniciar.",
+        "err_format": "[!] Error: Dirección inválida.",
+        "err_port": "[!] Error: El puerto debe ser un número.",
+        "dns_resolve": "[*] Resolviendo {host}...",
+        "dns_ok": "[✓] IP resuelta: {ip}",
+        "dns_err": "[x] Error DNS: No se encontró IP.",
+        "ping_test": "[-] Búsqueda inteligente de puerto {ip}:{port}...",
+        "server_found": "[✓] Servidor: {name}",
+        "server_alive": "[✓] El servidor respondió (vivo).",
+        "server_timeout": "[x] Sin respuesta (quizás apagado).",
+        "start_poll": "\n[*] Monitoreando: {ip}:{port}",
+        "poll_stop": "[*] Monitoreo detenido.",
+        "poll_ping": "[-] Consultando {ip}:{port}...",
+        "poll_ans": "[+] Respuesta: {name}",
+        "poll_err": "[x] Sin respuesta. Reintento en {sec}s...",
+        "stable": "[✓] Servidor estable. Conectando...",
+        "launch": "[>] Ejecutando: {url}",
+        "launch_ok": "[✓] ¡Enviado a Steam!",
+        "launch_err": "[!] Error Steam: {err}",
+        "del": "X",
+        "rust_on": "Rust: Abierto 🟢",
+        "rust_off": "Rust: Cerrado 🔴",
+        "save_ip": "[*] Servidor añadido al historial."
+    },
+    "FR": {
+        "title": "Rust AutoConnect",
+        "history": "Historique",
+        "placeholder": "IP:PORT ou Domaine:PORT",
+        "start": "Démarrer",
+        "stop": "Arrêter",
+        "ready": "[i] Prêt. Entrez l'adresse et cliquez sur Démarrer.",
+        "err_format": "[!] Erreur: Adresse invalide.",
+        "err_port": "[!] Erreur: Le port doit être un nombre.",
+        "dns_resolve": "[*] Résolution de {host}...",
+        "dns_ok": "[✓] IP résolue: {ip}",
+        "dns_err": "[x] Erreur DNS.",
+        "ping_test": "[-] Recherche intelligente de port {ip}:{port}...",
+        "server_found": "[✓] Serveur: {name}",
+        "server_alive": "[✓] Le serveur a répondu.",
+        "server_timeout": "[x] Pas de réponse (hors ligne ?).",
+        "start_poll": "\n[*] Surveillance: {ip}:{port}",
+        "poll_stop": "[*] Surveillance arrêtée.",
+        "poll_ping": "[-] Sondage {ip}:{port}...",
+        "poll_ans": "[+] Réponse: {name}",
+        "poll_err": "[x] Pas de réponse. Réessai dans {sec}s...",
+        "stable": "[✓] Serveur stable. Connexion...",
+        "launch": "[>] Exécution: {url}",
+        "launch_ok": "[✓] Envoyé à Steam !",
+        "launch_err": "[!] Erreur Steam: {err}",
+        "del": "X",
+        "rust_on": "Rust: Ouvert 🟢",
+        "rust_off": "Rust: Fermé 🔴",
+        "save_ip": "[*] Serveur ajouté à l'historique."
+    },
+    "DE": {
+        "title": "Rust AutoConnect",
+        "history": "Verlauf",
+        "placeholder": "IP:PORT oder Domain:PORT",
+        "start": "Starten",
+        "stop": "Stoppen",
+        "ready": "[i] Bereit. Adresse eingeben und Starten klicken.",
+        "err_format": "[!] Fehler: Ungültige Adresse.",
+        "err_port": "[!] Fehler: Port muss eine Zahl sein.",
+        "dns_resolve": "[*] Auflösen von {host}...",
+        "dns_ok": "[✓] IP gefunden: {ip}",
+        "dns_err": "[x] DNS Fehler.",
+        "ping_test": "[-] Intelligente Portsuche für {ip}:{port}...",
+        "server_found": "[✓] Server: {name}",
+        "server_alive": "[✓] Server antwortet (am Leben).",
+        "server_timeout": "[x] Keine Antwort (vielleicht offline).",
+        "start_poll": "\n[*] Überwachung: {ip}:{port}",
+        "poll_stop": "[*] Überwachung gestoppt.",
+        "poll_ping": "[-] Abfrage {ip}:{port}...",
+        "poll_ans": "[+] Antwort: {name}",
+        "poll_err": "[x] Keine Antwort. Neustart in {sec}s...",
+        "stable": "[✓] Server stabil. Verbinde...",
+        "launch": "[>] Führe aus: {url}",
+        "launch_ok": "[✓] An Steam gesendet!",
+        "launch_err": "[!] Steam Fehler: {err}",
+        "del": "X",
+        "rust_on": "Rust: Offen 🟢",
+        "rust_off": "Rust: Geschlossen 🔴",
+        "save_ip": "[*] Server zum Verlauf hinzugefügt."
+    },
+    "ZH": {
+        "title": "Rust 自动连接",
+        "history": "服务器历史",
+        "placeholder": "IP:端口 或 域名:端口",
+        "start": "启动",
+        "stop": "停止",
+        "ready": "[i] 准备就绪。输入地址并点击启动。",
+        "err_format": "[!] 错误: 地址格式无效。",
+        "err_port": "[!] 错误: 端口必须是数字。",
+        "dns_resolve": "[*] 正在解析 {host}...",
+        "dns_ok": "[✓] IP 解析成功: {ip}",
+        "dns_err": "[x] DNS 错误: 找不到 IP。",
+        "ping_test": "[-] 智能端口搜索 {ip}:{port}...",
+        "server_found": "[✓] 找到服务器: {name}",
+        "server_alive": "[✓] 服务器已响应 (存活)。",
+        "server_timeout": "[x] 服务器未响应 (可能离线)。",
+        "start_poll": "\n[*] 开始监控: {ip}:{port}",
+        "poll_stop": "[*] 监控已停止。",
+        "poll_ping": "[-] 轮询 {ip}:{port}...",
+        "poll_ans": "[+] 响应: {name}",
+        "poll_err": "[x] 无响应。{sec} 秒后重试...",
+        "stable": "[✓] 服务器稳定。正在连接...",
+        "launch": "[>] 执行命令: {url}",
+        "launch_ok": "[✓] 已成功发送至 Steam!",
+        "launch_err": "[!] Steam 启动错误: {err}",
+        "del": "删",
+        "rust_on": "Rust: 运行中 🟢",
+        "rust_off": "Rust: 已关闭 🔴",
+        "save_ip": "[*] 服务器已添加到历史记录。"
+    }
+}
+
+LANG_MAP = {
+    "RU": "RU - Русский",
+    "EN": "EN - English",
+    "ES": "ES - Español",
+    "FR": "FR - Français",
+    "DE": "DE - Deutsch",
+    "ZH": "ZH - 中文"
+}
+
+# Settings
+DATA_FILE = "data.json"
+POLL_INTERVAL = 3.0 # seconds
+
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        
+        self.data = self.load_data()
+        self.lang = self.data.get("lang", "RU")
+        self.history = self.data.get("history", [])
+
+        self.title(self.t("title"))
+        self.geometry("800x480")
+        self.minsize(700, 400)
+        
+        self.is_polling = False
+        self.poll_thread = None
+
+        # Grid layout
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # Left Panel (History)
+        self.left_panel = ctk.CTkFrame(self, width=240, corner_radius=0)
+        self.left_panel.grid(row=0, column=0, sticky="nsew")
+        self.left_panel.grid_rowconfigure(1, weight=1)
+
+        self.history_label = ctk.CTkLabel(self.left_panel, text=self.t("history"), font=ctk.CTkFont(size=16, weight="bold"))
+        self.history_label.grid(row=0, column=0, padx=20, pady=(20, 10))
+
+        self.history_scroll = ctk.CTkScrollableFrame(self.left_panel)
+        self.history_scroll.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+
+        # Bottom Frame of Left Panel (Language + Status)
+        self.left_bottom_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        self.left_bottom_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
+        self.left_bottom_frame.grid_columnconfigure(1, weight=1)
+
+        # Language Selector
+        self.lang_menu = ctk.CTkOptionMenu(self.left_bottom_frame, values=list(LANG_MAP.values()), 
+                                           command=self.change_lang, width=80)
+        self.lang_menu.grid(row=0, column=0, sticky="w")
+        self.lang_menu.set(self.lang) # Show short code on init
+
+        # Rust Running Status Label
+        self.rust_status_label = ctk.CTkLabel(self.left_bottom_frame, text=self.t("rust_off"), font=ctk.CTkFont(weight="bold"), text_color="#C25A5A")
+        self.rust_status_label.grid(row=0, column=1, sticky="e")
+
+        # Right Panel
+        self.right_panel = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.right_panel.grid(row=0, column=1, sticky="nsew")
+        self.right_panel.grid_columnconfigure(0, weight=1)
+        self.right_panel.grid_rowconfigure(1, weight=1)
+
+        # Input Frame
+        self.input_frame = ctk.CTkFrame(self.right_panel)
+        self.input_frame.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+        self.input_frame.grid_columnconfigure(0, weight=1)
+
+        self.ip_entry = ctk.CTkEntry(self.input_frame, placeholder_text=self.t("placeholder"))
+        self.ip_entry.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+
+        # "+" Save button
+        self.save_btn = ctk.CTkButton(self.input_frame, text="+", width=40, font=ctk.CTkFont(weight="bold"), command=self.save_only)
+        self.save_btn.grid(row=0, column=1, padx=(10, 0), pady=10)
+
+        # Start button
+        self.connect_btn = ctk.CTkButton(self.input_frame, text=self.t("start"), command=self.start_process, width=120)
+        self.connect_btn.grid(row=0, column=2, padx=10, pady=10)
+
+        # Log Frame
+        self.log_frame = ctk.CTkFrame(self.right_panel)
+        self.log_frame.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.log_frame.grid_columnconfigure(0, weight=1)
+        self.log_frame.grid_rowconfigure(0, weight=1)
+
+        self.log_textbox = ctk.CTkTextbox(self.log_frame, state="disabled", font=ctk.CTkFont(family="Consolas", size=13))
+        self.log_textbox.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+
+        self.refresh_history_ui()
+        self.log(self.t("ready"))
+
+        # Start Rust process checker
+        threading.Thread(target=self.check_rust_status_loop, daemon=True).start()
+
+    def check_rust_status_loop(self):
+        while True:
+            try:
+                if os.name == 'nt':
+                    output = subprocess.check_output('tasklist /FI "IMAGENAME eq RustClient.exe" /NH', shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode(errors='ignore')
+                    if "RustClient.exe" in output:
+                        self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_on"), text_color="#50C878"))
+                    else:
+                        self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_off"), text_color="#C25A5A"))
+            except Exception:
+                pass
+            time.sleep(3.0)
+
+    def t(self, key):
+        return LANGUAGES[self.lang].get(key, key)
+
+    def change_lang(self, choice):
+        code = choice.split(" ")[0]
+        self.lang = code
+        self.data["lang"] = self.lang
+        self.save_data()
+        
+        self.title(self.t("title"))
+        self.history_label.configure(text=self.t("history"))
+        self.ip_entry.configure(placeholder_text=self.t("placeholder"))
+        if not self.is_polling:
+            self.connect_btn.configure(text=self.t("start"))
+        else:
+            self.connect_btn.configure(text=self.t("stop"))
+        
+        if "🟢" in self.rust_status_label.cget("text"):
+            self.rust_status_label.configure(text=self.t("rust_on"))
+        else:
+            self.rust_status_label.configure(text=self.t("rust_off"))
+            
+        self.lang_menu.set(code)
+        self.refresh_history_ui()
+
+    def load_data(self):
+        data = {"lang": "RU", "history": []}
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+        elif os.path.exists("history.json"):
+            try:
+                with open("history.json", "r", encoding="utf-8") as f:
+                    data["history"] = json.load(f)
+            except Exception:
+                pass
+        return data
+
+    def save_data(self):
+        self.data["history"] = self.history
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(self.data, f, ensure_ascii=False, indent=4)
+
+    def add_to_history(self, ip_port, name):
+        self.history = [h for h in self.history if h["ip"] != ip_port]
+        self.history.insert(0, {"ip": ip_port, "name": name})
+        self.history = self.history[:20]
+        self.save_data()
+        self.refresh_history_ui()
+
+    def remove_from_history(self, ip_port):
+        self.history = [h for h in self.history if h["ip"] != ip_port]
+        self.save_data()
+        self.refresh_history_ui()
+
+    def refresh_history_ui(self):
+        for widget in self.history_scroll.winfo_children():
+            widget.destroy()
+
+        for item in self.history:
+            frame = ctk.CTkFrame(self.history_scroll, fg_color="transparent")
+            frame.pack(fill="x", pady=2)
+            
+            display_name = item.get('name', 'Rust Server')
+            if len(display_name) > 18:
+                display_name = display_name[:15] + "..."
+            
+            btn_text = f"{item['ip']}\n({display_name})"
+            btn = ctk.CTkButton(frame, text=btn_text, fg_color="#2b2b2b", 
+                                hover_color="#3b3b3b", text_color=("gray80", "white"),
+                                command=lambda i=item['ip']: self.select_history(i))
+            btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
+            del_btn = ctk.CTkButton(frame, text="X", width=25, fg_color="#C25A5A", hover_color="#914141",
+                                    command=lambda i=item['ip']: self.remove_from_history(i))
+            del_btn.pack(side="right")
+
+    def select_history(self, ip_port):
+        if self.is_polling:
+            return
+        self.ip_entry.delete(0, 'end')
+        self.ip_entry.insert(0, ip_port)
+
+    def log(self, msg):
+        self.log_textbox.configure(state="normal")
+        self.log_textbox.insert("end", msg + "\n")
+        self.log_textbox.see("end")
+        self.log_textbox.configure(state="disabled")
+
+    def log_safe(self, msg):
+        self.after(0, self.log, msg)
+
+    def save_only(self):
+        target = self.ip_entry.get().strip()
+        if not target or ":" not in target:
+            self.log(self.t("err_format"))
+            return
+        threading.Thread(target=self.run_save_logic, args=(target,), daemon=True).start()
+
+    def run_save_logic(self, target):
+        try:
+            host, port_str = target.split(":", 1)
+            port = int(port_str)
+        except ValueError:
+            self.log_safe(self.t("err_port"))
+            return
+
+        real_ip = host
+        try:
+            real_ip = socket.gethostbyname(host)
+            self.after(0, lambda: self.update_entry(f"{real_ip}:{port}"))
+        except socket.gaierror:
+            pass
+        
+        server_name = host
+        is_alive, name = self.check_server_alive(real_ip, port)
+        if is_alive and name:
+            server_name = name
+            
+        target_str = f"{real_ip}:{port}"
+        self.after(0, self.add_to_history, target_str, server_name)
+        self.log_safe(self.t("save_ip"))
+
+    def start_process(self):
+        if self.is_polling:
+            self.stop_polling()
+            return
+
+        target = self.ip_entry.get().strip()
+        if not target or ":" not in target:
+            self.log(self.t("err_format"))
+            return
+
+        self.ip_entry.configure(state="disabled")
+        self.connect_btn.configure(text=self.t("stop"), fg_color="#C25A5A", hover_color="#914141")
+        self.is_polling = True
+        
+        # Save IP immediately when clicking Start as well
+        threading.Thread(target=self.run_save_logic, args=(target,), daemon=True).start()
+
+        threading.Thread(target=self.run_logic, args=(target,), daemon=True).start()
+
+    def stop_polling(self):
+        self.is_polling = False
+        self.connect_btn.configure(text=self.t("start"), fg_color=['#3B8ED0', '#1F6AA5'], hover_color=['#36719F', '#144870'])
+        self.ip_entry.configure(state="normal")
+        self.log(self.t("poll_stop"))
+
+    def stop_polling_safe(self):
+        self.after(0, self.stop_polling)
+
+    def check_server_alive(self, ip, base_port):
+        """ Умный поиск Query порта """
+        offsets = [0, 15, 3, 1, 123]
+        for offset in offsets:
+            try:
+                info = a2s.info((ip, base_port + offset), timeout=0.6)
+                return True, info.server_name
+            except a2s.exceptions.BrokenMessageError:
+                return True, None
+            except Exception:
+                continue
+        return False, None
+
+    def run_logic(self, target):
+        try:
+            host, port_str = target.split(":", 1)
+            port = int(port_str)
+        except ValueError:
+            self.log_safe(self.t("err_port"))
+            self.stop_polling_safe()
+            return
+
+        # 1. Resolve DNS
+        real_ip = host
+        try:
+            self.log_safe(self.t("dns_resolve").format(host=host))
+            real_ip = socket.gethostbyname(host)
+            if real_ip != host:
+                self.log_safe(self.t("dns_ok").format(ip=real_ip))
+        except socket.gaierror:
+            self.log_safe(self.t("dns_err").format(host=host))
+
+        # 2. Initial Ping Check
+        server_name = host
+        self.log_safe(self.t("ping_test").format(ip=real_ip, port=port))
+        is_alive, name = self.check_server_alive(real_ip, port)
+        
+        if is_alive:
+            if name:
+                server_name = name
+                self.log_safe(self.t("server_found").format(name=server_name))
+            else:
+                self.log_safe(self.t("server_alive"))
+        else:
+            self.log_safe(self.t("server_timeout"))
+
+        if not self.is_polling: return
+
+        # 3. Start Polling Loop
+        self.log_safe(self.t("start_poll").format(ip=real_ip, port=port))
+        success_count = 0
+
+        while self.is_polling:
+            is_alive, name = self.check_server_alive(real_ip, port)
+            
+            if is_alive:
+                if name:
+                    server_name = name
+                    self.log_safe(self.t("poll_ans").format(name=server_name))
+                else:
+                    self.log_safe(self.t("server_alive"))
+                success_count += 1
+            else:
+                success_count = 0
+                self.log_safe(self.t("poll_err").format(sec=POLL_INTERVAL))
+            
+            if success_count >= 2:
+                self.log_safe(self.t("stable"))
+                
+                target_str = f"{real_ip}:{port}"
+                self.after(0, self.add_to_history, target_str, server_name)
+                
+                self.launch_game(target_str)
+                self.stop_polling_safe()
+                break
+
+            for _ in range(int(POLL_INTERVAL * 10)):
+                if not self.is_polling:
+                    break
+                time.sleep(0.1)
+
+    def update_entry(self, text):
+        state = self.ip_entry.cget("state")
+        self.ip_entry.configure(state="normal")
+        self.ip_entry.delete(0, 'end')
+        self.ip_entry.insert(0, text)
+        self.ip_entry.configure(state=state)
+
+    def launch_game(self, target):
+        url = f"steam://run/252490//+connect {target}"
+        self.log_safe(self.t("launch").format(url=url))
+        try:
+            if os.name == 'nt':
+                os.startfile(url)
+            else:
+                webbrowser.open(url)
+            self.log_safe(self.t("launch_ok"))
+        except Exception as e:
+            self.log_safe(self.t("launch_err").format(err=e))
+
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()

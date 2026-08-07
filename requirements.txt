@@ -1,0 +1,2 @@
+customtkinter
+python-a2s

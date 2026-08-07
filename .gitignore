@@ -1,0 +1,39 @@
+# AI Agent configs
+.agents/
+.gemini/
+.geminiignore
+GEMINI.md
+GEMINI_CLI_*.json
+GEMINI_CLI_*.toml
+ANTIGRAVITY_CLI_*.json
+ORIGINAL_REQUEST.md
+PROJECT.md
+README_RU.md
+SECURITY_SETUP_RU.md
+TEST_INFRA.md
+
+# User data (created at runtime)
+data.json
+history.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+
+# PyInstaller
+*.spec
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
