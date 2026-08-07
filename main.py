@@ -8,7 +8,9 @@ import webbrowser
 import socket
 import subprocess
 import glob
-
+import winreg
+import urllib.request
+import re
 # --- Translations ---
 LANGUAGES = {
     "RU": {
@@ -255,6 +257,7 @@ class App(ctk.CTk):
         self.data = self.load_data()
         self.lang = self.data.get("lang", "RU")
         self.history = self.data.get("history", [])
+        self.favorites = self.data.get("favorites", [])
         self.wait_wipe = ctk.BooleanVar(value=self.data.get("wait_wipe", False))
 
         self.title(self.t("title"))
@@ -263,6 +266,7 @@ class App(ctk.CTk):
         
         self.is_polling = False
         self.poll_thread = None
+        self.auto_update = ctk.BooleanVar(value=self.data.get("auto_update", True))
 
         # Grid layout
         self.grid_columnconfigure(1, weight=1)
@@ -305,23 +309,30 @@ class App(ctk.CTk):
         self.input_frame.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
         self.input_frame.grid_columnconfigure(0, weight=1)
 
-        self.ip_entry = ctk.CTkEntry(self.input_frame, placeholder_text=self.t("placeholder"))
+        self.ip_entry = ctk.CTkComboBox(self.input_frame, values=[f"{f['name']} ({f['ip']})" for f in self.favorites])
+        self.ip_entry.set("") # Empty by default
         self.ip_entry.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        # "+" Save button
-        self.save_btn = ctk.CTkButton(self.input_frame, text="+", width=40, font=ctk.CTkFont(weight="bold"), command=self.save_only)
+        # "Fav" Save button
+        self.save_btn = ctk.CTkButton(self.input_frame, text="⭐", width=40, font=ctk.CTkFont(weight="bold"), command=self.save_favorite_dialog)
         self.save_btn.grid(row=0, column=1, padx=(10, 0), pady=10)
 
         # Start button
         self.connect_btn = ctk.CTkButton(self.input_frame, text=self.t("start"), command=self.start_process, width=120)
         self.connect_btn.grid(row=0, column=2, padx=10, pady=10)
 
-        # Checkbox Frame
         self.check_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
         self.check_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
         
         self.wait_check = ctk.CTkCheckBox(self.check_frame, text=self.t("wait_wipe"), variable=self.wait_wipe, command=self.save_data)
         self.wait_check.pack(side="left", padx=10)
+        
+        self.update_check = ctk.CTkCheckBox(self.check_frame, text="Auto-Update Rust", variable=self.auto_update, command=self.save_data)
+        self.update_check.pack(side="left", padx=10)
+        
+        self.update_ready_label = ctk.CTkLabel(self.check_frame, text="Update Ready!", text_color="#50C878", font=ctk.CTkFont(weight="bold"))
+        self.update_ready_label.pack(side="left", padx=10)
+        self.update_ready_label.pack_forget() # Hide by default
 
         # Log Frame
         self.log_frame = ctk.CTkFrame(self.right_panel)
@@ -335,8 +346,9 @@ class App(ctk.CTk):
         self.refresh_history_ui()
         self.log(self.t("ready"))
 
-        # Start Rust process checker
+        # Start Rust process checker and update checker
         threading.Thread(target=self.check_rust_status_loop, daemon=True).start()
+        threading.Thread(target=self.check_rust_update, daemon=True).start()
 
     def check_rust_status_loop(self):
         while True:
@@ -351,6 +363,52 @@ class App(ctk.CTk):
                 pass
             time.sleep(3.0)
 
+    def check_rust_update(self):
+        try:
+            # 1. Fetch latest buildid from SteamCMD API
+            req = urllib.request.Request("https://api.steamcmd.net/v1/info/252490", headers={'User-Agent': 'Mozilla/5.0'})
+            res = urllib.request.urlopen(req, timeout=5.0)
+            data = json.loads(res.read())
+            latest_buildid = data['data']['252490']['depots']['branches']['public']['buildid']
+            
+            # 2. Find local appmanifest_252490.acf
+            local_buildid = None
+            steam_path = r"C:\Program Files (x86)\Steam"
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
+                    steam_path, _ = winreg.QueryValueEx(key, "SteamPath")
+            except Exception:
+                pass
+                
+            manifest_path = os.path.join(steam_path, "steamapps", "appmanifest_252490.acf")
+            
+            # If not in main steamapps, check libraryfolders.vdf
+            if not os.path.exists(manifest_path):
+                lib_folders = os.path.join(steam_path, "steamapps", "libraryfolders.vdf")
+                if os.path.exists(lib_folders):
+                    with open(lib_folders, "r", encoding="utf-8", errors="ignore") as f:
+                        for line in f:
+                            match = re.search(r'"path"\s+"([^"]+)"', line)
+                            if match:
+                                p = match.group(1).replace("\\\\", "\\")
+                                test_path = os.path.join(p, "steamapps", "appmanifest_252490.acf")
+                                if os.path.exists(test_path):
+                                    manifest_path = test_path
+                                    break
+                                    
+            if os.path.exists(manifest_path):
+                with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                    match = re.search(r'"buildid"\s+"(\d+)"', content)
+                    if match:
+                        local_buildid = match.group(1)
+            
+            # 3. Compare
+            if local_buildid and latest_buildid and str(local_buildid) != str(latest_buildid):
+                self.after(0, self.update_ready_label.pack, {"side": "left", "padx": 10})
+        except Exception:
+            pass
+
     def t(self, key):
         return LANGUAGES[self.lang].get(key, key)
 
@@ -362,7 +420,6 @@ class App(ctk.CTk):
         
         self.title(self.t("title"))
         self.history_label.configure(text=self.t("history"))
-        self.ip_entry.configure(placeholder_text=self.t("placeholder"))
         self.wait_check.configure(text=self.t("wait_wipe"))
         if not self.is_polling:
             self.connect_btn.configure(text=self.t("start"))
@@ -407,7 +464,9 @@ class App(ctk.CTk):
 
     def save_data(self):
         self.data["history"] = self.history
+        self.data["favorites"] = self.favorites
         self.data["wait_wipe"] = self.wait_wipe.get()
+        self.data["auto_update"] = self.auto_update.get()
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=4)
 
@@ -448,8 +507,7 @@ class App(ctk.CTk):
     def select_history(self, ip_port):
         if self.is_polling:
             return
-        self.ip_entry.delete(0, 'end')
-        self.ip_entry.insert(0, ip_port)
+        self.ip_entry.set(ip_port)
 
     def log(self, msg):
         self.log_textbox.configure(state="normal")
@@ -460,8 +518,35 @@ class App(ctk.CTk):
     def log_safe(self, msg):
         self.after(0, self.log, msg)
 
-    def save_only(self):
+    def save_favorite_dialog(self):
         target = self.ip_entry.get().strip()
+        if not target: return
+        
+        # If it's already a formatted string "Name (IP:PORT)", extract IP
+        if "(" in target and ")" in target:
+            target = target.split("(")[-1].replace(")", "").strip()
+            
+        dialog = ctk.CTkInputDialog(text="Enter a name for this favorite server:", title="Save Favorite")
+        name = dialog.get_input()
+        if name:
+            self.favorites = [f for f in self.favorites if f["ip"] != target]
+            self.favorites.append({"name": name, "ip": target})
+            self.save_data()
+            
+            # Update combobox
+            self.ip_entry.configure(values=[f"{f['name']} ({f['ip']})" for f in self.favorites])
+            self.ip_entry.set(f"{name} ({target})")
+            self.log_safe(f"[*] Saved to favorites: {name}")
+
+    def get_target_ip(self):
+        target = self.ip_entry.get().strip()
+        # If it's selected from combobox, it looks like "Name (IP:PORT)"
+        if "(" in target and ")" in target:
+            target = target.split("(")[-1].replace(")", "").strip()
+        return target
+
+    def save_only(self):
+        target = self.get_target_ip()
         if not target or ":" not in target:
             self.log(self.t("err_format"))
             return
@@ -496,7 +581,7 @@ class App(ctk.CTk):
             self.stop_polling()
             return
 
-        target = self.ip_entry.get().strip()
+        target = self.get_target_ip()
         if not target or ":" not in target:
             self.log(self.t("err_format"))
             return
@@ -609,7 +694,8 @@ class App(ctk.CTk):
                     self.start_log_monitor(target_str)
                     break
 
-            for _ in range(int(POLL_INTERVAL * 10)):
+            current_interval = 30.0 if state == "WAITING_OFFLINE" else POLL_INTERVAL
+            for _ in range(int(current_interval * 10)):
                 if not self.is_polling:
                     break
                 time.sleep(0.1)
@@ -651,8 +737,7 @@ class App(ctk.CTk):
     def update_entry(self, text):
         state = self.ip_entry.cget("state")
         self.ip_entry.configure(state="normal")
-        self.ip_entry.delete(0, 'end')
-        self.ip_entry.insert(0, text)
+        self.ip_entry.set(text)
         self.ip_entry.configure(state=state)
 
     def launch_game(self, target):
