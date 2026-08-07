@@ -1,6 +1,6 @@
 [Setup]
 AppName=Rust AutoConnect
-AppVersion=0.4.0
+AppVersion=0.5.0
 DefaultDirName={autopf}\RustAutoConnect
 DefaultGroupName=Rust AutoConnect
 UninstallDisplayIcon={app}\RustAutoConnect.exe

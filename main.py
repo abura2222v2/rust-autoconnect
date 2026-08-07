@@ -276,17 +276,21 @@ class App(ctk.CTk):
         # Left Panel (History)
         self.left_panel = ctk.CTkFrame(self, width=240, corner_radius=0)
         self.left_panel.grid(row=0, column=0, sticky="nsew")
-        self.left_panel.grid_rowconfigure(1, weight=1)
+        self.left_panel.grid_rowconfigure(2, weight=1)
 
         self.history_label = ctk.CTkLabel(self.left_panel, text=self.t("history"), font=ctk.CTkFont(size=16, weight="bold"))
-        self.history_label.grid(row=0, column=0, padx=20, pady=(20, 10))
+        self.history_label.grid(row=0, column=0, padx=20, pady=(20, 5))
+
+        self.filter_var = ctk.StringVar(value="All Servers")
+        self.filter_menu = ctk.CTkOptionMenu(self.left_panel, values=["All Servers", "Favorites"], variable=self.filter_var, command=lambda e: self.refresh_history_ui())
+        self.filter_menu.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
 
         self.history_scroll = ctk.CTkScrollableFrame(self.left_panel)
-        self.history_scroll.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        self.history_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=0)
 
         # Bottom Frame of Left Panel (Language + Status)
         self.left_bottom_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
-        self.left_bottom_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
+        self.left_bottom_frame.grid(row=3, column=0, sticky="ew", padx=10, pady=10)
         self.left_bottom_frame.grid_columnconfigure(1, weight=1)
 
         # Language Selector
@@ -314,13 +318,9 @@ class App(ctk.CTk):
         self.ip_entry.set("") # Empty by default
         self.ip_entry.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        # "Fav" Save button
-        self.save_btn = ctk.CTkButton(self.input_frame, text="⭐", width=40, font=ctk.CTkFont(weight="bold"), command=self.save_favorite_dialog)
-        self.save_btn.grid(row=0, column=1, padx=(10, 0), pady=10)
-
         # Start button
         self.connect_btn = ctk.CTkButton(self.input_frame, text=self.t("start"), command=self.start_process, width=120)
-        self.connect_btn.grid(row=0, column=2, padx=10, pady=10)
+        self.connect_btn.grid(row=0, column=1, padx=10, pady=10)
 
         # Bottom frame for Auto-Update (at the very bottom of right panel)
         self.bottom_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
@@ -392,7 +392,7 @@ class App(ctk.CTk):
                 continue
                 
             force_wipe = self.is_force_wipe_window()
-            interval = 60.0 if force_wipe else 1200.0 # 1 min on force wipe, 20 min normal
+            interval = 25.0 if force_wipe else 1800.0 # 25 sec on force wipe, 30 min normal
             
             # If not force wipe and Rust is running, do not spam API or do updates
             rust_running = self.is_rust_running()
@@ -448,8 +448,27 @@ class App(ctk.CTk):
                         try:
                             subprocess.run('taskkill /F /IM RustClient.exe', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
                         except: pass
-                    
-                    break # Stop checking once update is found
+                    else:
+                        self.log_safe("[!] Обновление найдено. Ждем скачивания...")
+
+                    # Ждем, пока Steam докачает обнову
+                    while True:
+                        time.sleep(20.0)
+                        
+                        new_local = None
+                        if os.path.exists(manifest_path):
+                            with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
+                                match2 = re.search(r'"buildid"\s+"(\d+)"', f.read())
+                                if match2:
+                                    new_local = match2.group(1)
+                                    
+                        if new_local and str(new_local) == str(latest_buildid):
+                            self.log_safe("[+] Обновление установлено! Запускаем Rust...")
+                            self.after(0, self.update_ready_label.pack_forget)
+                            webbrowser.open("steam://run/252490")
+                            # Небольшая пауза, чтобы не дублировать
+                            time.sleep(120.0)
+                            break
                 else:
                     self.after(0, self.update_ready_label.pack_forget)
                     
@@ -533,8 +552,18 @@ class App(ctk.CTk):
     def refresh_history_ui(self):
         for widget in self.history_scroll.winfo_children():
             widget.destroy()
-
+            
+        show_favs_only = (self.filter_var.get() == "Favorites")
+        
+        # We assume self.history is ordered by date added (newest first).
+        # We will iterate through self.history.
         for item in self.history:
+            ip = item['ip']
+            is_fav = any(f["ip"] == ip for f in self.favorites)
+            
+            if show_favs_only and not is_fav:
+                continue
+
             frame = ctk.CTkFrame(self.history_scroll, fg_color="transparent")
             frame.pack(fill="x", pady=2)
             
@@ -542,15 +571,32 @@ class App(ctk.CTk):
             if len(display_name) > 18:
                 display_name = display_name[:15] + "..."
             
-            btn_text = f"{item['ip']}\n({display_name})"
+            btn_text = f"{ip}\n({display_name})"
             btn = ctk.CTkButton(frame, text=btn_text, fg_color="#2b2b2b", 
                                 hover_color="#3b3b3b", text_color=("gray80", "white"),
-                                command=lambda i=item['ip']: self.select_history(i))
+                                command=lambda i=ip: self.select_history(i))
             btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
+            
+            fav_text = "⭐" if is_fav else "☆"
+            fav_color = "#3B8ED0" if is_fav else "#555555"
+            fav_btn = ctk.CTkButton(frame, text=fav_text, width=25, fg_color=fav_color,
+                                    command=lambda i=ip, n=item.get('name', 'Rust Server'): self.toggle_favorite(i, n))
+            fav_btn.pack(side="left", padx=(0, 5))
 
             del_btn = ctk.CTkButton(frame, text="X", width=25, fg_color="#C25A5A", hover_color="#914141",
-                                    command=lambda i=item['ip']: self.remove_from_history(i))
+                                    command=lambda i=ip: self.remove_from_history(i))
             del_btn.pack(side="right")
+
+    def toggle_favorite(self, ip_port, name):
+        is_fav = any(f["ip"] == ip_port for f in self.favorites)
+        if is_fav:
+            self.favorites = [f for f in self.favorites if f["ip"] != ip_port]
+        else:
+            self.favorites.append({"name": name, "ip": ip_port})
+        self.save_data()
+        self.refresh_history_ui()
+        # Update combo box values
+        self.ip_entry.configure(values=[f"{f['name']} ({f['ip']})" for f in self.favorites])
 
     def select_history(self, ip_port):
         if self.is_polling:
