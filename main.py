@@ -539,7 +539,8 @@ class App(ctk.CTk):
 
     def add_to_history(self, ip_port, name):
         self.history = [h for h in self.history if h["ip"] != ip_port]
-        self.history.insert(0, {"ip": ip_port, "name": name})
+        self.history.insert(0, {"ip": ip_port, "name": name, "added_at": int(time.time())})
+        self.history = sorted(self.history, key=lambda x: x.get("added_at", 0), reverse=True)
         self.history = self.history[:20]
         self.save_data()
         self.refresh_history_ui()
@@ -555,8 +556,8 @@ class App(ctk.CTk):
             
         show_favs_only = (self.filter_var.get() == "Favorites")
         
-        # We assume self.history is ordered by date added (newest first).
-        # We will iterate through self.history.
+        # Sort history by timestamp descending
+        self.history = sorted(self.history, key=lambda x: x.get("added_at", 0), reverse=True)
         for item in self.history:
             ip = item['ip']
             is_fav = any(f["ip"] == ip for f in self.favorites)
@@ -577,13 +578,15 @@ class App(ctk.CTk):
                                 command=lambda i=ip: self.select_history(i))
             btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
             
+            btn_font = ctk.CTkFont(family="Arial", size=14)
+            
             fav_text = "⭐" if is_fav else "☆"
             fav_color = "#3B8ED0" if is_fav else "#555555"
-            fav_btn = ctk.CTkButton(frame, text=fav_text, width=25, fg_color=fav_color,
+            fav_btn = ctk.CTkButton(frame, text=fav_text, width=28, height=28, font=btn_font, fg_color=fav_color,
                                     command=lambda i=ip, n=item.get('name', 'Rust Server'): self.toggle_favorite(i, n))
             fav_btn.pack(side="left", padx=(0, 5))
 
-            del_btn = ctk.CTkButton(frame, text="X", width=25, fg_color="#C25A5A", hover_color="#914141",
+            del_btn = ctk.CTkButton(frame, text="X", width=28, height=28, font=btn_font, fg_color="#C25A5A", hover_color="#914141",
                                     command=lambda i=ip: self.remove_from_history(i))
             del_btn.pack(side="right")
 
@@ -804,14 +807,15 @@ class App(ctk.CTk):
                         f.seek(where)
                         continue
                     
-                    if "Disconnected" in line or "Connection Attempt Failed" in line or "Rejected" in line or "Kicked" in line:
-                        if "returning to main menu" in line or "Failed" in line or "EAC" in line or "Server Closed" in line:
-                            self.log_safe(self.t("log_err"))
-                            time.sleep(2.0)
-                            if self.is_polling:
-                                # Бот сам рестартует логику! Если сервер рипнулся на вайп, он начнет ждать онлайна.
-                                threading.Thread(target=self.run_logic, args=(target_str,), daemon=True).start()
-                                return # Завершаем этот поток мониторинга
+                    # Перехват любого дисконнекта, кика или отмены.
+                    disconnect_keywords = ["Disconnected", "Connection Attempt Failed", "Rejected", "Kicked", "User Cancelled", "Server Closed"]
+                    if any(k in line for k in disconnect_keywords):
+                        self.log_safe(self.t("log_err"))
+                        time.sleep(2.0)
+                        if self.is_polling:
+                            # Бот сам рестартует логику! Если сервер рипнулся на вайп, он начнет ждать онлайна.
+                            threading.Thread(target=self.run_logic, args=(target_str,), daemon=True).start()
+                            return # Завершаем этот поток мониторинга
         except Exception:
             pass
 
