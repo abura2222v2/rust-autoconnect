@@ -13,10 +13,11 @@ class ProcessMonitor:
             # Check cached PID first (O(1) OS check)
             if self.cached_pid is not None:
                 try:
-                    if psutil.pid_exists(self.cached_pid):
+                    p = psutil.Process(self.cached_pid)
+                    if p.name() == 'RustClient.exe':
                         return True
                     else:
-                        self.cached_pid = None # Process died
+                        self.cached_pid = None
                 except Exception:
                     self.cached_pid = None
             

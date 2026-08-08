@@ -8,7 +8,7 @@ from .config import config
 
 class HistoryStore:
     def __init__(self):
-        self.data: Dict[str, Any] = {"lang": "RU", "history": [], "favorites": [], "auto_update": True}
+        self.data: Dict[str, Any] = {"lang": "RU", "history": [], "favorites": [], "auto_update": True, "minimize_to_tray": False, "rust_path": "", "swarm_enabled": True, "allow_benchmark_copy": False}
         self.load()
 
     def load(self):
@@ -33,7 +33,7 @@ class HistoryStore:
                     shutil.copy2(data_file, corrupted_file)
                 except Exception:
                     pass
-                self.data = {"lang": "RU", "history": [], "favorites": [], "auto_update": True}
+                self.data = {"lang": "RU", "history": [], "favorites": [], "auto_update": True, "minimize_to_tray": False, "rust_path": ""}
             except Exception:
                 pass
         elif Path("history.json").exists():
@@ -114,6 +114,30 @@ class HistoryStore:
 
     def set_auto_update(self, val: bool):
         self.data["auto_update"] = val
+        self.save()
+
+    def get_minimize_to_tray(self) -> bool:
+        return self.data.get("minimize_to_tray", False)
+
+    def set_minimize_to_tray(self, val: bool):
+        self.data["minimize_to_tray"] = val
+        self.save()
+
+    def get_rust_path(self) -> str:
+        return self.data.get("rust_path", "")
+
+    def get_swarm_enabled(self) -> bool:
+        return self.data.get("swarm_enabled", True)
+
+    def set_swarm_enabled(self, val: bool):
+        self.data["swarm_enabled"] = val
+        self.save()
+
+    def get_allow_benchmark_copy(self) -> bool:
+        return self.data.get("allow_benchmark_copy", False)
+
+    def set_allow_benchmark_copy(self, val: bool):
+        self.data["allow_benchmark_copy"] = val
         self.save()
 
 history_store = HistoryStore()

@@ -68,11 +68,11 @@ def get_local_buildid() -> Optional[str]:
     return None
 
 def fetch_latest_buildid() -> Optional[str]:
-    """Fetch latest Rust buildid from SteamCMD API."""
     try:
         req = urllib.request.Request("https://api.steamcmd.net/v1/info/252490", headers={'User-Agent': 'Mozilla/5.0'})
-        res = urllib.request.urlopen(req, timeout=5.0)
-        data = json.loads(res.read().decode('utf-8'))
-        return data['data']['252490']['depots']['branches']['public']['buildid']
+        with urllib.request.urlopen(req, timeout=5.0) as res:
+            data = json.loads(res.read().decode('utf-8'))
+            buildid = data['data']['252490']['depots']['branches']['public']['buildid']
+            return str(buildid)
     except Exception:
         return None

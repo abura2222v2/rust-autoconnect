@@ -35,7 +35,8 @@ class MainWindow(ctk.CTk):
         self.auto_update = ctk.BooleanVar(value=self.is_auto_update_enabled)
 
         self.tray_icon = None
-        self.protocol('WM_DELETE_WINDOW', self.withdraw_window)
+        self.protocol('WM_DELETE_WINDOW', self.shutdown)
+        self.bind('<Unmap>', self.on_unmap)
 
         # Grid layout
         self.grid_columnconfigure(1, weight=1)
@@ -74,15 +75,14 @@ class MainWindow(ctk.CTk):
         self.left_bottom_frame.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
         self.left_bottom_frame.grid_columnconfigure(1, weight=1)
 
-        # Language Selector
-        self.lang_menu = ctk.CTkOptionMenu(
+        # Settings Button
+        self.settings_btn = ctk.CTkButton(
             self.left_bottom_frame,
-            values=list(I18nManager.LANG_MAP.values()),
-            command=self.change_lang,
-            width=80
+            text="⚙",
+            width=40,
+            command=self.open_settings
         )
-        self.lang_menu.grid(row=0, column=0, sticky="w")
-        self.lang_menu.set(self.lang)
+        self.settings_btn.grid(row=0, column=0, sticky="w")
 
         # Rust Running Status Label
         self.rust_status_label = ctk.CTkLabel(
@@ -90,11 +90,32 @@ class MainWindow(ctk.CTk):
         )
         self.rust_status_label.grid(row=0, column=1, sticky="e")
 
-        # Right Panel
-        self.right_panel = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.right_panel.grid(row=0, column=1, sticky="nsew")
+        # Right Panel (Tabview)
+        self.tabs = ctk.CTkTabview(self)
+        self.tabs.grid(row=0, column=1, padx=20, pady=(0, 20), sticky="nsew")
+        self.tabs.add(self.t("tab_home"))
+        self.tabs.add(self.t("tab_bench"))
+
+        # Home Tab
+        self.right_panel = self.tabs.tab(self.t("tab_home"))
         self.right_panel.grid_columnconfigure(0, weight=1)
         self.right_panel.grid_rowconfigure(1, weight=1)
+        
+        # Benchmark Tab
+        self.benchmark_panel = self.tabs.tab(self.t("tab_bench"))
+        self.benchmark_panel.grid_columnconfigure(0, weight=1)
+        
+        self.bench_btn = ctk.CTkButton(self.benchmark_panel, text=self.t("run_test"), command=self._on_run_test_click, fg_color="#3B8ED0")
+        self.bench_btn.pack(pady=20)
+        
+        self.top_btn = ctk.CTkButton(self.benchmark_panel, text=self.t("top_30"), command=self.open_leaderboard, fg_color="#FADA5E", text_color="black")
+        self.top_btn.pack(pady=10)
+        
+        self.hardware_label = ctk.CTkLabel(self.benchmark_panel, text=self.t("loading_hw"), justify="left", font=ctk.CTkFont(size=14))
+        self.hardware_label.pack(pady=10)
+        
+        self.bench_log = ctk.CTkTextbox(self.benchmark_panel, state="disabled", font=ctk.CTkFont(family="Consolas", size=13))
+        self.bench_log.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Input Frame
         self.input_frame = ctk.CTkFrame(self.right_panel)
@@ -158,6 +179,17 @@ class MainWindow(ctk.CTk):
         # Override in AppController
         pass
 
+    def _on_run_test_click(self):
+        self.app_controller.run_benchmark()
+
+    def open_settings(self):
+        from .settings_window import SettingsWindow
+        SettingsWindow(self, self.history_store, self.i18n, self.change_lang)
+
+    def open_leaderboard(self):
+        from .leaderboard_window import LeaderboardWindow
+        LeaderboardWindow(self)
+
     def change_lang(self, choice: str):
         code = choice.split(" ")[0]
         self.lang = code
@@ -172,7 +204,6 @@ class MainWindow(ctk.CTk):
         else:
             self.rust_status_label.configure(text=self.t("rust_off"))
 
-        self.lang_menu.set(code)
         self.refresh_history_ui()
 
     def update_favorites_combobox(self):
@@ -330,6 +361,11 @@ class MainWindow(ctk.CTk):
         d = ImageDraw.Draw(image)
         d.text((24, 24), "R", fill=(255, 255, 255))
         return image
+
+    def on_unmap(self, event):
+        if event.widget == self and self.state() == 'iconic':
+            if self.history_store.get_minimize_to_tray():
+                self.withdraw_window()
 
     def withdraw_window(self):
         self.withdraw()

@@ -27,26 +27,47 @@ class AppController(MainWindow):
         self.is_reconnecting = False
         self.poll_thread = None
         self.log_watcher: Optional[LogWatcher] = None
-        self.a2s_client = a2s_client
+        self.a2s_client = A2SClient(config.A2S_TIMEOUT)
         self.process_monitor = process_monitor
 
-        self.log(self.t("ready"))
+        from .services.hardware_service import hardware_service
+        self.hardware_service = hardware_service
+        
+        self.gui.append_log(self.t("ready"))
+        
+        hw_cpu = self.hardware_service.get_cpu_info()
+        hw_ram = self.hardware_service.get_ram_info()
+        hw_disk = self.hardware_service.get_disk_info()
+        self.hardware_label.configure(text=f"CPU: {hw_cpu}\nRAM: {hw_ram}\nDisk: {hw_disk}")
 
         # Start background status and update monitoring loops
         threading.Thread(target=self.check_rust_status_loop, daemon=True).start()
         threading.Thread(target=self.check_rust_update_loop, daemon=True).start()
+        
+        from .services.hardware_service import hardware_service
+        self.hardware_service = hardware_service
+        
+        threading.Thread(target=self._load_hardware, daemon=True).start()
+        
+        # Init Swarm Service
+        from .services.swarm_service import swarm_service
+        self.swarm_service = swarm_service
+        self.swarm_service.is_enabled = self.history_store.get_swarm_enabled()
+        self.swarm_service.on_swarm_event = self._on_swarm_event
+        if self.swarm_service.is_enabled:
+            self.swarm_service.start()
 
     def _on_connect_btn_click(self):
-        self.start_process()
+        self.start_process(self.get_target_ip())
 
-    def start_process(self):
+    def start_process(self, target_str: str):
         if self.is_polling:
             self.stop_polling()
             return
 
-        target = self.get_target_ip()
-        if not target or ":" not in target:
-            self.log(self.t("err_format"))
+        if not re.match(r'^[a-zA-Z0-9.-]+:\d+$', target_str):
+            self.log_safe("[!] Security Error: Invalid address format. Must be IP:PORT.")
+            self.stop_polling()
             return
 
         self.ip_entry.configure(state="disabled")
@@ -54,7 +75,7 @@ class AppController(MainWindow):
         self.is_polling = True
         self.is_reconnecting = False
 
-        threading.Thread(target=self.run_logic, args=(target,), daemon=True).start()
+        threading.Thread(target=self.run_logic, args=(target_str,), daemon=True).start()
 
     def stop_polling(self):
         self.is_polling = False
@@ -147,6 +168,169 @@ class AppController(MainWindow):
         finally:
             self.is_reconnecting = False
 
+    def _on_run_test_click(self):
+        if self.process_monitor.is_rust_running():
+            from tkinter import messagebox
+            if messagebox.askyesno("Close Rust?", "Rust is currently running. We need to close it to run the benchmark. Close it now?"):
+                self.process_monitor.force_kill_rust()
+                self.log_bench("[*] Closed Rust.")
+            else:
+                self.log_bench("[!] Benchmark aborted.")
+        else:
+            pass
+
+    def log_safe(self, msg: str):
+        self.gui.after(0, lambda: self.gui.append_log(msg))
+
+    def _on_swarm_event(self, ip_port: str):
+        if not self.is_polling:
+            return
+            
+        target = self.get_target_ip()
+        if target == ip_port:
+            self.log_safe("[🚀] Swarm Connect: Другой игрок зашел на сервер! Мгновенный вход...")
+            self.is_polling = False # Stop a2s polling loop
+            self.start_process_force(target)
+        
+    def _load_hardware(self):
+        hw_cpu = self.hardware_service.get_cpu_info()
+        hw_ram = self.hardware_service.get_ram_info()
+        hw_disk = self.hardware_service.get_disk_info()
+        self.after(0, lambda: self.gui.hardware_label.configure(text=f"CPU: {hw_cpu}\nRAM: {hw_ram}\nDisk: {hw_disk}"))
+
+    def run_benchmark(self):
+        if not hasattr(self, 'gui') or not hasattr(self.gui, 'bench_btn'):
+            return
+        self.gui.bench_btn.configure(state="disabled")
+        self.gui.bench_log.configure(state="normal")
+        self.gui.bench_log.delete("0.0", "end")
+        self.gui.bench_log.configure(state="disabled")
+        threading.Thread(target=self.run_benchmark_logic, daemon=True).start()
+
+    def run_benchmark_logic(self):
+        from .core.history_store import history_store
+        if not history_store.get_allow_benchmark_copy():
+            self.log_bench("[!] Отменено: Вы не разрешили копирование файлов в Настройках (галочка).")
+            self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
+            return
+            
+        rust_path = history_store.get_rust_path()
+        if not rust_path or not os.path.exists(rust_path):
+            self.log_bench("[*] Please select your Rust game folder...")
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            rust_path = filedialog.askdirectory(title="Select your Rust game folder (where RustClient.exe is)")
+            if not rust_path:
+                self.log_bench("[!] Benchmark aborted. Rust path not provided.")
+                self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
+                return
+            history_store.set_rust_path(rust_path)
+            
+        if not os.path.exists(os.path.join(rust_path, "RustClient.exe")):
+            self.log_bench("[!] Invalid Rust folder. RustClient.exe not found.")
+            history_store.set_rust_path("") # reset
+            self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
+            return
+            
+        bm_source = r"C:\Users\abura\Downloads\BenchmarkFiles"
+        if not os.path.exists(bm_source):
+            self.log_bench(f"[!] Benchmark files not found in {bm_source}")
+            self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
+            return
+            
+        self.log_bench("[*] Copying Benchmark files to Rust folder...")
+        import shutil
+        try:
+            shutil.copytree(os.path.join(bm_source, "cfg"), os.path.join(rust_path, "cfg"), dirs_exist_ok=True)
+            shutil.copytree(os.path.join(bm_source, "demos"), os.path.join(rust_path, "demos"), dirs_exist_ok=True)
+        except Exception as e:
+            self.log_bench(f"[!] Failed to copy benchmark files: {e}")
+            self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
+            return
+            
+        self.after(0, lambda: self.gui.bench_btn.configure(fg_color="orange", text="Running..."))
+        self.log_bench("[*] Starting Local Benchmark: Launching Rust Demo...")
+        time.sleep(1.0)
+        
+        start_time = time.time()
+        url = f"steam://run/{config.STEAM_APP_ID}//-windowed -popupwindow +demo.play RustTweaker_bm"
+        import webbrowser
+        if os.name == 'nt':
+            os.startfile(url)
+        else:
+            webbrowser.open(url)
+            
+        spawn_reached = False
+        def bench_event(event):
+            nonlocal spawn_reached
+            if "Spawning" in event or "LocalPlayer" in event or "Client connected" in event:
+                spawn_reached = True
+
+        from .services.log_watcher import LogWatcher
+        bench_watcher = LogWatcher(
+            on_disconnect=lambda r: None, 
+            on_error=lambda e: None,
+            on_event=bench_event
+        )
+        
+        try:
+            bench_watcher.start()
+            while not spawn_reached:
+                time.sleep(1.0)
+                if time.time() - start_time > 600:
+                    self.log_bench("[!] Timeout: Demo took too long to load.")
+                    self.after(0, lambda: self.gui.bench_btn.configure(fg_color="#3B8ED0", text=self.t("run_test")))
+                    return
+        finally:
+            bench_watcher.stop()
+            
+        total_time = time.time() - start_time
+        self.log_bench(f"[🏆] Total Benchmark Time: {round(total_time, 1)} seconds.")
+        
+        if total_time < 90:
+            self.after(0, lambda: self.gui.bench_btn.configure(fg_color="#50C878", text="Excellent"))
+        elif total_time < 180:
+            self.after(0, lambda: self.gui.bench_btn.configure(fg_color="#FADA5E", text="Good", text_color="black"))
+        else:
+            self.after(0, lambda: self.gui.bench_btn.configure(fg_color="#C25A5A", text="Slow"))
+            
+        self.after(0, lambda: self._prompt_leaderboard(total_time))
+        
+    def _prompt_leaderboard(self, total_time: float):
+        import customtkinter as ctk
+        dialog = ctk.CTkInputDialog(text=f"Your time: {round(total_time, 1)}s!\nEnter nickname for Global Top-30:", title="Submit Score")
+        ans = dialog.get_input()
+        if ans:
+            from .services.leaderboard_service import leaderboard_service
+            hw_cpu = self.hardware_service.get_cpu_info()
+            hw_disk = self.hardware_service.get_disk_info()
+            # Run blocking HTTP request in background to prevent UI freeze (Architect review fix)
+            threading.Thread(target=self._submit_score_bg, args=(ans, hw_cpu, hw_disk, total_time), daemon=True).start()
+
+    def _submit_score_bg(self, ans, hw_cpu, hw_disk, total_time):
+        from .services.leaderboard_service import leaderboard_service
+        success = leaderboard_service.submit_score(ans, hw_cpu, hw_disk, total_time)
+        if success:
+            self.log_bench("[+] Score successfully submitted to Leaderboard!")
+        else:
+            self.log_bench("[!] Failed to submit score.")
+
+    def log_bench(self, msg: str):
+        self.after(0, lambda: self._log_bench_ui(msg))
+        
+    def _log_bench_ui(self, msg: str):
+        if not hasattr(self, 'gui') or not hasattr(self.gui, 'bench_log'):
+            return
+        self.gui.bench_log.configure(state="normal")
+        self.gui.bench_log.insert("end", msg + "\n")
+        self.gui.bench_log.see("end")
+        self.gui.bench_log.configure(state="disabled")
+
+    def _on_log_error(self, err: str):
+        self.log_safe(f"[x] Log Error: {err}")
+
     def start_log_monitor(self, target_str: str):
         self.log_safe(self.t("log_mon"))
         if self.log_watcher:
@@ -155,17 +339,24 @@ class AppController(MainWindow):
 
         self.log_watcher = LogWatcher(
             on_disconnect=lambda reason: self._on_log_disconnect(target_str, reason),
-            on_error=lambda err: self.log_safe(f"[!] Log watcher error: {err}")
+            on_error=self._on_log_error,
+            on_event=lambda event: self.log_safe(f"[*] Лог игры: {event}")
         )
         self.log_watcher.start()
 
     def _on_log_disconnect(self, target_str: str, reason: str):
         if not self.is_polling:
             return
-        self.log_safe(self.t("log_err"))
+            
+        self.log_safe(self.t("log_err") + f" Reason: {reason}")
+        
+        current_watcher = self.log_watcher
         time.sleep(2.0)
-        if self.is_polling:
-            self.start_process_force(target_str)
+        
+        if not self.is_polling or self.log_watcher is not current_watcher:
+            return
+            
+        self.start_process_force(target_str)
 
     def start_process_force(self, target: str):
         if self.is_reconnecting:
@@ -174,16 +365,21 @@ class AppController(MainWindow):
         threading.Thread(target=self.run_logic, args=(target,), daemon=True).start()
 
     def launch_game(self, target: str):
-        url = f"steam://run/{config.STEAM_APP_ID}//+connect {target}"
-        self.log_safe(self.t("launch", url=url))
+        self.log(self.t("launch", url=target))
         try:
+            url = f"steam://run/{config.STEAM_APP_ID}//+connect {target}"
             if os.name == 'nt':
                 os.startfile(url)
             else:
+                import webbrowser
                 webbrowser.open(url)
-            self.log_safe(self.t("launch_ok"))
+            self.log(self.t("launch_ok"))
+            self.start_log_monitor(target)
+            
+            if self.swarm_service.is_enabled:
+                threading.Thread(target=self.swarm_service.broadcast_success, args=(target,), daemon=True).start()
         except Exception as e:
-            self.log_safe(self.t("launch_err", err=e))
+            self.log(self.t("launch_err", err=str(e)))
 
     def save_only(self):
         target = self.get_target_ip()
