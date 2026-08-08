@@ -61,5 +61,11 @@
   "tooltip_tray": "Wenn Sie auf das 'X' klicken, um das Fenster zu schließen,\nwird die App in die Taskleiste minimiert.",
   "tooltip_swarm": "Teilt den Serverstatus mit anderen Spielern.\nWenn sich jemand anderes mit demselben Server verbindet,\nverbindet Sie Ihr Bot ebenfalls sofort.",
   "stop_bench": "Stop",
-  "save_cfg_btn": "Save My Config"
+  "save_cfg_btn": "Save My Config",
+  "bench_warn_running": "Rust läuft derzeit und wird geschlossen, um den Benchmark zu starten.\n\nNachdem das Spiel gestartet ist und das Hauptmenü erreicht hat, MÜSSEN Sie [F5] drücken, um den Benchmark zu starten.\n\nSind Sie sicher, dass Sie fortfahren möchten?",
+  "bench_warn_f5": "Der Benchmark startet nun Rust.\n\nWarten Sie, bis das Hauptmenü erscheint, und dann MÜSSEN Sie im Spiel [F5] drücken, um den Benchmark zu starten.\n\nDrücken Sie OK, um fortzufahren.",
+  "close_rust_title": "Rust schließen?",
+  "bench_instr_title": "Benchmark-Anweisungen",
+  "f5_pressed_log": "[*] F5 gedrückt! Starte Benchmark-Zeitachse der Karte...",
+  "f5_prompt_log": "[!] Drücken Sie F5 in Rust, um den Benchmark der Karte zu starten!"
 }

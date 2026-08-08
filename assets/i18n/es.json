@@ -61,5 +61,11 @@
   "tooltip_tray": "Al hacer clic en la 'X' para cerrar la ventana,\nla aplicación se minimizará en la bandeja del sistema.",
   "tooltip_swarm": "Comparte el estado del servidor con otros jugadores.\nSi alguien se conecta al mismo servidor,\ntu bot te conectará al instante.",
   "stop_bench": "Stop",
-  "save_cfg_btn": "Save My Config"
+  "save_cfg_btn": "Save My Config",
+  "bench_warn_running": "Rust se está ejecutando actualmente y se cerrará para iniciar el benchmark.\n\nDespués de que el juego se inicie y llegue al menú, DEBE presionar [F5] para iniciar el benchmark.\n\n¿Está seguro de que desea continuar?",
+  "bench_warn_f5": "El benchmark iniciará Rust ahora.\n\nEspere hasta que aparezca el menú principal y luego DEBE presionar [F5] dentro del juego para iniciar el benchmark.\n\nPresione Aceptar para continuar.",
+  "close_rust_title": "¿Cerrar Rust?",
+  "bench_instr_title": "Instrucciones del Benchmark",
+  "f5_pressed_log": "[*] ¡F5 Presionado! Iniciando la línea de tiempo del benchmark...",
+  "f5_prompt_log": "[!] ¡Presione F5 dentro de Rust para iniciar el benchmark del mapa!"
 }

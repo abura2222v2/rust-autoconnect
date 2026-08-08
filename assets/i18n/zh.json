@@ -61,5 +61,11 @@
   "tooltip_tray": "当您点击“X”关闭窗口时，\n应用程序将最小化到系统托盘。",
   "tooltip_swarm": "与其他玩家共享服务器状态。\n如果其他人连接到同一个服务器，\n您的机器人也会立即连接您。",
   "stop_bench": "Stop",
-  "save_cfg_btn": "Save My Config"
+  "save_cfg_btn": "Save My Config",
+  "bench_warn_running": "Rust 当前正在运行，将关闭以启动基准测试。\n\n游戏启动并到达主菜单后，您必须按 [F5] 启动基准测试。\n\n您确定要继续吗？",
+  "bench_warn_f5": "基准测试现在将启动 Rust。\n\n等待主菜单出现，然后您必须在游戏中按 [F5] 启动基准测试。\n\n按确定继续。",
+  "close_rust_title": "关闭 Rust？",
+  "bench_instr_title": "基准测试说明",
+  "f5_pressed_log": "[*] 已按 F5！正在启动地图基准测试...",
+  "f5_prompt_log": "[!] 在 Rust 中按 F5 以启动地图基准测试！"
 }

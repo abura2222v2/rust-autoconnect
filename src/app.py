@@ -384,19 +384,41 @@ class AppController(MainWindow):
         from pathlib import Path
         for log_name in ["output_log.txt", "Player.log"]:
             log_path = Path(rust_path) / log_name
-            try:
-                if log_path.exists():
+            attempts = 0
+            while log_path.exists() and attempts < 10:
+                try:
                     os.remove(log_path)
                     self.log_bench(f"[*] Cleared old game log {log_name}.")
-            except Exception as e:
-                self.log_bench(f"[!] Warning: Could not delete old log file: {e}")
+                    break
+                except Exception as e:
+                    attempts += 1
+                    if attempts == 1:
+                        self.log_bench(f"[*] Waiting for {log_name} to be released by previous game instance...")
+                    time.sleep(1.0)
+            if log_path.exists():
+                self.log_bench(f"[!] Critical error: Could not delete old log {log_name} after 10 seconds. Aborting benchmark. Please close Rust manually and try again.")
+                self.is_benchmarking = False
+                self.after(0, lambda: self.bench_btn.configure(state="normal", fg_color="#E74C3C", text="Failed"))
+                return
                 
         config_appdata = os.path.join(os.environ.get('USERPROFILE', ''), "AppData", "LocalLow", "Facepunch Studios LTD", "Rust", "Player.log")
-        try:
-            if os.path.exists(config_appdata):
+        attempts = 0
+        while os.path.exists(config_appdata) and attempts < 10:
+            try:
                 os.remove(config_appdata)
-        except:
-            pass
+                self.log_bench("[*] Cleared old game log Player.log (AppData).")
+                break
+            except:
+                attempts += 1
+                if attempts == 1:
+                    self.log_bench("[*] Waiting for Player.log (AppData) to be released by previous game instance...")
+                time.sleep(1.0)
+        
+        if os.path.exists(config_appdata):
+            self.log_bench("[!] Critical error: Could not delete Player.log (AppData) after 10 seconds. Aborting benchmark. Please close Rust manually and try again.")
+            self.is_benchmarking = False
+            self.after(0, lambda: self.bench_btn.configure(state="normal", fg_color="#E74C3C", text="Failed"))
+            return
             
         url = f"steam://run/{config.STEAM_APP_ID}//-windowed -popupwindow"
         if os.name == 'nt':
