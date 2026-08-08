@@ -162,15 +162,7 @@ class AppController(MainWindow):
             self.is_reconnecting = False
 
     def _on_run_test_click(self):
-        if self.process_monitor.is_rust_running():
-            from tkinter import messagebox
-            if messagebox.askyesno("Close Rust?", "Rust is currently running. We need to close it to run the benchmark. Close it now?"):
-                self.process_monitor.force_kill_rust()
-                self.log_bench("[*] Closed Rust.")
-            else:
-                self.log_bench("[!] Benchmark aborted.")
-        if self.is_reconnecting:
-            return
+        self.run_benchmark()
 
     def log_safe(self, msg: str):
         self.after(0, lambda: self.log(msg))
@@ -227,7 +219,7 @@ class AppController(MainWindow):
             rust_path = filedialog.askdirectory(title="Select your Rust game folder (where RustClient.exe is)")
             if not rust_path:
                 self.log_bench("[!] Benchmark aborted. Rust path not provided.")
-                self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
+                self.after(0, lambda: self.bench_btn.configure(state="normal"))
                 return
             history_store.set_rust_path(rust_path)
             

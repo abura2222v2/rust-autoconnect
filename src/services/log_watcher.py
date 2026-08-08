@@ -11,7 +11,6 @@ class LogWatcher:
         self.on_error = on_error
         self.on_event = on_event
         self.is_monitoring = False
-        self.is_monitoring = False
         self._thread = None
 
     def start(self):
@@ -28,7 +27,6 @@ class LogWatcher:
         log_path = config.rust_log_path
         # Wait for log file to exist
         while self.is_monitoring and not log_path.exists():
-            time.sleep(1.0)
             time.sleep(1.0)
             
         if not self.is_monitoring:

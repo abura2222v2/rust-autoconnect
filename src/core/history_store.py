@@ -133,9 +133,6 @@ class HistoryStore:
         self.data["swarm_enabled"] = val
         self.save()
 
-    def get_rust_path(self) -> str:
-        return self.data.get("rust_path", "")
-
     def set_rust_path(self, val: str):
         self.data["rust_path"] = val
         self.save()
