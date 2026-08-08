@@ -8,12 +8,12 @@ class LeaderboardService:
 
     def fetch_leaderboard(self, limit: int = 500, offset: int = 0, search_query: str = "", sort_order: str = "asc") -> list:
         try:
-            url = f"{self.url}?select=*&order=time_seconds.{sort_order}&limit={limit}&offset={offset}"
+            url = f"{self.url}?select=*&order=total_time.{sort_order}&limit={limit}&offset={offset}"
             if search_query:
                 # Add basic search filter using Supabase ilike
-                import urllib.parse
-                sq = urllib.parse.quote(f"%{search_query}%")
-                url += f"&or=(player_name.ilike.{sq},cpu_model.ilike.{sq},disk_model.ilike.{sq})"
+                import urllib.parse as uparse
+                sq = uparse.quote(f"%{search_query}%")
+                url += f"&or=(username.ilike.{sq},cpu.ilike.{sq},disk.ilike.{sq})"
                 
             req = urllib.request.Request(url)
             req.add_header("apikey", self.key)
@@ -30,10 +30,10 @@ class LeaderboardService:
             disk_model = f"{disk} [{disk_serial}]" if disk_serial and disk_serial != disk else disk
             
             payload = {
-                "player_name": name,
-                "cpu_model": cpu_model,
-                "disk_model": disk_model,
-                "time_seconds": time_seconds
+                "username": name,
+                "cpu": cpu_model,
+                "disk": disk_model,
+                "total_time": time_seconds
             }
             req = urllib.request.Request(self.url, data=json.dumps(payload).encode('utf-8'), method="POST")
             req.add_header("apikey", self.key)

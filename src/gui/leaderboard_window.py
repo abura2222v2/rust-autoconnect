@@ -106,10 +106,10 @@ class LeaderboardWindow(ctk.CTkToplevel):
         # Aggregate data by CPU + Disk using full accumulated dataset
         groups = {}
         for row in self.current_data:
-            cpu_txt = row.get('cpu_model', '')
+            cpu_txt = row.get('cpu', '')
             if '[' in cpu_txt: cpu_txt = cpu_txt.split('[')[0].strip()
             
-            disk_txt = row.get('disk_model', '')
+            disk_txt = row.get('disk', '')
             if '[' in disk_txt: disk_txt = disk_txt.split('[')[0].strip()
             
             key = (cpu_txt, disk_txt)
@@ -120,7 +120,7 @@ class LeaderboardWindow(ctk.CTkToplevel):
         # Sort groups by average time
         sorted_groups = []
         for key, rows in groups.items():
-            avg_time = sum(r.get('time_seconds', 0.0) for r in rows) / len(rows)
+            avg_time = sum(r.get('total_time', 0.0) for r in rows) / len(rows)
             sorted_groups.append((key, avg_time, rows))
             
         sorted_groups.sort(key=lambda x: x[1], reverse=(self.sort_var.get() == "Slowest"))
