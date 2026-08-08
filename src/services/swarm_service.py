@@ -59,6 +59,26 @@ class SwarmService:
             
     def _on_open(self, ws):
         self.is_connected = True
+        
+        # Start heartbeat loop required by Phoenix/Supabase
+        def heartbeat_loop():
+            import time
+            ref = 2
+            while self.is_connected and self.ws:
+                time.sleep(30)
+                if self.is_connected and self.ws:
+                    try:
+                        self.ws.send(json.dumps({
+                            "topic": "phoenix",
+                            "event": "heartbeat",
+                            "payload": {},
+                            "ref": str(ref)
+                        }))
+                        ref += 1
+                    except:
+                        pass
+                        
+        threading.Thread(target=heartbeat_loop, daemon=True).start()
         payload = {
             "topic": "realtime:public:swarm_events",
             "event": "phx_join",
@@ -91,6 +111,13 @@ class SwarmService:
         
     def _on_close(self, ws, status_code, msg):
         self.is_connected = False
+        if self.is_enabled:
+            import time
+            def reconnect():
+                time.sleep(5)
+                if self.is_enabled and not self.is_connected:
+                    self.start()
+            threading.Thread(target=reconnect, daemon=True).start()
         
     def broadcast_success(self, ip_port: str):
         if not self.is_enabled:
