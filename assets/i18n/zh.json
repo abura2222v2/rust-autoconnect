@@ -52,5 +52,10 @@
   "lb_err_conn": "无法连接到 Supabase。",
   "lb_err_empty": "暂无基准测试记录。",
   "swarm_lbl": "网络加速 (Swarm Connect)",
-  "bench_copy_lbl": "允许复制基准测试文件到游戏文件夹（风险自负）"
+  "bench_copy_lbl": "允许复制基准测试文件到游戏文件夹（风险自负）",
+  "nav_home": "Home",
+  "nav_bench": "Benchmark",
+  "nav_settings": "Settings",
+  "tab_home": "Home",
+  "lb_search": "Search Player / CPU / Disk..."
 }

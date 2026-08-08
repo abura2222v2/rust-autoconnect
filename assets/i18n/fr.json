@@ -52,5 +52,10 @@
   "lb_err_conn": "Échec de connexion à Supabase.",
   "lb_err_empty": "Aucun benchmark enregistré.",
   "swarm_lbl": "Accélération réseau (Swarm Connect)",
-  "bench_copy_lbl": "Autoriser la copie des fichiers de benchmark (À vos risques)"
+  "bench_copy_lbl": "Autoriser la copie des fichiers de benchmark (À vos risques)",
+  "nav_home": "Home",
+  "nav_bench": "Benchmark",
+  "nav_settings": "Settings",
+  "tab_home": "Home",
+  "lb_search": "Search Player / CPU / Disk..."
 }

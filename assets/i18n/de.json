@@ -52,5 +52,10 @@
   "lb_err_conn": "Verbindung zu Supabase fehlgeschlagen.",
   "lb_err_empty": "Noch keine Benchmarks aufgezeichnet.",
   "swarm_lbl": "Netzwerkbeschleunigung (Swarm Connect)",
-  "bench_copy_lbl": "Erlaube das Kopieren von Benchmark-Dateien ins Spiel (Auf eigene Gefahr)"
+  "bench_copy_lbl": "Erlaube das Kopieren von Benchmark-Dateien ins Spiel (Auf eigene Gefahr)",
+  "nav_home": "Home",
+  "nav_bench": "Benchmark",
+  "nav_settings": "Settings",
+  "tab_home": "Home",
+  "lb_search": "Search Player / CPU / Disk..."
 }

@@ -1,10 +1,8 @@
 import customtkinter as ctk
 import threading
-import time
-import os
-from PIL import Image, ImageDraw
 import pystray
-from typing import Optional, Callable
+from PIL import Image, ImageDraw
+from typing import Optional
 
 from ..core.i18n import i18n, I18nManager
 from ..core.history_store import history_store, HistoryStore
@@ -13,10 +11,6 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 class MainWindow(ctk.CTk):
-    """
-    CustomTkinter Main Window UI logic extracted from monolithic main.py.
-    Provides left history panel, right connection/log panel, and system tray integration.
-    """
     def __init__(self, history_mgr: Optional[HistoryStore] = None, i18n_mgr: Optional[I18nManager] = None):
         super().__init__()
         
@@ -27,10 +21,10 @@ class MainWindow(ctk.CTk):
         self.i18n.set_lang(self.lang)
 
         self.title(self.t("title"))
-        self.geometry("800x480")
-        self.minsize(700, 400)
+        self.geometry("950x550")
+        self.minsize(800, 450)
 
-        self._search_timer = None # UI Stutter Fix: Debounce handle for search bar
+        self._search_timer = None
         self.is_auto_update_enabled = self.history_store.get_auto_update()
         self.auto_update = ctk.BooleanVar(value=self.is_auto_update_enabled)
 
@@ -38,88 +32,77 @@ class MainWindow(ctk.CTk):
         self.protocol('WM_DELETE_WINDOW', self.shutdown)
         self.bind('<Unmap>', self.on_unmap)
 
-        # Grid layout
+        # Main Grid Layout: Sidebar (0) and Content (1)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        # Left Panel (History)
-        self.left_panel = ctk.CTkFrame(self, width=240, corner_radius=0)
-        self.left_panel.grid(row=0, column=0, sticky="nsew")
-        self.left_panel.grid_rowconfigure(3, weight=1)
+        # ==========================================
+        # 1. SIDEBAR FRAME
+        # ==========================================
+        self.sidebar_frame = ctk.CTkFrame(self, width=160, corner_radius=0)
+        self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
+        self.sidebar_frame.grid_rowconfigure(4, weight=1)
 
-        self.history_label = ctk.CTkLabel(
-            self.left_panel, text=self.t("history"), font=ctk.CTkFont(size=16, weight="bold")
-        )
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Rust AC", font=ctk.CTkFont(size=22, weight="bold"))
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 30))
+
+        self.nav_home_btn = ctk.CTkButton(self.sidebar_frame, text=self.t("nav_home"), command=self.show_home_frame, fg_color="transparent", border_width=2, text_color=("gray10", "#DCE4EE"))
+        self.nav_home_btn.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+
+        self.nav_bench_btn = ctk.CTkButton(self.sidebar_frame, text=self.t("nav_bench"), command=self.show_bench_frame, fg_color="transparent", border_width=2, text_color=("gray10", "#DCE4EE"))
+        self.nav_bench_btn.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
+
+        self.nav_settings_btn = ctk.CTkButton(self.sidebar_frame, text=self.t("nav_settings"), command=self.show_settings_frame, fg_color="transparent", border_width=2, text_color=("gray10", "#DCE4EE"))
+        self.nav_settings_btn.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
+
+        self.rust_status_label = ctk.CTkLabel(self.sidebar_frame, text=self.t("rust_off"), font=ctk.CTkFont(weight="bold"), text_color="#C25A5A")
+        self.rust_status_label.grid(row=5, column=0, padx=20, pady=(10, 20))
+
+        # ==========================================
+        # 2. CONTENT FRAMES (Overlapping Grid)
+        # ==========================================
+        self.home_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.bench_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.settings_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+
+        # Place them all in the same grid cell
+        for frame in (self.home_frame, self.bench_frame, self.settings_frame):
+            frame.grid(row=0, column=1, sticky="nsew")
+
+        # ==========================================
+        # 2.1 HOME FRAME (History + Connection)
+        # ==========================================
+        self.home_frame.grid_columnconfigure(1, weight=1)
+        self.home_frame.grid_rowconfigure(0, weight=1)
+
+        # Left side of Home: History
+        self.history_panel = ctk.CTkFrame(self.home_frame, width=260, corner_radius=0)
+        self.history_panel.grid(row=0, column=0, sticky="nsew")
+        self.history_panel.grid_rowconfigure(3, weight=1)
+
+        self.history_label = ctk.CTkLabel(self.history_panel, text=self.t("history"), font=ctk.CTkFont(size=16, weight="bold"))
         self.history_label.grid(row=0, column=0, padx=20, pady=(20, 5))
 
         self.filter_var = ctk.StringVar(value="All Servers")
-        self.filter_menu = ctk.CTkOptionMenu(
-            self.left_panel,
-            values=["All Servers", "Favorites"],
-            variable=self.filter_var,
-            command=lambda e: self.refresh_history_ui()
-        )
+        self.filter_menu = ctk.CTkOptionMenu(self.history_panel, values=["All Servers", "Favorites"], variable=self.filter_var, command=lambda e: self.refresh_history_ui())
         self.filter_menu.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
 
-        # Smart Search with UI Stutter Fix (Debounced via after())
         self.search_var = ctk.StringVar()
         self.search_var.trace_add("write", self._on_search_changed)
-        self.search_entry = ctk.CTkEntry(self.left_panel, placeholder_text="Поиск...", textvariable=self.search_var)
+        self.search_entry = ctk.CTkEntry(self.history_panel, placeholder_text="Поиск...", textvariable=self.search_var)
         self.search_entry.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
 
-        self.history_scroll = ctk.CTkScrollableFrame(self.left_panel)
-        self.history_scroll.grid(row=3, column=0, sticky="nsew", padx=10, pady=0)
+        self.history_scroll = ctk.CTkScrollableFrame(self.history_panel)
+        self.history_scroll.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
-        # Bottom Frame of Left Panel (Language + Status)
-        self.left_bottom_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
-        self.left_bottom_frame.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
-        self.left_bottom_frame.grid_columnconfigure(1, weight=1)
+        # Right side of Home: Connection & Logs
+        self.connection_panel = ctk.CTkFrame(self.home_frame, fg_color="transparent")
+        self.connection_panel.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
+        self.connection_panel.grid_columnconfigure(0, weight=1)
+        self.connection_panel.grid_rowconfigure(1, weight=1)
 
-        # Settings Button
-        self.settings_btn = ctk.CTkButton(
-            self.left_bottom_frame,
-            text="⚙",
-            width=40,
-            command=self.open_settings
-        )
-        self.settings_btn.grid(row=0, column=0, sticky="w")
-
-        # Rust Running Status Label
-        self.rust_status_label = ctk.CTkLabel(
-            self.left_bottom_frame, text=self.t("rust_off"), font=ctk.CTkFont(weight="bold"), text_color="#C25A5A"
-        )
-        self.rust_status_label.grid(row=0, column=1, sticky="e")
-
-        # Right Panel (Tabview)
-        self.tabs = ctk.CTkTabview(self)
-        self.tabs.grid(row=0, column=1, padx=20, pady=(0, 20), sticky="nsew")
-        self.tabs.add(self.t("tab_home"))
-        self.tabs.add(self.t("tab_bench"))
-
-        # Home Tab
-        self.right_panel = self.tabs.tab(self.t("tab_home"))
-        self.right_panel.grid_columnconfigure(0, weight=1)
-        self.right_panel.grid_rowconfigure(1, weight=1)
-        
-        # Benchmark Tab
-        self.benchmark_panel = self.tabs.tab(self.t("tab_bench"))
-        self.benchmark_panel.grid_columnconfigure(0, weight=1)
-        
-        self.bench_btn = ctk.CTkButton(self.benchmark_panel, text=self.t("run_test"), command=self._on_run_test_click, fg_color="#3B8ED0")
-        self.bench_btn.pack(pady=20)
-        
-        self.top_btn = ctk.CTkButton(self.benchmark_panel, text=self.t("top_30"), command=self.open_leaderboard, fg_color="#FADA5E", text_color="black")
-        self.top_btn.pack(pady=10)
-        
-        self.hardware_label = ctk.CTkLabel(self.benchmark_panel, text=self.t("loading_hw"), justify="left", font=ctk.CTkFont(size=14))
-        self.hardware_label.pack(pady=10)
-        
-        self.bench_log = ctk.CTkTextbox(self.benchmark_panel, state="disabled", font=ctk.CTkFont(family="Consolas", size=13))
-        self.bench_log.pack(fill="both", expand=True, padx=20, pady=20)
-
-        # Input Frame
-        self.input_frame = ctk.CTkFrame(self.right_panel)
-        self.input_frame.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
+        self.input_frame = ctk.CTkFrame(self.connection_panel)
+        self.input_frame.grid(row=0, column=0, pady=(0, 10), sticky="ew")
         self.input_frame.grid_columnconfigure(0, weight=1)
 
         self.ip_entry = ctk.CTkComboBox(
@@ -129,66 +112,110 @@ class MainWindow(ctk.CTk):
         self.ip_entry.set("")
         self.ip_entry.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        # Start button
-        self.connect_btn = ctk.CTkButton(
-            self.input_frame, text=self.t("start"), command=self._on_connect_btn_click, width=120
-        )
+        self.connect_btn = ctk.CTkButton(self.input_frame, text=self.t("start"), command=self._on_connect_btn_click, width=120)
         self.connect_btn.grid(row=0, column=1, padx=10, pady=10)
 
-        # Bottom frame for Auto-Update
-        self.bottom_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
-        self.bottom_frame.grid(row=3, column=0, sticky="e", padx=20, pady=(0, 10))
-
-        self.update_ready_label = ctk.CTkLabel(
-            self.bottom_frame, text="Update Ready!", text_color="#50C878", font=ctk.CTkFont(weight="bold")
-        )
-        self.update_ready_label.pack(side="left", padx=10)
-        self.update_ready_label.pack_forget()
-
-        self.update_check = ctk.CTkCheckBox(
-            self.bottom_frame, text="Auto-Update Rust", variable=self.auto_update, command=self.on_auto_update_change
-        )
-        self.update_check.pack(side="right", padx=10)
-
-        # Log Frame
-        self.log_frame = ctk.CTkFrame(self.right_panel)
-        self.log_frame.grid(row=1, column=0, rowspan=2, padx=20, pady=(0, 10), sticky="nsew")
+        self.log_frame = ctk.CTkFrame(self.connection_panel)
+        self.log_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
         self.log_frame.grid_columnconfigure(0, weight=1)
         self.log_frame.grid_rowconfigure(0, weight=1)
 
         self.log_textbox = ctk.CTkTextbox(self.log_frame, state="disabled", font=ctk.CTkFont(family="Consolas", size=13))
         self.log_textbox.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        
+        self.bottom_frame = ctk.CTkFrame(self.connection_panel, fg_color="transparent")
+        self.bottom_frame.grid(row=2, column=0, sticky="e")
+        self.update_check = ctk.CTkCheckBox(self.bottom_frame, text="Auto-Update Rust", variable=self.auto_update, command=self.on_auto_update_change)
+        self.update_check.pack(side="right")
 
+        # ==========================================
+        # 2.2 BENCHMARK FRAME
+        # ==========================================
+        self.bench_frame.grid_columnconfigure(0, weight=1)
+        
+        self.bench_title = ctk.CTkLabel(self.bench_frame, text=self.t("tab_bench"), font=ctk.CTkFont(size=20, weight="bold"))
+        self.bench_title.pack(pady=(20,10))
+
+        self.bench_btn = ctk.CTkButton(self.bench_frame, text=self.t("run_test"), command=self._on_run_test_click, fg_color="#3B8ED0", height=40)
+        self.bench_btn.pack(pady=10)
+        
+        self.top_btn = ctk.CTkButton(self.bench_frame, text=self.t("lb_title"), command=self.open_leaderboard, fg_color="#FADA5E", text_color="black", height=40)
+        self.top_btn.pack(pady=10)
+        
+        self.hardware_label = ctk.CTkLabel(self.bench_frame, text=self.t("lb_load"), justify="left", font=ctk.CTkFont(size=14))
+        self.hardware_label.pack(pady=10)
+        
+        self.bench_log = ctk.CTkTextbox(self.bench_frame, state="disabled", font=ctk.CTkFont(family="Consolas", size=13))
+        self.bench_log.pack(fill="both", expand=True, padx=40, pady=20)
+
+        # ==========================================
+        # 2.3 SETTINGS FRAME
+        # ==========================================
+        self.settings_frame.grid_columnconfigure(1, weight=1)
+        
+        self.settings_title = ctk.CTkLabel(self.settings_frame, text=self.t("settings_title"), font=ctk.CTkFont(size=20, weight="bold"))
+        self.settings_title.grid(row=0, column=0, columnspan=2, padx=40, pady=(40, 20), sticky="w")
+
+        # Language
+        self.lang_label = ctk.CTkLabel(self.settings_frame, text=self.t("lang_lbl"), font=ctk.CTkFont(weight="bold"))
+        self.lang_label.grid(row=1, column=0, padx=40, pady=(20, 10), sticky="w")
+        
+        self.lang_menu = ctk.CTkOptionMenu(
+            self.settings_frame,
+            values=list(I18nManager.LANG_MAP.values()),
+            command=self.change_lang,
+            width=200
+        )
+        self.lang_menu.grid(row=1, column=1, padx=40, pady=(20, 10), sticky="w")
+        self.lang_menu.set(self.history_store.get_lang())
+
+        # Tray Checkbox
+        self.tray_var = ctk.BooleanVar(value=self.history_store.get_minimize_to_tray())
+        self.tray_checkbox = ctk.CTkCheckBox(self.settings_frame, text=self.t("tray_lbl"), variable=self.tray_var, command=self._on_tray_change)
+        self.tray_checkbox.grid(row=2, column=0, columnspan=2, padx=40, pady=20, sticky="w")
+
+        # Swarm Checkbox
+        self.swarm_var = ctk.BooleanVar(value=self.history_store.get_swarm_enabled())
+        self.swarm_checkbox = ctk.CTkCheckBox(self.settings_frame, text=self.t("swarm_lbl"), variable=self.swarm_var, command=self._on_swarm_change)
+        self.swarm_checkbox.grid(row=3, column=0, columnspan=2, padx=40, pady=10, sticky="w")
+
+        # Start by showing Home
         self.refresh_history_ui()
+        self.show_home_frame()
 
-    def t(self, key: str, **kwargs) -> str:
-        """Localization helper."""
-        return self.i18n.t(key, **kwargs)
+    # --- NAVIGATION LOGIC ---
+    def show_home_frame(self):
+        self.home_frame.tkraise()
+        self._highlight_nav(self.nav_home_btn)
 
-    def _on_search_changed(self, *args):
-        """UI Stutter Fix: Debounce search bar input by 300ms using after()."""
-        if self._search_timer is not None:
-            self.after_cancel(self._search_timer)
-        self._search_timer = self.after(300, self.refresh_history_ui)
+    def show_bench_frame(self):
+        self.bench_frame.tkraise()
+        self._highlight_nav(self.nav_bench_btn)
 
-    def on_auto_update_change(self):
-        self.is_auto_update_enabled = self.auto_update.get()
-        self.history_store.set_auto_update(self.is_auto_update_enabled)
+    def show_settings_frame(self):
+        self.settings_frame.tkraise()
+        self._highlight_nav(self.nav_settings_btn)
+        
+    def _highlight_nav(self, active_btn):
+        # Reset all
+        self.nav_home_btn.configure(fg_color="transparent")
+        self.nav_bench_btn.configure(fg_color="transparent")
+        self.nav_settings_btn.configure(fg_color="transparent")
+        # Highlight active
+        active_btn.configure(fg_color=("gray75", "gray25"))
 
-    def _on_connect_btn_click(self):
-        # Override in AppController
-        pass
+    # --- SETTINGS LOGIC ---
+    def _on_tray_change(self):
+        self.history_store.set_minimize_to_tray(self.tray_var.get())
 
-    def _on_run_test_click(self):
-        self.app_controller.run_benchmark()
-
-    def open_settings(self):
-        from .settings_window import SettingsWindow
-        SettingsWindow(self, self.history_store, self.i18n, self.change_lang)
-
-    def open_leaderboard(self):
-        from .leaderboard_window import LeaderboardWindow
-        LeaderboardWindow(self)
+    def _on_swarm_change(self):
+        self.history_store.set_swarm_enabled(self.swarm_var.get())
+        from ..services.swarm_service import swarm_service
+        swarm_service.is_enabled = self.swarm_var.get()
+        if swarm_service.is_enabled:
+            swarm_service.start()
+        else:
+            swarm_service.stop()
 
     def change_lang(self, choice: str):
         code = choice.split(" ")[0]
@@ -198,6 +225,16 @@ class MainWindow(ctk.CTk):
 
         self.title(self.t("title"))
         self.history_label.configure(text=self.t("history"))
+        self.nav_home_btn.configure(text=self.t("nav_home"))
+        self.nav_bench_btn.configure(text=self.t("nav_bench"))
+        self.nav_settings_btn.configure(text=self.t("nav_settings"))
+        self.bench_title.configure(text=self.t("tab_bench"))
+        self.bench_btn.configure(text=self.t("run_test"))
+        self.top_btn.configure(text=self.t("lb_title"))
+        self.settings_title.configure(text=self.t("settings_title"))
+        self.lang_label.configure(text=self.t("lang_lbl"))
+        self.tray_checkbox.configure(text=self.t("tray_lbl"))
+        self.swarm_checkbox.configure(text=self.t("swarm_lbl"))
 
         if "🟢" in self.rust_status_label.cget("text"):
             self.rust_status_label.configure(text=self.t("rust_on"))
@@ -205,6 +242,29 @@ class MainWindow(ctk.CTk):
             self.rust_status_label.configure(text=self.t("rust_off"))
 
         self.refresh_history_ui()
+
+    # --- OTHER METHODS ---
+    def t(self, key: str, **kwargs) -> str:
+        return self.i18n.t(key, **kwargs)
+
+    def _on_search_changed(self, *args):
+        if self._search_timer is not None:
+            self.after_cancel(self._search_timer)
+        self._search_timer = self.after(300, self.refresh_history_ui)
+
+    def on_auto_update_change(self):
+        self.is_auto_update_enabled = self.auto_update.get()
+        self.history_store.set_auto_update(self.is_auto_update_enabled)
+
+    def _on_connect_btn_click(self):
+        pass # Override in AppController
+
+    def _on_run_test_click(self):
+        pass # Override in AppController
+
+    def open_leaderboard(self):
+        from .leaderboard_window import LeaderboardWindow
+        LeaderboardWindow(self)
 
     def update_favorites_combobox(self):
         favorites = self.history_store.get_favorites()
@@ -252,8 +312,6 @@ class MainWindow(ctk.CTk):
                 command=lambda i=ip: self.select_history(i)
             )
             btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
-
-            # Double click to edit name
             btn.bind("<Double-Button-1>", lambda event, f=frame, b=btn, i=ip, n=display_name: self.start_inline_edit(f, b, i, n))
 
             btn_font = ctk.CTkFont(family="Arial", size=14)
@@ -293,10 +351,6 @@ class MainWindow(ctk.CTk):
         self.refresh_history_ui()
 
     def start_inline_edit(self, frame, btn, ip, current_name):
-        """
-        BUG-09 Fix: Unbind <FocusOut> and <Return> handlers before saving
-        and use a guard flag to prevent double invocation Tcl errors during UI refresh.
-        """
         btn.pack_forget()
         entry = ctk.CTkEntry(frame, font=ctk.CTkFont(family="Arial", size=14))
         entry.insert(0, current_name)
@@ -332,7 +386,6 @@ class MainWindow(ctk.CTk):
         return save_inline
 
     def select_history(self, ip_port: str):
-        # Override check in AppController
         self.ip_entry.set(ip_port)
 
     def get_target_ip(self) -> str:
@@ -388,9 +441,6 @@ class MainWindow(ctk.CTk):
         self.after(0, self.deiconify)
 
     def quit_window(self, icon=None, item=None):
-        """
-        BUG-04 Fix: Replace abrupt os._exit(0) with graceful shutdown on main Tkinter thread.
-        """
         if self.tray_icon:
             try:
                 self.tray_icon.stop()
@@ -400,7 +450,6 @@ class MainWindow(ctk.CTk):
         self.after(0, self.shutdown)
 
     def shutdown(self):
-        """Gracefully destroy main window."""
         try:
             self.destroy()
         except Exception:

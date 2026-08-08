@@ -52,5 +52,10 @@
   "lb_err_conn": "Error al conectar con Supabase.",
   "lb_err_empty": "Aún no hay benchmarks registrados.",
   "swarm_lbl": "Aceleración de Red (Swarm Connect)",
-  "bench_copy_lbl": "Permitir copiar archivos de benchmark al juego (Bajo su riesgo)"
+  "bench_copy_lbl": "Permitir copiar archivos de benchmark al juego (Bajo su riesgo)",
+  "nav_home": "Home",
+  "nav_bench": "Benchmark",
+  "nav_settings": "Settings",
+  "tab_home": "Home",
+  "lb_search": "Search Player / CPU / Disk..."
 }
