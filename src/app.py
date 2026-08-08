@@ -124,39 +124,56 @@ class AppController(MainWindow):
             if not self.is_polling:
                 return
 
-            success_count = 0
-            while self.is_polling:
-                is_alive, name, max_players, _ = self.a2s_client.check_server_alive(real_ip, port)
-                if name:
-                    server_name = name
+            def check_manual_join(event):
+                if not getattr(self, 'is_polling', False): return
+                if "Client connected" in event or "Spawning" in event:
+                    self.log_safe("[!] Обнаружено ручное подключение к серверу! Авто-коннект остановлен.")
+                    self.stop_polling_safe()
+                    
+            from .services.log_watcher import LogWatcher
+            manual_join_watcher = LogWatcher(
+                on_disconnect=lambda r: None,
+                on_error=lambda e: None,
+                on_event=check_manual_join,
+                seek_end=True
+            )
+            manual_join_watcher.start()
 
-                if state == "WAITING_ONLINE":
-                    if is_alive:
-                        if max_players > 0:
-                            success_count += 1
-                            self.log_safe(self.t("poll_ans", name=server_name))
+            try:
+                success_count = 0
+                while self.is_polling:
+                    is_alive, name, max_players, _ = self.a2s_client.check_server_alive(real_ip, port)
+                    if name:
+                        server_name = name
+
+                    if state == "WAITING_ONLINE":
+                        if is_alive:
+                            if max_players > 0:
+                                success_count += 1
+                                self.log_safe(self.t("poll_ans", name=server_name))
+                            else:
+                                success_count = 0
+                                self.log_safe(self.t("wait_ready"))
                         else:
                             success_count = 0
-                            self.log_safe(self.t("wait_ready"))
-                    else:
-                        success_count = 0
-                        self.log_safe(self.t("poll_err", sec=config.POLL_INTERVAL))
+                            self.log_safe(self.t("poll_err", sec=config.POLL_INTERVAL))
 
-                    if success_count >= 2:
-                        self.log_safe(self.t("stable"))
-                        target_str = f"{real_ip}:{port}"
-                        self.after(0, lambda: self.history_store.add_to_history(target_str, server_name))
-                        self.after(0, self.refresh_history_ui)
+                        if success_count >= 2:
+                            self.log_safe(self.t("stable"))
+                            target_str = f"{real_ip}:{port}"
+                            self.after(0, lambda: self.history_store.add_to_history(target_str, server_name))
+                            self.after(0, self.refresh_history_ui)
 
-                        self.launch_game(target_str)
-                        self.start_log_monitor(target_str)
-                        break
+                            self.launch_game(target_str)
+                            break
 
-                current_interval = config.POLL_INTERVAL
-                for _ in range(int(current_interval * 10)):
-                    if not self.is_polling:
-                        break
-                    time.sleep(0.1)
+                    current_interval = config.POLL_INTERVAL
+                    for _ in range(int(current_interval * 10)):
+                        if not self.is_polling:
+                            break
+                        time.sleep(0.1)
+            finally:
+                manual_join_watcher.stop()
 
         finally:
             self.is_reconnecting = False
