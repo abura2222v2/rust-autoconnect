@@ -215,23 +215,26 @@ class MainWindow(ctk.CTk):
     def _on_tray_change(self):
         self.history_store.set_minimize_to_tray(self.tray_var.get())
 
+    def save_user_config(self):
+        pass
+
     def _on_swarm_change(self):
         from ..services.swarm_service import swarm_service
         is_checked = self.swarm_var.get()
         
         if is_checked:
-            self.swarm_switch.configure(state="disabled")
+            self.swarm_checkbox.configure(state="disabled")
             def test_and_connect():
                 if swarm_service.test_connection():
                     self.history_store.set_swarm_enabled(True)
                     swarm_service.is_enabled = True
                     swarm_service.start()
-                    self.after(0, lambda: self.swarm_switch.configure(state="normal"))
+                    self.after(0, lambda: self.swarm_checkbox.configure(state="normal"))
                 else:
                     import tkinter.messagebox as messagebox
                     self.after(0, lambda: messagebox.showerror("Connection Error", "Failed to connect to Swarm servers."))
                     self.after(0, lambda: self.swarm_var.set(False))
-                    self.after(0, lambda: self.swarm_switch.configure(state="normal"))
+                    self.after(0, lambda: self.swarm_checkbox.configure(state="normal"))
             import threading
             threading.Thread(target=test_and_connect, daemon=True).start()
         else:
@@ -293,7 +296,10 @@ class MainWindow(ctk.CTk):
 
     def open_leaderboard(self):
         from .leaderboard_window import LeaderboardWindow
-        LeaderboardWindow(self)
+        if not hasattr(self, 'lb_window') or not self.lb_window.winfo_exists():
+            self.lb_window = LeaderboardWindow(self)
+        else:
+            self.lb_window.focus()
 
     def update_favorites_combobox(self):
         favorites = self.history_store.get_favorites()
@@ -463,6 +469,9 @@ class MainWindow(ctk.CTk):
         ts = time.strftime("[%H:%M:%S]")
         self.log_textbox.configure(state="normal")
         self.log_textbox.insert("end", f"{ts} {msg}\n")
+        lines = int(self.log_textbox.index('end-1c').split('.')[0])
+        if lines > 500:
+            self.log_textbox.delete('1.0', '2.0')
         self.log_textbox.see("end")
         self.log_textbox.configure(state="disabled")
 

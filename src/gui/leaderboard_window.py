@@ -72,8 +72,12 @@ class LeaderboardWindow(ctk.CTkToplevel):
         self.after(0, lambda: self._render_data(data, is_new_search))
         
     def _render_data(self, data, is_new_search):
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
         self.search_btn.configure(state="normal")
-        self.load_more_btn.configure(state="normal")
         
         if is_new_search and hasattr(self, 'lbl_status'):
             self.lbl_status.destroy()
@@ -82,13 +86,16 @@ class LeaderboardWindow(ctk.CTkToplevel):
             for widget in self.scroll.winfo_children():
                 widget.destroy()
             ctk.CTkLabel(self.scroll, text=self.i18n.t("lb_err_empty")).pack(pady=20)
-            return
-            
-        if not data:
             self.load_more_btn.configure(state="disabled", text="End of Results")
             return
             
-        self.load_more_btn.configure(text="Load More ⬇")
+        if not data or len(data) < self.limit:
+            self.load_more_btn.configure(state="disabled", text="End of Results")
+        else:
+            self.load_more_btn.configure(state="normal", text="Load More ⬇")
+            
+        if not data:
+            return
         
         for row in data:
             self.current_data.append(row)

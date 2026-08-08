@@ -28,30 +28,25 @@ def test_steam_service_parse_acf_buildid():
 
 def test_steam_service_is_force_wipe_window():
     from datetime import datetime, timezone
-    # Non-wipe date: Jan 15, 2026
     dt_normal = datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)
     assert steam_service.is_force_wipe_window(dt_normal) is False
 
-    # Force wipe date: Feb 5, 2026 15:00 UTC (First Thursday of Feb 2026)
     dt_wipe = datetime(2026, 2, 5, 15, 0, tzinfo=timezone.utc)
     assert steam_service.is_force_wipe_window(dt_wipe) is True
 
 def test_main_window_init_and_search_debounce(temp_env):
-    """Test MainWindow creation and search bar debouncing (UI stutter fix)."""
     store = HistoryStore()
     app = MainWindow(history_mgr=store)
     app.withdraw()
 
-    # Verify search debounce timer setup
     app.search_var.set("test search")
     assert app._search_timer is not None
 
-    # Cancel pending after call before destroying
-    app.after_cancel(app._search_timer)
+    if app._search_timer:
+        app.after_cancel(app._search_timer)
     app.destroy()
 
 def test_bug_09_inline_edit_unbind(temp_env):
-    """Test BUG-09 fix: inline edit unbinds handlers to prevent double invocation Tcl errors."""
     store = HistoryStore()
     store.add_to_history("127.0.0.1:28015", "Old Name")
 
@@ -65,10 +60,8 @@ def test_bug_09_inline_edit_unbind(temp_env):
     frame = children[0]
     btn = frame.winfo_children()[0]
 
-    # Trigger inline edit
     save_cb = app.start_inline_edit(frame, btn, "127.0.0.1:28015", "Old Name")
 
-    # Verify entry created
     entry_widget = None
     for w in frame.winfo_children():
         if hasattr(w, "get"):
@@ -79,9 +72,7 @@ def test_bug_09_inline_edit_unbind(temp_env):
     entry_widget.delete(0, "end")
     entry_widget.insert(0, "New Name")
 
-    # Call save_cb (simulating Return or FocusOut)
     save_cb()
-    # Call save_cb a second time (simulating double invocation event)
     save_cb()
 
     assert store.get_history()[0]["name"] == "New Name"
@@ -91,16 +82,11 @@ def test_bug_09_inline_edit_unbind(temp_env):
     app.destroy()
 
 def test_bug_01_reconnect_finally_cleanup(temp_env):
-    """Test BUG-01 fix: run_logic resets is_reconnecting = False in finally block."""
     app = AppController()
     app.withdraw()
 
     app.is_reconnecting = True
-
-    # Call run_logic with invalid target string to trigger early return
     app.run_logic("invalid_target_no_colon")
-
-    # Verify is_reconnecting was set back to False by finally block
     assert app.is_reconnecting is False
 
     if app._search_timer:
@@ -108,14 +94,92 @@ def test_bug_01_reconnect_finally_cleanup(temp_env):
     app.destroy()
 
 def test_bug_04_graceful_shutdown(temp_env):
-    """Test BUG-04 fix: system tray quit uses graceful shutdown instead of abrupt os._exit(0)."""
     app = AppController()
     app.withdraw()
 
     app.is_polling = True
-
-    # Call quit_window (which schedules shutdown on main thread)
     app.quit_window()
     app.update()
 
     assert app.is_polling is False
+
+def test_save_user_config_exists(temp_env):
+    store = HistoryStore()
+    app = MainWindow(history_mgr=store)
+    app.withdraw()
+    assert hasattr(app, "save_user_config")
+    app.save_user_config()
+    if app._search_timer:
+        app.after_cancel(app._search_timer)
+    app.destroy()
+
+def test_on_swarm_change_uses_swarm_checkbox(temp_env):
+    store = HistoryStore()
+    app = MainWindow(history_mgr=store)
+    app.withdraw()
+    app.swarm_var.set(False)
+    app._on_swarm_change()
+    assert store.get_swarm_enabled() is False
+    if app._search_timer:
+        app.after_cancel(app._search_timer)
+    app.destroy()
+
+def test_open_leaderboard_single_instance(temp_env):
+    store = HistoryStore()
+    app = MainWindow(history_mgr=store)
+    app.withdraw()
+    app.open_leaderboard()
+    assert hasattr(app, "lb_window")
+    first_lb = app.lb_window
+    assert first_lb.winfo_exists()
+    app.open_leaderboard()
+    assert app.lb_window is first_lb
+    if app._search_timer:
+        app.after_cancel(app._search_timer)
+    first_lb.destroy()
+    app.destroy()
+
+def test_log_textbox_truncation(temp_env):
+    store = HistoryStore()
+    app = MainWindow(history_mgr=store)
+    app.withdraw()
+    for i in range(510):
+        app.log(f"Test log line {i}")
+    lines = int(app.log_textbox.index('end-1c').split('.')[0])
+    assert lines <= 500
+    if app._search_timer:
+        app.after_cancel(app._search_timer)
+    app.destroy()
+
+def test_leaderboard_load_more_disabled_and_destroyed_window(temp_env):
+    from src.gui.leaderboard_window import LeaderboardWindow
+    store = HistoryStore()
+    app = MainWindow(history_mgr=store)
+    app.withdraw()
+    lb = LeaderboardWindow(app)
+    lb.withdraw()
+    
+    small_data = [{'cpu': 'CPU', 'disk': 'Disk', 'total_time': 10.0}]
+    lb._render_data(small_data, is_new_search=True)
+    assert lb.load_more_btn.cget("state") == "disabled"
+    
+    lb.destroy()
+    lb._render_data(small_data, is_new_search=False)
+    
+    if app._search_timer:
+        app.after_cancel(app._search_timer)
+    app.destroy()
+
+def test_tooltip_topmost(temp_env):
+    from src.gui.tooltip import ToolTip
+    store = HistoryStore()
+    app = MainWindow(history_mgr=store)
+    app.withdraw()
+    tip = ToolTip(app.save_cfg_btn, "Test tooltip")
+    tip.showtip()
+    assert tip.tw is not None
+    assert tip.tw.attributes('-topmost')
+    tip.hidetip()
+    if app._search_timer:
+        app.after_cancel(app._search_timer)
+    app.destroy()

@@ -796,6 +796,7 @@ class AppController(MainWindow):
         """
         BUG-04 Fix: Graceful shutdown stopping log watcher and polling loops.
         """
+        self.is_polling = False
         self._is_shutting_down = True
         self._shutdown_event.set()
         
