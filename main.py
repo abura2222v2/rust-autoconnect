@@ -593,14 +593,17 @@ class App(ctk.CTk):
             frame.pack(fill="x", pady=2)
             
             short_name = display_name
-            if len(short_name) > 18:
-                short_name = short_name[:15] + "..."
+            if len(short_name) > 30:
+                short_name = short_name[:27] + "..."
             
             btn_text = f"{ip}\n({short_name})"
             btn = ctk.CTkButton(frame, text=btn_text, fg_color="#2b2b2b", 
                                 hover_color="#3b3b3b", text_color=("gray80", "white"),
                                 command=lambda i=ip: self.select_history(i))
             btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
+            
+            # Double click to edit name
+            btn.bind("<Double-Button-1>", lambda event, i=ip, n=display_name: self.edit_history_name(i, n))
             
             btn_font = ctk.CTkFont(family="Arial", size=14)
             
@@ -610,9 +613,7 @@ class App(ctk.CTk):
                                     command=lambda i=ip, n=display_name: self.toggle_favorite(i, n))
             fav_btn.pack(side="left", padx=(0, 2))
 
-            edit_btn = ctk.CTkButton(frame, text="✎", width=28, height=28, font=btn_font, fg_color="#3B8ED0", hover_color="#36719F",
-                                    command=lambda i=ip, n=display_name: self.edit_history_name(i, n))
-            edit_btn.pack(side="left", padx=(0, 2))
+
 
             del_btn = ctk.CTkButton(frame, text="X", width=28, height=28, font=btn_font, fg_color="#C25A5A", hover_color="#914141",
                                     command=lambda i=ip: self.remove_from_history(i))
