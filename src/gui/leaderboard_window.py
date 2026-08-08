@@ -24,6 +24,10 @@ class LeaderboardWindow(ctk.CTkToplevel):
         self.search_entry = ctk.CTkEntry(self.search_frame, placeholder_text="Search Player / CPU / Disk...", width=300)
         self.search_entry.pack(side="left", padx=10, pady=10)
         
+        self.sort_var = ctk.StringVar(value="Fastest")
+        self.sort_menu = ctk.CTkOptionMenu(self.search_frame, values=["Fastest", "Slowest"], variable=self.sort_var, width=100)
+        self.sort_menu.pack(side="left", padx=5, pady=10)
+        
         self.search_btn = ctk.CTkButton(self.search_frame, text="Search", width=100, command=self._on_search)
         self.search_btn.pack(side="left", padx=10, pady=10)
         
@@ -59,11 +63,12 @@ class LeaderboardWindow(ctk.CTkToplevel):
         self.load_more_btn.configure(state="disabled")
         
         query = self.search_entry.get().strip()
-        threading.Thread(target=self._fetch_bg, args=(query, is_new_search), daemon=True).start()
+        sort_val = "asc" if self.sort_var.get() == "Fastest" else "desc"
+        threading.Thread(target=self._fetch_bg, args=(query, sort_val, is_new_search), daemon=True).start()
         
-    def _fetch_bg(self, query, is_new_search):
+    def _fetch_bg(self, query, sort_val, is_new_search):
         from ..services.leaderboard_service import leaderboard_service
-        data = leaderboard_service.fetch_leaderboard(limit=self.limit, offset=self.offset, search_query=query)
+        data = leaderboard_service.fetch_leaderboard(limit=self.limit, offset=self.offset, search_query=query, sort_order=sort_val)
         self.after(0, lambda: self._render_data(data, is_new_search))
         
     def _render_data(self, data, is_new_search):
@@ -118,7 +123,7 @@ class LeaderboardWindow(ctk.CTkToplevel):
             avg_time = sum(r.get('time_seconds', 0.0) for r in rows) / len(rows)
             sorted_groups.append((key, avg_time, rows))
             
-        sorted_groups.sort(key=lambda x: x[1])
+        sorted_groups.sort(key=lambda x: x[1], reverse=(self.sort_var.get() == "Slowest"))
             
         for i, (key, avg_time, rows) in enumerate(sorted_groups):
             rank = i + 1

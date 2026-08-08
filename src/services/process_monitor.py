@@ -24,7 +24,7 @@ class ProcessMonitor:
             
             current_time = time.time()
             if current_time - self._last_scan_time < 1.5:
-                return False
+                return self.cached_pid is not None
             self._last_scan_time = current_time
             
             # Slow path: iterate processes

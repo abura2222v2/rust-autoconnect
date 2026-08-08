@@ -6,9 +6,9 @@ class LeaderboardService:
         self.url = "https://eznuyydoanefceqmqxqi.supabase.co/rest/v1/benchmarks"
         self.key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6bnV5eWRvYW5lZmNlcW1xeHFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxNzAyNDgsImV4cCI6MjEwMTc0NjI0OH0.nCxZbqr3m0r242kUBY3RSpF_iwh7vRtBw_nVTxwe-tI"
 
-    def fetch_leaderboard(self, limit: int = 500, offset: int = 0, search_query: str = "") -> list:
+    def fetch_leaderboard(self, limit: int = 500, offset: int = 0, search_query: str = "", sort_order: str = "asc") -> list:
         try:
-            url = f"{self.url}?select=*&order=time_seconds.asc&limit={limit}&offset={offset}"
+            url = f"{self.url}?select=*&order=time_seconds.{sort_order}&limit={limit}&offset={offset}"
             if search_query:
                 # Add basic search filter using Supabase ilike
                 import urllib.parse

@@ -505,10 +505,18 @@ class AppController(MainWindow):
                 self.log_bench("[*] Demo patched! Restarting benchmark...")
                 # Start again
                 self.after(2000, self.run_benchmark)
-            elif spawn_reached:
+            elif spawn_reached and menu_reached:
                 demo_load_time = time.time() - demo_start_time if demo_start_time > 0.0 else 0.0
                 total_time = time_to_menu + demo_load_time
                 
+                # Validation: Prevent spoofing by requiring minimum realistic times
+                if time_to_menu < 2.0 or demo_load_time < 2.0:
+                    self.log_bench("[!] Benchmark rejected: Times are unrealistically fast. Anti-cheat triggered.")
+                    self.is_benchmarking = False
+                    self.after(0, lambda: self.bench_btn.configure(state="normal", fg_color="#E74C3C", text="Rejected"))
+                    self.after(3000, lambda: self.bench_btn.configure(state="normal", fg_color="#3B8ED0", text=self.t("run_test"), text_color=["gray10", "#DCE4EE"]))
+                    return
+                    
                 self.log_bench(f"[🏆] Time to Menu: {round(time_to_menu, 1)}s")
                 self.log_bench(f"[🏆] Map Load Time: {round(demo_load_time, 1)}s")
                 self.log_bench(f"[🏆] Total Benchmark Score: {round(total_time, 1)}s")
