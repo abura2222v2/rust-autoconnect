@@ -4,6 +4,7 @@ import pystray
 from PIL import Image, ImageDraw
 from typing import Optional
 
+from .tooltip import ToolTip
 from ..core.i18n import i18n, I18nManager
 from ..core.history_store import history_store, HistoryStore
 
@@ -173,11 +174,13 @@ class MainWindow(ctk.CTk):
         self.tray_var = ctk.BooleanVar(value=self.history_store.get_minimize_to_tray())
         self.tray_checkbox = ctk.CTkCheckBox(self.settings_frame, text=self.t("tray_lbl"), variable=self.tray_var, command=self._on_tray_change)
         self.tray_checkbox.grid(row=2, column=0, columnspan=2, padx=40, pady=20, sticky="w")
+        ToolTip(self.tray_checkbox, "When you click the 'X' to close the window,\nthe app will minimize to the system tray\ninstead of quitting entirely.")
 
         # Swarm Checkbox
         self.swarm_var = ctk.BooleanVar(value=self.history_store.get_swarm_enabled())
         self.swarm_checkbox = ctk.CTkCheckBox(self.settings_frame, text=self.t("swarm_lbl"), variable=self.swarm_var, command=self._on_swarm_change)
         self.swarm_checkbox.grid(row=3, column=0, columnspan=2, padx=40, pady=10, sticky="w")
+        ToolTip(self.swarm_checkbox, "Shares server status with other players.\nIf someone else connects to the same server,\nyour bot will instantly connect you too.")
 
         # Start by showing Home
         self.refresh_history_ui()
