@@ -347,10 +347,6 @@ class App(ctk.CTk):
         self.update_check = ctk.CTkCheckBox(self.bottom_frame, text="Auto-Update Rust", variable=self.auto_update, command=self.on_auto_update_change)
         self.update_check.pack(side="right", padx=10)
 
-    def on_auto_update_change(self):
-        self.is_auto_update_enabled = self.auto_update.get()
-        self.save_data()
-
         # Log Frame (Now taking row 1 and row 2 space)
         self.log_frame = ctk.CTkFrame(self.right_panel)
         self.log_frame.grid(row=1, column=0, rowspan=2, padx=20, pady=(0, 10), sticky="nsew")
@@ -366,6 +362,10 @@ class App(ctk.CTk):
         # Start Rust process checker and update checker
         threading.Thread(target=self.check_rust_status_loop, daemon=True).start()
         threading.Thread(target=self.check_rust_update, daemon=True).start()
+
+    def on_auto_update_change(self):
+        self.is_auto_update_enabled = self.auto_update.get()
+        self.save_data()
 
     def check_rust_status_loop(self):
         while True:
