@@ -3,7 +3,7 @@ import a2s
 from typing import Tuple
 
 class A2SClient:
-    def __init__(self, timeout=0.6, offsets=(0, 15, 3, 1, 123)):
+    def __init__(self, timeout=0.6, offsets=(0, 15, 5, 10, 3, 1, 123)):
         self.timeout = timeout
         self.offsets = offsets
 
