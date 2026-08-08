@@ -35,7 +35,7 @@ class AppController(MainWindow):
         from .services.hardware_service import hardware_service
         self.hardware_service = hardware_service
         
-        self.append_log(self.t("ready"))
+        self.log_safe(self.t("ready"))
         
         # Start background status and update monitoring loops
         threading.Thread(target=self.check_rust_status_loop, daemon=True).start()
@@ -169,11 +169,11 @@ class AppController(MainWindow):
                 self.log_bench("[*] Closed Rust.")
             else:
                 self.log_bench("[!] Benchmark aborted.")
-        else:
-            pass
+        if self.is_reconnecting:
+            return
 
     def log_safe(self, msg: str):
-        self.gui.after(0, lambda: self.gui.append_log(msg))
+        self.after(0, lambda: self.log(msg))
 
     def _on_swarm_event(self, ip_port: str):
         if not self.is_polling:
@@ -202,8 +202,8 @@ class AppController(MainWindow):
                 self.log_bench("[*] Closed Rust.")
             else:
                 self.log_bench("[!] Benchmark aborted.")
+                self.after(0, lambda: self.bench_btn.configure(state="normal"))
                 return
-                
         self.bench_btn.configure(state="disabled")
         self.bench_log.configure(state="normal")
         self.bench_log.delete("0.0", "end")
