@@ -1,10 +1,23 @@
 import urllib.request
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 class LeaderboardService:
     def __init__(self):
         self.url = "https://eznuyydoanefceqmqxqi.supabase.co/rest/v1/benchmarks"
-        self.key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6bnV5eWRvYW5lZmNlcW1xeHFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxNzAyNDgsImV4cCI6MjEwMTc0NjI0OH0.nCxZbqr3m0r242kUBY3RSpF_iwh7vRtBw_nVTxwe-tI"
+        self._executor = ThreadPoolExecutor(max_workers=4)
+
+    @property
+    def key(self) -> str:
+        return os.environ.get('SUPABASE_KEY', '')
+
+    def _http_request(self, req, timeout: int = 5):
+        def _do_request():
+            with urllib.request.urlopen(req, timeout=timeout) as res:
+                code = res.getcode() if hasattr(res, 'getcode') else res.status
+                return code, res.read()
+        return self._executor.submit(_do_request).result()
 
     def fetch_leaderboard(self, limit: int = 500, offset: int = 0, search_query: str = "", sort_order: str = "asc") -> list:
         try:
@@ -18,28 +31,29 @@ class LeaderboardService:
             req = urllib.request.Request(url)
             req.add_header("apikey", self.key)
             req.add_header("Authorization", f"Bearer {self.key}")
-            with urllib.request.urlopen(req, timeout=5) as res:
-                data = json.loads(res.read().decode('utf-8'))
-                
-                # Filter out dummy test rows
-                data = [r for r in data if r.get('username') != 'TestUser']
-                
-                # Deduplicate by client_id (UUID format username) - keep only the best (fastest) score
-                user_best = {}
-                deduped_data = []
-                import re
-                uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
-                
-                for row in data:
-                    uname = row.get('username', '')
-                    if uuid_pattern.match(uname):
-                        if uname not in user_best or row.get('total_time', 999.0) < user_best[uname].get('total_time', 999.0):
-                            user_best[uname] = row
-                    else:
-                        deduped_data.append(row)
-                
-                deduped_data.extend(user_best.values())
-                return deduped_data
+            
+            _, body = self._http_request(req, timeout=5)
+            data = json.loads(body.decode('utf-8'))
+            
+            # Filter out dummy test rows
+            data = [r for r in data if r.get('username') != 'TestUser']
+            
+            # Deduplicate by client_id (UUID format username) - keep only the best (fastest) score
+            user_best = {}
+            deduped_data = []
+            import re
+            uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+            
+            for row in data:
+                uname = row.get('username', '')
+                if uuid_pattern.match(uname):
+                    if uname not in user_best or row.get('total_time', 999.0) < user_best[uname].get('total_time', 999.0):
+                        user_best[uname] = row
+                else:
+                    deduped_data.append(row)
+            
+            deduped_data.extend(user_best.values())
+            return deduped_data
         except Exception as e:
             print(e)
             return []
@@ -62,16 +76,17 @@ class LeaderboardService:
             del_req.add_header("apikey", self.key)
             del_req.add_header("Authorization", f"Bearer {self.key}")
             try:
-                urllib.request.urlopen(del_req, timeout=5)
-            except:
+                self._http_request(del_req, timeout=5)
+            except Exception:
                 pass # Ignore if no previous scores or network issue
                 
             req = urllib.request.Request(self.url, data=json.dumps(payload).encode('utf-8'), method="POST")
             req.add_header("apikey", self.key)
             req.add_header("Authorization", f"Bearer {self.key}")
             req.add_header("Content-Type", "application/json")
-            with urllib.request.urlopen(req, timeout=5) as res:
-                return res.getcode() in [200, 201]
+            
+            status_code, _ = self._http_request(req, timeout=5)
+            return status_code in [200, 201]
         except Exception:
             return False
 

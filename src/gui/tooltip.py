@@ -36,6 +36,7 @@ class ToolTip(object):
         self.tw = tk.Toplevel(self.widget)
         self.tw.wm_overrideredirect(True)
         self.tw.wm_geometry("+%d+%d" % (x, y))
+        self.tw.attributes('-topmost', True)
         
         # Adding a slightly dark theme look
         label = tk.Label(self.tw, text=self.text, justify='left',

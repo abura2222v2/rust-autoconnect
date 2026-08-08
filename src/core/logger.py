@@ -15,7 +15,9 @@ class AppLogger:
             )
             
             # File Handler (5MB max size, keep 2 backups)
-            log_file = os.path.join(os.getcwd(), 'app.log')
+            log_dir = os.path.join(os.getenv('APPDATA', os.getcwd()), 'RustAutoConnect')
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, 'app.log')
             file_handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=2, encoding='utf-8')
             file_handler.setLevel(logging.DEBUG)
             file_handler.setFormatter(log_format)

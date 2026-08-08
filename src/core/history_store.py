@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import shutil
@@ -67,6 +68,8 @@ class HistoryStore:
         try:
             with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, ensure_ascii=False, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp_file, data_file)
         except Exception:
             if tmp_file.exists():
@@ -112,11 +115,11 @@ class HistoryStore:
 
     def get_history(self) -> List[Dict[str, Any]]:
         with self._lock:
-            return list(self.data.get("history", []))
+            return copy.deepcopy(self.data.get("history", []))
 
     def get_favorites(self) -> List[Dict[str, Any]]:
         with self._lock:
-            return list(self.data.get("favorites", []))
+            return copy.deepcopy(self.data.get("favorites", []))
 
     def get_username(self) -> str:
         return self.data.get("username", "")
@@ -128,12 +131,13 @@ class HistoryStore:
                 import uuid
                 cid = str(uuid.uuid4())
                 self.data["client_id"] = cid
-                self._save_unsafe()
+                self.save()
             return cid
 
     def set_username(self, name: str):
-        self.data["username"] = name
-        self._save()
+        with self._lock:
+            self.data["username"] = name
+            self.save()
 
     def get_lang(self) -> str:
         with self._lock:

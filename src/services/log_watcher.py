@@ -6,7 +6,21 @@ from ..core.config import config
 from .process_monitor import process_monitor
 
 class LogWatcher:
+    """
+    Monitors Rust client log files in a background thread and invokes callbacks when events occur.
+
+    Note on Thread Safety:
+        Callbacks (`on_disconnect`, `on_error`, `on_event`) are executed on a background thread.
+        If a callback performs UI operations (e.g. updating CustomTkinter widgets), the caller
+        must handle thread-safety by scheduling UI updates onto the main UI thread (e.g. using `widget.after()`).
+    """
     def __init__(self, on_disconnect: Callable[[str], None], on_error: Callable[[str], None], on_event: Callable[[str], None] = None, seek_end: bool = True, target_log_path = None):
+        """
+        Initialize LogWatcher.
+
+        Note: Callbacks are executed from a background thread. Callers modifying UI components in callbacks
+        must dispatch changes safely to the main thread (e.g., via root.after or thread-safe queue).
+        """
         self.on_disconnect = on_disconnect
         self.on_error = on_error
         self.on_event = on_event
@@ -85,7 +99,7 @@ class LogWatcher:
                         if len(buffer) > 1024 * 1024:
                             buffer = ""
                             
-                        lines = buffer.split('\n')
+                        lines = buffer.split(chr(10))
                         buffer = lines.pop()
                         
                         for line in lines:

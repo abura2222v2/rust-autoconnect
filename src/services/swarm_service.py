@@ -1,5 +1,6 @@
 import threading
 import json
+import os
 import websocket
 import hmac
 import hashlib
@@ -18,10 +19,17 @@ class SwarmService:
         self.on_swarm_event: Optional[Callable[[str], None]] = None
         self.is_connected = False
         self.is_enabled = False
-        self._secret = b"RustAutoConnect_Swarm_Secret_v1"
+        
+        secret = os.environ.get('SWARM_SECRET', b'default')
+        if isinstance(secret, str):
+            secret = secret.encode('utf-8')
+        self._secret = secret
         
     def _sign(self, text: str) -> str:
-        return hmac.new(self._secret, text.encode('utf-8'), hashlib.sha256).hexdigest()
+        secret = os.environ.get('SWARM_SECRET', self._secret)
+        if isinstance(secret, str):
+            secret = secret.encode('utf-8')
+        return hmac.new(secret, text.encode('utf-8'), hashlib.sha256).hexdigest()
         
     def test_connection(self) -> bool:
         """Ping Supabase REST endpoint to verify connection."""
@@ -54,6 +62,7 @@ class SwarmService:
         self.ws_thread.start()
         
     def stop(self):
+        self.is_enabled = False
         if self.ws:
             self.ws.close()
             
@@ -61,24 +70,27 @@ class SwarmService:
         self.is_connected = True
         
         # Start heartbeat loop required by Phoenix/Supabase
-        def heartbeat_loop():
+        def heartbeat_loop(current_ws):
             import time
             ref = 2
             while self.is_connected and self.ws:
+                if self.ws is not current_ws:
+                    break
                 time.sleep(30)
-                if self.is_connected and self.ws:
-                    try:
-                        self.ws.send(json.dumps({
-                            "topic": "phoenix",
-                            "event": "heartbeat",
-                            "payload": {},
-                            "ref": str(ref)
-                        }))
-                        ref += 1
-                    except:
-                        pass
+                if not self.is_connected or self.ws is not current_ws:
+                    break
+                try:
+                    current_ws.send(json.dumps({
+                        "topic": "phoenix",
+                        "event": "heartbeat",
+                        "payload": {},
+                        "ref": str(ref)
+                    }))
+                    ref += 1
+                except:
+                    break
                         
-        threading.Thread(target=heartbeat_loop, daemon=True).start()
+        threading.Thread(target=heartbeat_loop, args=(ws,), daemon=True).start()
         payload = {
             "topic": "realtime:public:swarm_events",
             "event": "phx_join",

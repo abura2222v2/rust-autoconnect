@@ -41,7 +41,7 @@ class ProcessMonitor:
     def force_kill_rust(self):
         with self._lock:
             try:
-                subprocess.run(["taskkill", "/F", "/IM", "RustClient.exe"], creationflags=subprocess.CREATE_NO_WINDOW)
+                subprocess.run(["taskkill", "/F", "/IM", "RustClient.exe"], timeout=5.0, creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception as e:
                 from ..core.logger import app_logger
                 app_logger.error(f"Failed to kill Rust: {e}")
