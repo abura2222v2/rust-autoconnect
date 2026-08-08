@@ -26,28 +26,9 @@ class LogWatcher:
 
     def _watch_loop(self):
         log_path = config.rust_log_path
-        if not log_path.exists():
-            return
-            
-        try:
-            where = log_path.stat().st_size
-        except Exception as e:
-            self.on_error(f"Failed to read log size: {e}")
-            self.is_monitoring = False
-            return
-        has_started = False
-        
-        while self.is_monitoring:
-            try:
-                current_size = log_path.stat().st_size
-                if current_size == where:
-                    # File didn't grow
-                    is_running = process_monitor.is_rust_running()
-                    if is_running:
-                        has_started = True
-                    elif has_started:
-                        # Crash detected (process was running but disappeared)
+        # Wait for log file to exist
         while self.is_monitoring and not log_path.exists():
+            time.sleep(1.0)
             time.sleep(1.0)
             
         if not self.is_monitoring:

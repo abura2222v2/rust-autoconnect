@@ -3,6 +3,8 @@ import threading
 import time
 import webbrowser
 import os
+import re
+import shutil
 import customtkinter as ctk
 from typing import Optional
 
@@ -27,26 +29,17 @@ class AppController(MainWindow):
         self.is_reconnecting = False
         self.poll_thread = None
         self.log_watcher: Optional[LogWatcher] = None
-        self.a2s_client = A2SClient(config.A2S_TIMEOUT)
+        self.a2s_client = a2s_client
         self.process_monitor = process_monitor
 
         from .services.hardware_service import hardware_service
         self.hardware_service = hardware_service
         
-        self.gui.append_log(self.t("ready"))
+        self.append_log(self.t("ready"))
         
-        hw_cpu = self.hardware_service.get_cpu_info()
-        hw_ram = self.hardware_service.get_ram_info()
-        hw_disk = self.hardware_service.get_disk_info()
-        self.hardware_label.configure(text=f"CPU: {hw_cpu}\nRAM: {hw_ram}\nDisk: {hw_disk}")
-
         # Start background status and update monitoring loops
         threading.Thread(target=self.check_rust_status_loop, daemon=True).start()
         threading.Thread(target=self.check_rust_update_loop, daemon=True).start()
-        
-        from .services.hardware_service import hardware_service
-        self.hardware_service = hardware_service
-        
         threading.Thread(target=self._load_hardware, daemon=True).start()
         
         # Init Swarm Service
@@ -196,10 +189,10 @@ class AppController(MainWindow):
         hw_cpu = self.hardware_service.get_cpu_info()
         hw_ram = self.hardware_service.get_ram_info()
         hw_disk = self.hardware_service.get_disk_info()
-        self.after(0, lambda: self.gui.hardware_label.configure(text=f"CPU: {hw_cpu}\nRAM: {hw_ram}\nDisk: {hw_disk}"))
+        self.after(0, lambda: self.hardware_label.configure(text=f"CPU: {hw_cpu}\nRAM: {hw_ram}\nDisk: {hw_disk}"))
 
     def run_benchmark(self):
-        if not hasattr(self, 'gui') or not hasattr(self.gui, 'bench_btn'):
+        if not hasattr(self, 'bench_btn'):
             return
             
         if self.process_monitor.is_rust_running():
@@ -211,10 +204,10 @@ class AppController(MainWindow):
                 self.log_bench("[!] Benchmark aborted.")
                 return
                 
-        self.gui.bench_btn.configure(state="disabled")
-        self.gui.bench_log.configure(state="normal")
-        self.gui.bench_log.delete("0.0", "end")
-        self.gui.bench_log.configure(state="disabled")
+        self.bench_btn.configure(state="disabled")
+        self.bench_log.configure(state="normal")
+        self.bench_log.delete("0.0", "end")
+        self.bench_log.configure(state="disabled")
         threading.Thread(target=self.run_benchmark_logic, daemon=True).start()
 
     def run_benchmark_logic(self):
@@ -241,26 +234,39 @@ class AppController(MainWindow):
         if not os.path.exists(os.path.join(rust_path, "RustClient.exe")):
             self.log_bench("[!] Invalid Rust folder. RustClient.exe not found.")
             history_store.set_rust_path("") # reset
-            self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
+            self.after(0, lambda: self.bench_btn.configure(state="normal"))
             return
             
-        bm_source = r"C:\Users\abura\Downloads\BenchmarkFiles"
+        # Try to find BenchmarkFiles next to exe, or fallback to current dir
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        bm_source = os.path.abspath(os.path.join(base_dir, "..", "..", "BenchmarkFiles"))
         if not os.path.exists(bm_source):
-            self.log_bench(f"[!] Benchmark files not found in {bm_source}")
-            self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
-            return
+            bm_source = os.path.abspath(os.path.join(base_dir, "..", "BenchmarkFiles"))
+            if not os.path.exists(bm_source):
+                self.log_bench(f"[!] Benchmark files not found in {bm_source}. Please place 'BenchmarkFiles' folder next to the executable.")
+                self.after(0, lambda: self.bench_btn.configure(state="normal"))
+                return
             
-        self.log_bench("[*] Copying Benchmark files to Rust folder...")
-        import shutil
+        self.log_bench("[*] Backing up your CFG and copying Benchmark files...")
+        
+        cfg_path = os.path.join(rust_path, "cfg")
+        cfg_backup_path = os.path.join(rust_path, "cfg_backup_auto")
+        
         try:
-            shutil.copytree(os.path.join(bm_source, "cfg"), os.path.join(rust_path, "cfg"), dirs_exist_ok=True)
+            # Backup
+            if os.path.exists(cfg_path):
+                if os.path.exists(cfg_backup_path):
+                    shutil.rmtree(cfg_backup_path)
+                shutil.copytree(cfg_path, cfg_backup_path)
+                
+            shutil.copytree(os.path.join(bm_source, "cfg"), cfg_path, dirs_exist_ok=True)
             shutil.copytree(os.path.join(bm_source, "demos"), os.path.join(rust_path, "demos"), dirs_exist_ok=True)
         except Exception as e:
-            self.log_bench(f"[!] Failed to copy benchmark files: {e}")
-            self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
+            self.log_bench(f"[!] Failed to prepare benchmark files: {e}")
+            self.after(0, lambda: self.bench_btn.configure(state="normal"))
             return
             
-        self.after(0, lambda: self.gui.bench_btn.configure(fg_color="orange", text="Running..."))
+        self.after(0, lambda: self.bench_btn.configure(fg_color="orange", text="Running..."))
         self.log_bench("[*] Starting Local Benchmark: Launching Rust Demo...")
         time.sleep(1.0)
         
@@ -291,37 +297,46 @@ class AppController(MainWindow):
                 time.sleep(1.0)
                 if time.time() - start_time > 600:
                     self.log_bench("[!] Timeout: Demo took too long to load.")
-                    self.after(0, lambda: self.gui.bench_btn.configure(fg_color="#3B8ED0", text=self.t("run_test")))
                     return
         finally:
             bench_watcher.stop()
+            self.after(0, lambda: self.bench_btn.configure(fg_color="#3B8ED0", text=self.t("run_test")))
+            self.log_bench("[*] Restoring original CFG backup...")
+            try:
+                if os.path.exists(cfg_backup_path):
+                    shutil.rmtree(cfg_path, ignore_errors=True)
+                    os.rename(cfg_backup_path, cfg_path)
+            except Exception as e:
+                self.log_bench(f"[!] Failed to restore CFG backup: {e}")
             
         total_time = time.time() - start_time
         self.log_bench(f"[🏆] Total Benchmark Time: {round(total_time, 1)} seconds.")
         
         if total_time < 90:
-            self.after(0, lambda: self.gui.bench_btn.configure(fg_color="#50C878", text="Excellent"))
+            self.after(0, lambda: self.bench_btn.configure(fg_color="#50C878", text="Excellent"))
         elif total_time < 180:
-            self.after(0, lambda: self.gui.bench_btn.configure(fg_color="#FADA5E", text="Good", text_color="black"))
+            self.after(0, lambda: self.bench_btn.configure(fg_color="#FADA5E", text="Good", text_color="black"))
         else:
-            self.after(0, lambda: self.gui.bench_btn.configure(fg_color="#C25A5A", text="Slow"))
+            self.after(0, lambda: self.bench_btn.configure(fg_color="#C25A5A", text="Slow"))
             
         self.after(0, lambda: self._prompt_leaderboard(total_time))
         
     def _prompt_leaderboard(self, total_time: float):
         import customtkinter as ctk
-        dialog = ctk.CTkInputDialog(text=f"Your time: {round(total_time, 1)}s!\nEnter nickname for Global Top-30:", title="Submit Score")
+        dialog = ctk.CTkInputDialog(text=f"Your time: {round(total_time, 1)}s!\nEnter nickname for Global Leaderboard:", title="Submit Score")
         ans = dialog.get_input()
         if ans:
             from .services.leaderboard_service import leaderboard_service
             hw_cpu = self.hardware_service.get_cpu_info()
             hw_disk = self.hardware_service.get_disk_info()
+            hw_cpu_id = self.hardware_service.get_cpu_id()
+            hw_disk_serial = self.hardware_service.get_disk_serial()
             # Run blocking HTTP request in background to prevent UI freeze (Architect review fix)
-            threading.Thread(target=self._submit_score_bg, args=(ans, hw_cpu, hw_disk, total_time), daemon=True).start()
+            threading.Thread(target=self._submit_score_bg, args=(ans, hw_cpu, hw_disk, total_time, hw_cpu_id, hw_disk_serial), daemon=True).start()
 
-    def _submit_score_bg(self, ans, hw_cpu, hw_disk, total_time):
+    def _submit_score_bg(self, ans, hw_cpu, hw_disk, total_time, cpu_id, disk_serial):
         from .services.leaderboard_service import leaderboard_service
-        success = leaderboard_service.submit_score(ans, hw_cpu, hw_disk, total_time)
+        success = leaderboard_service.submit_score(ans, hw_cpu, hw_disk, total_time, cpu_id, disk_serial)
         if success:
             self.log_bench("[+] Score successfully submitted to Leaderboard!")
         else:
@@ -331,12 +346,12 @@ class AppController(MainWindow):
         self.after(0, lambda: self._log_bench_ui(msg))
         
     def _log_bench_ui(self, msg: str):
-        if not hasattr(self, 'gui') or not hasattr(self.gui, 'bench_log'):
+        if not hasattr(self, 'bench_log'):
             return
-        self.gui.bench_log.configure(state="normal")
-        self.gui.bench_log.insert("end", msg + "\n")
-        self.gui.bench_log.see("end")
-        self.gui.bench_log.configure(state="disabled")
+        self.bench_log.configure(state="normal")
+        self.bench_log.insert("end", msg + "\n")
+        self.bench_log.see("end")
+        self.bench_log.configure(state="disabled")
 
     def _on_log_error(self, err: str):
         self.log_safe(f"[x] Log Error: {err}")

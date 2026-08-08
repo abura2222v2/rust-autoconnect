@@ -24,5 +24,11 @@ class HardwareService:
 
     def get_disk_info(self) -> str:
         return self._run_ps("(Get-PhysicalDisk | Select-Object -First 1).FriendlyName")
+        
+    def get_cpu_id(self) -> str:
+        return self._run_ps("(Get-WmiObject Win32_Processor).ProcessorId")
+        
+    def get_disk_serial(self) -> str:
+        return self._run_ps("(Get-WmiObject Win32_DiskDrive | Select-Object -First 1).SerialNumber")
 
 hardware_service = HardwareService()
