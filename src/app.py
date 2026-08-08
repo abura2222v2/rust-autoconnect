@@ -211,17 +211,22 @@ class AppController(MainWindow):
             
         rust_path = history_store.get_rust_path()
         if not rust_path or not os.path.exists(rust_path):
-            self.log_bench("[*] Please select your Rust game folder...")
-            import tkinter as tk
-            from tkinter import filedialog
-            root = tk.Tk()
-            root.withdraw()
-            rust_path = filedialog.askdirectory(title="Select your Rust game folder (where RustClient.exe is)")
-            if not rust_path:
-                self.log_bench("[!] Benchmark aborted. Rust path not provided.")
-                self.after(0, lambda: self.bench_btn.configure(state="normal"))
-                return
-            history_store.set_rust_path(rust_path)
+            # Auto-detect via Steam registry and library folders
+            self.log_bench("[*] Auto-detecting Rust installation path...")
+            rust_path = steam_service.find_rust_install_path()
+            if rust_path:
+                self.log_bench(f"[+] Found Rust at: {rust_path}")
+                history_store.set_rust_path(rust_path)
+            else:
+                self.log_bench("[!] Could not auto-detect Rust. Please select manually...")
+                import tkinter as tk
+                from tkinter import filedialog
+                rust_path = filedialog.askdirectory(title="Select your Rust game folder (where RustClient.exe is)")
+                if not rust_path:
+                    self.log_bench("[!] Benchmark aborted. Rust path not provided.")
+                    self.after(0, lambda: self.bench_btn.configure(state="normal"))
+                    return
+                history_store.set_rust_path(rust_path)
             
         if not os.path.exists(os.path.join(rust_path, "RustClient.exe")):
             self.log_bench("[!] Invalid Rust folder. RustClient.exe not found.")

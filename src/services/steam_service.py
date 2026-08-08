@@ -76,3 +76,34 @@ def fetch_latest_buildid() -> Optional[str]:
             return str(buildid)
     except Exception:
         return None
+
+def find_rust_install_path() -> Optional[str]:
+    """Auto-detect Rust installation path via Steam registry and library folders."""
+    steam_path = r"C:\Program Files (x86)\Steam"
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
+            steam_path, _ = winreg.QueryValueEx(key, "SteamPath")
+    except Exception:
+        pass
+
+    # Check default steamapps/common/Rust
+    rust_path = Path(steam_path) / "steamapps" / "common" / "Rust"
+    if rust_path.exists() and (rust_path / "RustClient.exe").exists():
+        return str(rust_path)
+
+    # Check all Steam library folders
+    lib_folders = Path(steam_path) / "steamapps" / "libraryfolders.vdf"
+    if lib_folders.exists():
+        try:
+            with open(lib_folders, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    match = re.search(r'"path"\s+"([^"]+)"', line)
+                    if match:
+                        p = match.group(1).replace("\\\\", "\\")
+                        test_path = Path(p) / "steamapps" / "common" / "Rust"
+                        if test_path.exists() and (test_path / "RustClient.exe").exists():
+                            return str(test_path)
+        except Exception:
+            pass
+
+    return None
