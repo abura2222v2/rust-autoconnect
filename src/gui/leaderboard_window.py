@@ -11,7 +11,7 @@ class LeaderboardWindow(ctk.CTkToplevel):
         self.current_data = []
         
         self.title(self.i18n.t("lb_title"))
-        self.geometry("750x500")
+        self.geometry("850x600")
         self.resizable(False, False)
         
         self.grid_rowconfigure(1, weight=1)
@@ -81,33 +81,54 @@ class LeaderboardWindow(ctk.CTkToplevel):
             header = ctk.CTkFrame(self.scroll)
             header.pack(fill="x", pady=2)
             ctk.CTkLabel(header, text=self.i18n.t("lb_rank"), width=50).pack(side="left", padx=5)
-            ctk.CTkLabel(header, text=self.i18n.t("lb_player"), width=130, anchor="w").pack(side="left", padx=5)
             ctk.CTkLabel(header, text=self.i18n.t("lb_time"), width=70).pack(side="left", padx=5)
-            ctk.CTkLabel(header, text=self.i18n.t("lb_cpu"), width=180, anchor="w").pack(side="left", padx=5)
-            ctk.CTkLabel(header, text="Disk", width=180, anchor="w").pack(side="left", padx=5)
+            ctk.CTkLabel(header, text=self.i18n.t("lb_cpu"), width=250, anchor="w").pack(side="left", padx=5)
+            ctk.CTkLabel(header, text="Disk (SSD/HDD)", width=250, anchor="w").pack(side="left", padx=5)
         
         if not data:
             self.load_more_btn.configure(state="disabled", text="End of Results")
             return
             
         self.load_more_btn.configure(text="Load More ⬇")
-            
+        
+        # Aggregate data by CPU + Disk
+        groups = {}
         for row in data:
             self.current_data.append(row)
-            idx = len(self.current_data)
-            
-            f = ctk.CTkFrame(self.scroll)
-            f.pack(fill="x", pady=2)
-            ctk.CTkLabel(f, text=f"#{idx}", width=50).pack(side="left", padx=5)
-            ctk.CTkLabel(f, text=row.get('player_name', ''), width=130, anchor="w").pack(side="left", padx=5)
-            ctk.CTkLabel(f, text=f"{row.get('time_seconds', 0.0):.1f}s", width=70, text_color="#50C878").pack(side="left", padx=5)
             
             cpu_txt = row.get('cpu_model', '')
-            if '[' in cpu_txt: cpu_txt = cpu_txt.split('[')[0].strip() # Hide hardware ID in UI
-            ctk.CTkLabel(f, text=cpu_txt[:25], width=180, anchor="w", font=ctk.CTkFont(size=11)).pack(side="left", padx=5)
+            if '[' in cpu_txt: cpu_txt = cpu_txt.split('[')[0].strip()
             
             disk_txt = row.get('disk_model', '')
-            if '[' in disk_txt: disk_txt = disk_txt.split('[')[0].strip() # Hide hardware ID in UI
-            ctk.CTkLabel(f, text=disk_txt[:25], width=180, anchor="w", font=ctk.CTkFont(size=11)).pack(side="left", padx=5)
+            if '[' in disk_txt: disk_txt = disk_txt.split('[')[0].strip()
+            
+            key = (cpu_txt, disk_txt)
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(row)
+            
+        # Sort groups by average time
+        sorted_groups = []
+        for key, rows in groups.items():
+            avg_time = sum(r.get('time_seconds', 0.0) for r in rows) / len(rows)
+            sorted_groups.append((key, avg_time, rows))
+            
+        sorted_groups.sort(key=lambda x: x[1])
+            
+        for i, (key, avg_time, rows) in enumerate(sorted_groups):
+            rank = self.offset + i + 1
+            
+            # Group Header Frame
+            f = ctk.CTkFrame(self.scroll)
+            f.pack(fill="x", pady=4)
+            
+            ctk.CTkLabel(f, text=f"#{rank}", width=50, font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
+            ctk.CTkLabel(f, text=f"{avg_time:.1f}s", width=70, text_color="#FADA5E", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
+            
+            cpu_name = key[0][:40] + ("..." if len(key[0]) > 40 else "")
+            disk_name = key[1][:40] + ("..." if len(key[1]) > 40 else "")
+            
+            ctk.CTkLabel(f, text=cpu_name, width=250, anchor="w", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
+            ctk.CTkLabel(f, text=disk_name, width=250, anchor="w", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
             
         self.offset += self.limit

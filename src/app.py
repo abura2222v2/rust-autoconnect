@@ -162,20 +162,25 @@ class AppController(MainWindow):
             self.is_reconnecting = False
 
     def _on_run_test_click(self):
+        if getattr(self, 'is_benchmarking', False):
+            self.is_benchmarking = False
+            self.bench_btn.configure(state="disabled", text="Stopping...")
+            return
         self.run_benchmark()
 
     def log_safe(self, msg: str):
         self.after(0, lambda: self.log(msg))
 
     def _on_swarm_event(self, ip_port: str):
-        if not self.is_polling:
+        if not getattr(self, 'is_polling', False):
             return
             
         target = self.get_target_ip()
         if target == ip_port:
             self.log_safe("[🚀] Swarm Connect: Another player joined the server! Instant connect...")
             self.is_polling = False # Stop a2s polling loop
-            self.start_process_force(target)
+            self.launch_game(target)
+            self.start_log_monitor(target)
         
     def _load_hardware(self):
         hw_cpu = self.hardware_service.get_cpu_info()
@@ -191,47 +196,83 @@ class AppController(MainWindow):
             import tkinter.messagebox as messagebox
             if messagebox.askyesno("Close Rust?", "Rust is running. We must close it before copying benchmark files. Close it now?"):
                 self.process_monitor.force_kill_rust()
-                self.log_bench("[*] Closed Rust.")
+                self.log_safe("[*] Closed Rust.")
             else:
-                self.log_bench("[!] Benchmark aborted.")
-                self.after(0, lambda: self.bench_btn.configure(state="normal"))
+                self.log_safe("[!] Benchmark aborted.")
+                self.bench_btn.configure(state="normal")
                 return
-        self.bench_btn.configure(state="disabled")
+                
+        if getattr(self, 'is_benchmarking', False):
+            return
+            
+        from .core.history_store import history_store
+        import tkinter.filedialog as filedialog
+        
+        # Determine rust path inside run_benchmark (main thread) so filedialog is safe
+        rust_path = history_store.get_rust_path()
+        if not rust_path or not os.path.exists(rust_path):
+            self.log_safe("[*] Auto-detecting Rust installation path...")
+            from .services import steam_service
+            rust_path = steam_service.find_rust_install_path()
+            if rust_path:
+                self.log_safe(f"[+] Found Rust at: {rust_path}")
+                history_store.set_rust_path(rust_path)
+            else:
+                self.log_safe("[!] Could not auto-detect Rust. Please select manually...")
+                rust_path = filedialog.askdirectory(title="Select your Rust game folder (where RustClient.exe is)")
+                if not rust_path:
+                    self.log_safe("[!] Benchmark aborted. Rust path not provided.")
+                    self.bench_btn.configure(state="normal", text=self.t("run_test"), fg_color="#3B8ED0")
+                    return
+                history_store.set_rust_path(rust_path)
+                
+        self.is_benchmarking = True
+        self.bench_btn.configure(text=self.t("stop_bench"), fg_color="#E74C3C")
         self.bench_log.configure(state="normal")
         self.bench_log.delete("0.0", "end")
         self.bench_log.configure(state="disabled")
-        threading.Thread(target=self.run_benchmark_logic, daemon=True).start()
+        
+        threading.Thread(target=self.run_benchmark_logic, args=(rust_path,), daemon=True).start()
 
-    def run_benchmark_logic(self):
+    def save_user_config(self):
         from .core.history_store import history_store
+        rust_path = history_store.get_rust_path()
+        if not rust_path or not os.path.exists(rust_path):
+            import tkinter.messagebox as messagebox
+            messagebox.showerror("Error", "Rust path not found. Please run a benchmark or connect first to discover the path.")
+            return
+            
+        import shutil
+        import time
+        import tkinter.messagebox as messagebox
+        
+        cfg_path = os.path.join(rust_path, "cfg")
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        user_cfg_path = os.path.join(rust_path, f"cfg_user_backup_{timestamp}")
+        
+        if not os.path.exists(cfg_path):
+            messagebox.showerror("Error", "No 'cfg' folder found in Rust directory.")
+            return
+            
+        try:
+            shutil.copytree(cfg_path, user_cfg_path)
+            messagebox.showinfo("Success", f"Your personal Rust config has been saved to:\n{user_cfg_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save user config:\n{e}")
+
+    def run_benchmark_logic(self, rust_path):
+        from .core.history_store import history_store
+        from .core.config import config
         
         # Wait until Rust is fully closed
         while self.process_monitor.is_rust_running():
             time.sleep(1.0)
             
-        rust_path = history_store.get_rust_path()
-        if not rust_path or not os.path.exists(rust_path):
-            # Auto-detect via Steam registry and library folders
-            self.log_bench("[*] Auto-detecting Rust installation path...")
-            rust_path = steam_service.find_rust_install_path()
-            if rust_path:
-                self.log_bench(f"[+] Found Rust at: {rust_path}")
-                history_store.set_rust_path(rust_path)
-            else:
-                self.log_bench("[!] Could not auto-detect Rust. Please select manually...")
-                import tkinter as tk
-                from tkinter import filedialog
-                rust_path = filedialog.askdirectory(title="Select your Rust game folder (where RustClient.exe is)")
-                if not rust_path:
-                    self.log_bench("[!] Benchmark aborted. Rust path not provided.")
-                    self.after(0, lambda: self.bench_btn.configure(state="normal"))
-                    return
-                history_store.set_rust_path(rust_path)
-            
         if not os.path.exists(os.path.join(rust_path, "RustClient.exe")):
             self.log_bench("[!] Invalid Rust folder. RustClient.exe not found.")
             history_store.set_rust_path("") # reset
-            self.after(0, lambda: self.bench_btn.configure(state="normal"))
+            self.is_benchmarking = False
+            self.after(0, lambda: self.bench_btn.configure(state="normal", text=self.t("run_test"), fg_color="#3B8ED0"))
             return
             
         # Try to find BenchmarkFiles next to exe, or fallback to current dir
@@ -240,96 +281,209 @@ class AppController(MainWindow):
         if not os.path.exists(bm_source):
             bm_source = os.path.abspath(os.path.join(base_dir, "..", "BenchmarkFiles"))
             if not os.path.exists(bm_source):
-                self.log_bench(f"[!] Benchmark files not found in {bm_source}. Please place 'BenchmarkFiles' folder next to the executable.")
-                self.after(0, lambda: self.bench_btn.configure(state="normal"))
-                return
-            
+                # Auto-create the directory structure to prevent crashing
+                self.log_bench(f"[*] BenchmarkFiles folder missing. Creating it at {bm_source}...")
+                os.makedirs(os.path.join(bm_source, "cfg"), exist_ok=True)
+                os.makedirs(os.path.join(bm_source, "demos"), exist_ok=True)
+                
+                # We don't abort anymore, we just let it copy empty folders 
+                # (unless the user adds the actual demo file later)
+                self.log_bench(f"[!] Please place your actual RustTweaker_bm.dem in the 'demos' folder.")
         self.log_bench("[*] Backing up your CFG and copying Benchmark files...")
         
         cfg_path = os.path.join(rust_path, "cfg")
         cfg_backup_path = os.path.join(rust_path, "cfg_backup_auto")
         
         try:
-            # Backup
+            # Backup CFG
             if os.path.exists(cfg_path):
                 if os.path.exists(cfg_backup_path):
-                    shutil.rmtree(cfg_backup_path)
+                    shutil.rmtree(cfg_backup_path, ignore_errors=True)
                 shutil.copytree(cfg_path, cfg_backup_path)
                 
             shutil.copytree(os.path.join(bm_source, "cfg"), cfg_path, dirs_exist_ok=True)
-            shutil.copytree(os.path.join(bm_source, "demos"), os.path.join(rust_path, "demos"), dirs_exist_ok=True)
+            
+            target_demo = os.path.join(rust_path, "demos", "RustTweaker_bm.dem")
+            if not os.path.exists(target_demo):
+                shutil.copytree(os.path.join(bm_source, "demos"), os.path.join(rust_path, "demos"), dirs_exist_ok=True)
+                
+            # Append F5 bind to keys.cfg for manual start
+            keys_cfg = os.path.join(cfg_path, "keys.cfg")
+            with open(keys_cfg, "a") as f:
+                f.write('\nbind f5 "demo.play RustTweaker_bm"\n')
         except Exception as e:
             self.log_bench(f"[!] Failed to prepare benchmark files: {e}")
-            self.after(0, lambda: self.bench_btn.configure(state="normal"))
+            self.is_benchmarking = False
+            self.after(0, lambda: self.bench_btn.configure(state="normal", text=self.t("run_test"), fg_color="#3B8ED0"))
             return
             
-        self.after(0, lambda: self.bench_btn.configure(fg_color="orange", text="Running..."))
         self.log_bench("[*] Starting Local Benchmark: Launching Rust Demo...")
         time.sleep(1.0)
         
         start_time = time.time()
-        url = f"steam://run/{config.STEAM_APP_ID}//-windowed -popupwindow +demo.play RustTweaker_bm"
-        import webbrowser
+        
+        # Delete old output_log.txt to ensure we read from the beginning of the new one
+        from pathlib import Path
+        log_path = Path(rust_path) / "output_log.txt"
+        try:
+            if log_path.exists():
+                os.remove(log_path)
+                self.log_bench("[*] Cleared old game logs.")
+        except Exception as e:
+            self.log_bench(f"[!] Warning: Could not delete old log file: {e}")
+        
+        url = f"steam://run/{config.STEAM_APP_ID}//-windowed -popupwindow"
         if os.name == 'nt':
             os.startfile(url)
         else:
+            import webbrowser
             webbrowser.open(url)
             
         spawn_reached = False
+        menu_reached = False
+        protocol_mismatch = False
+        detected_client_protocol = None
+        
+        time_to_menu = 0.0
+        demo_start_time = 0.0
+        
         def bench_event(event):
-            nonlocal spawn_reached
+            nonlocal spawn_reached, menu_reached, protocol_mismatch, detected_client_protocol
+            nonlocal time_to_menu, demo_start_time
+            # Log the game output so we can see why it's failing
+            self.log_bench(f"[GAME] {event}")
+            
             if "Spawning" in event or "LocalPlayer" in event or "Client connected" in event:
                 spawn_reached = True
+            elif "[Bootstrap] DONE!" in event:
+                time_to_menu = time.time() - start_time
+                menu_reached = True
+            elif "Demo is" in event or "Index created" in event:
+                if demo_start_time == 0.0:
+                    demo_start_time = time.time()
+                    self.log_bench("[*] F5 Pressed! Starting map benchmark timeline...")
+            elif "Protocol mismatch" in event or "Demo protocol" in event:
+                protocol_mismatch = True
+                # Parse: "Demo protocol 2530 does not match client protocol 2544"
+                import re
+                match = re.search(r'client protocol (\d+)', event)
+                if match:
+                    detected_client_protocol = match.group(1)
 
-        from .services.log_watcher import LogWatcher
+        from .services.log_watcher import LogWatcher        
         bench_watcher = LogWatcher(
-            on_disconnect=lambda r: None, 
-            on_error=lambda e: None,
-            on_event=bench_event
+            on_disconnect=lambda reason: self.log_bench(f"Disconnected: {reason}"),
+            on_error=lambda err: self.log_bench(f"Error: {err}"),
+            on_event=bench_event,
+            seek_end=False,
+            target_log_path=log_path
         )
         
         try:
             bench_watcher.start()
-            while not spawn_reached:
-                time.sleep(1.0)
+            has_started = False
+            while not spawn_reached and self.is_benchmarking:
+                time.sleep(0.2)
+                is_running = self.process_monitor.is_rust_running()
+                
+                if is_running:
+                    if not has_started:
+                        self.log_bench("[*] Rust game process detected. Waiting for map load...")
+                        has_started = True
+                        
+                    if menu_reached:
+                        self.log_bench(f"[!] GAME READY! (Menu loaded in {round(time_to_menu, 1)}s)")
+                        self.log_bench("[!] Press F5 inside Rust to start the map benchmark!")
+                        menu_reached = False
+                    
+                    elapsed = int(time.time() - start_time)
+                    if elapsed > 0 and elapsed % 5 == 0 and elapsed != getattr(self, '_last_wait_log', 0):
+                        self.log_bench(f"[*] Waiting... ({elapsed}s elapsed)")
+                        self._last_wait_log = elapsed
+                        
+                if has_started and not is_running:
+                    self.log_bench("[!] Rust process closed. Benchmark stopped.")
+                    self.is_benchmarking = False
+                    break
+                if protocol_mismatch and detected_client_protocol:
+                    self.log_bench(f"[!] Protocol mismatch detected. Patching demo to protocol {detected_client_protocol}...")
+                    self.is_benchmarking = False
+                    break
                 if time.time() - start_time > 600:
                     self.log_bench("[!] Timeout: Demo took too long to load.")
-                    return
+                    self.is_benchmarking = False
+                    break
         finally:
             bench_watcher.stop()
-            self.after(0, lambda: self.bench_btn.configure(fg_color="#3B8ED0", text=self.t("run_test")))
             self.log_bench("[*] Restoring original CFG backup...")
             try:
                 if os.path.exists(cfg_backup_path):
-                    shutil.rmtree(cfg_path, ignore_errors=True)
-                    os.rename(cfg_backup_path, cfg_path)
+                    if os.path.exists(cfg_path):
+                        shutil.rmtree(cfg_path, ignore_errors=True)
+                    shutil.copytree(cfg_backup_path, cfg_path, dirs_exist_ok=True)
+                    shutil.rmtree(cfg_backup_path, ignore_errors=True)
             except Exception as e:
                 self.log_bench(f"[!] Failed to restore CFG backup: {e}")
             
-        total_time = time.time() - start_time
-        self.log_bench(f"[🏆] Total Benchmark Time: {round(total_time, 1)} seconds.")
-        
-        if total_time < 90:
-            self.after(0, lambda: self.bench_btn.configure(fg_color="#50C878", text="Excellent"))
-        elif total_time < 180:
-            self.after(0, lambda: self.bench_btn.configure(fg_color="#FADA5E", text="Good", text_color="black"))
-        else:
-            self.after(0, lambda: self.bench_btn.configure(fg_color="#C25A5A", text="Slow"))
+            self.is_benchmarking = False
             
-        self.after(0, lambda: self._prompt_leaderboard(total_time))
-        
+            if protocol_mismatch and detected_client_protocol:
+                bench_watcher.stop()
+                
+                # Fix: Kill Rust before patching to prevent Sharing Violation
+                if self.process_monitor.is_rust_running():
+                    self.log_bench("[*] Closing Rust to apply demo patch...")
+                    self.process_monitor.force_kill_rust()
+                    while self.process_monitor.is_rust_running():
+                        time.sleep(0.5)
+                        
+                self._auto_patch_demo(os.path.join(rust_path, "demos", "RustTweaker_bm.dem"), int(detected_client_protocol))
+                self.log_bench("[*] Demo patched! Restarting benchmark...")
+                # Start again
+                self.after(2000, self.run_benchmark)
+                return
+                
+            if spawn_reached:
+                demo_load_time = time.time() - demo_start_time if demo_start_time > 0.0 else 0.0
+                total_time = time_to_menu + demo_load_time
+                
+                self.log_bench(f"[🏆] Time to Menu: {round(time_to_menu, 1)}s")
+                self.log_bench(f"[🏆] Map Load Time: {round(demo_load_time, 1)}s")
+                self.log_bench(f"[🏆] Total Benchmark Score: {round(total_time, 1)}s")
+                
+                self.log_bench("[*] Benchmark complete! Closing game...")
+                self.process_monitor.force_kill_rust()
+                
+                if total_time < 90:
+                    self.after(0, lambda: self.bench_btn.configure(state="normal", fg_color="#50C878", text="Excellent"))
+                elif total_time < 180:
+                    self.after(0, lambda: self.bench_btn.configure(state="normal", fg_color="#FADA5E", text="Good", text_color="black"))
+                else:
+                    self.after(0, lambda: self.bench_btn.configure(state="normal", fg_color="#E74C3C", text="Slow"))
+                
+                self.after(3000, lambda: self.bench_btn.configure(state="normal", fg_color="#3B8ED0", text=self.t("run_test"), text_color=["gray10", "#DCE4EE"]))
+                self.after(0, lambda: self._prompt_leaderboard(total_time))
+            else:
+                self.after(0, lambda: self.bench_btn.configure(state="normal", fg_color="#3B8ED0", text=self.t("run_test")))
+
     def _prompt_leaderboard(self, total_time: float):
-        import customtkinter as ctk
-        dialog = ctk.CTkInputDialog(text=f"Your time: {round(total_time, 1)}s!\nEnter nickname for Global Leaderboard:", title="Submit Score")
-        ans = dialog.get_input()
-        if ans:
-            from .services.leaderboard_service import leaderboard_service
-            hw_cpu = self.hardware_service.get_cpu_info()
-            hw_disk = self.hardware_service.get_disk_info()
-            hw_cpu_id = self.hardware_service.get_cpu_id()
-            hw_disk_serial = self.hardware_service.get_disk_serial()
-            # Run blocking HTTP request in background to prevent UI freeze (Architect review fix)
-            threading.Thread(target=self._submit_score_bg, args=(ans, hw_cpu, hw_disk, total_time, hw_cpu_id, hw_disk_serial), daemon=True).start()
+        from .services.leaderboard_service import leaderboard_service
+        hw_cpu = self.hardware_service.get_cpu_info()
+        hw_disk = self.hardware_service.get_disk_info()
+        hw_cpu_id = self.hardware_service.get_cpu_id()
+        hw_disk_serial = self.hardware_service.get_disk_serial()
+        
+        self.log_bench("[*] Submitting hardware benchmark score to Global Top...")
+        threading.Thread(target=self._submit_score_bg, args=("HardwareTest", hw_cpu, hw_disk, total_time, hw_cpu_id, hw_disk_serial), daemon=True).start()
+
+    def _auto_patch_demo(self, demo_path: str, new_protocol: int):
+        # Rust demo header: 8 bytes id, 4 bytes protocol, 4 bytes save version
+        try:
+            with open(demo_path, "rb+") as f:
+                f.seek(8) # Skip identifier
+                f.write(new_protocol.to_bytes(4, byteorder='little'))
+        except Exception as e:
+            self.log_bench(f"[!] Failed to patch demo: {e}")
 
     def _submit_score_bg(self, ans, hw_cpu, hw_disk, total_time, cpu_id, disk_serial):
         from .services.leaderboard_service import leaderboard_service
@@ -345,8 +499,12 @@ class AppController(MainWindow):
     def _log_bench_ui(self, msg: str):
         if not hasattr(self, 'bench_log'):
             return
+        import time
+        from .core.logger import app_logger
+        app_logger.info(f"[BENCHMARK] {msg}")
+        ts = time.strftime("[%H:%M:%S]")
         self.bench_log.configure(state="normal")
-        self.bench_log.insert("end", msg + "\n")
+        self.bench_log.insert("end", f"{ts} {msg}\n")
         self.bench_log.see("end")
         self.bench_log.configure(state="disabled")
 
@@ -359,10 +517,20 @@ class AppController(MainWindow):
             self.log_watcher.stop()
             self.log_watcher = None
 
+        self.connection_start_time = time.time()
+        self.is_connected = False
+        
+        def handle_event(event):
+            self.log_safe(f"[*] Game log: {event}")
+            if not getattr(self, 'is_connected', False) and ("Client connected" in event or "Spawning" in event):
+                self.is_connected = True
+                conn_time = round(time.time() - getattr(self, 'connection_start_time', time.time()), 1)
+                self.log_safe(f"[⏱️] Server Connection Time: {conn_time} seconds!")
+
         self.log_watcher = LogWatcher(
             on_disconnect=lambda reason: self._on_log_disconnect(target_str, reason),
             on_error=self._on_log_error,
-            on_event=lambda event: self.log_safe(f"[*] Game log: {event}")
+            on_event=handle_event
         )
         self.log_watcher.start()
 
@@ -454,21 +622,27 @@ class AppController(MainWindow):
         self.ip_entry.set(ip_port)
 
     def check_rust_status_loop(self):
+        self.is_rust_was_running = False
         while True:
-            try:
-                running = self.process_monitor.is_rust_running()
-                if running:
-                    self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_on"), text_color="#50C878"))
-                else:
-                    self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_off"), text_color="#C25A5A"))
-            except Exception:
-                pass
-            time.sleep(3.0)
+            is_running = self.process_monitor.is_rust_running()
+            if is_running:
+                self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_on"), text_color="#2ECC71"))
+                self.is_rust_was_running = True
+            else:
+                self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_off"), text_color="#E74C3C"))
+                if getattr(self, 'is_rust_was_running', False):
+                    self.is_rust_was_running = False
+                    self.after(0, self.stop_polling)
+            
+            # Use event wait instead of raw sleep for graceful shutdown
+            if getattr(self, '_shutdown_event', threading.Event()).wait(2.0):
+                break
 
     def check_rust_update_loop(self):
         while True:
             if not self.history_store.get_auto_update():
-                time.sleep(60.0)
+                if getattr(self, '_shutdown_event', threading.Event()).wait(60.0):
+                    break
                 continue
 
             force_wipe = steam_service.is_force_wipe_window()
@@ -476,7 +650,8 @@ class AppController(MainWindow):
 
             rust_running = self.process_monitor.is_rust_running()
             if not force_wipe and rust_running:
-                time.sleep(interval)
+                if getattr(self, '_shutdown_event', threading.Event()).wait(interval):
+                    break
                 continue
 
             try:
@@ -491,10 +666,14 @@ class AppController(MainWindow):
                         self.is_polling = False
                         self.process_monitor.force_kill_rust()
                     else:
-                        self.log_safe("[!] Update found. Waiting for download...")
+                        import tkinter.messagebox as messagebox
+                        msg = f"A new Rust update is available! Current: {local_buildid}, Latest: {latest_buildid}\nDo you want to run the game to apply it?"
+                        if messagebox.askyesno("Rust Update", msg):
+                            self.after(0, lambda: self.launch_game("127.0.0.1:28015")) # trigger steam launch
 
                     while True:
-                        time.sleep(20.0)
+                        if getattr(self, '_shutdown_event', threading.Event()).wait(20.0):
+                            break
                         try:
                             new_local = steam_service.get_local_buildid()
                             if new_local and str(new_local) == str(latest_buildid):
@@ -510,13 +689,13 @@ class AppController(MainWindow):
             except Exception:
                 pass
 
-            time.sleep(interval)
+            if getattr(self, '_shutdown_event', threading.Event()).wait(interval):
+                break
 
     def shutdown(self):
         """
         BUG-04 Fix: Graceful shutdown stopping log watcher and polling loops.
         """
-        self.is_polling = False
         if self.log_watcher:
             self.log_watcher.stop()
             self.log_watcher = None
