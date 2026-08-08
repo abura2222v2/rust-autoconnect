@@ -174,13 +174,17 @@ class MainWindow(ctk.CTk):
         self.tray_var = ctk.BooleanVar(value=self.history_store.get_minimize_to_tray())
         self.tray_checkbox = ctk.CTkCheckBox(self.settings_frame, text=self.t("tray_lbl"), variable=self.tray_var, command=self._on_tray_change)
         self.tray_checkbox.grid(row=2, column=0, columnspan=2, padx=40, pady=20, sticky="w")
-        ToolTip(self.tray_checkbox, "When you click the 'X' to close the window,\nthe app will minimize to the system tray\ninstead of quitting entirely.")
+        self.tray_tooltip = ToolTip(self.tray_checkbox, self.t("tooltip_tray"))
 
         # Swarm Checkbox
         self.swarm_var = ctk.BooleanVar(value=self.history_store.get_swarm_enabled())
         self.swarm_checkbox = ctk.CTkCheckBox(self.settings_frame, text=self.t("swarm_lbl"), variable=self.swarm_var, command=self._on_swarm_change)
         self.swarm_checkbox.grid(row=3, column=0, columnspan=2, padx=40, pady=10, sticky="w")
-        ToolTip(self.swarm_checkbox, "Shares server status with other players.\nIf someone else connects to the same server,\nyour bot will instantly connect you too.")
+        self.swarm_tooltip = ToolTip(self.swarm_checkbox, self.t("tooltip_swarm"))
+
+        # Save User Config Button
+        self.save_cfg_btn = ctk.CTkButton(self.settings_frame, text=self.t("save_cfg_btn"), command=self.save_user_config)
+        self.save_cfg_btn.grid(row=4, column=0, columnspan=2, padx=40, pady=20, sticky="w")
 
         # Start by showing Home
         self.refresh_history_ui()
@@ -212,12 +216,27 @@ class MainWindow(ctk.CTk):
         self.history_store.set_minimize_to_tray(self.tray_var.get())
 
     def _on_swarm_change(self):
-        self.history_store.set_swarm_enabled(self.swarm_var.get())
         from ..services.swarm_service import swarm_service
-        swarm_service.is_enabled = self.swarm_var.get()
-        if swarm_service.is_enabled:
-            swarm_service.start()
+        is_checked = self.swarm_var.get()
+        
+        if is_checked:
+            self.swarm_switch.configure(state="disabled")
+            def test_and_connect():
+                if swarm_service.test_connection():
+                    self.history_store.set_swarm_enabled(True)
+                    swarm_service.is_enabled = True
+                    swarm_service.start()
+                    self.after(0, lambda: self.swarm_switch.configure(state="normal"))
+                else:
+                    import tkinter.messagebox as messagebox
+                    self.after(0, lambda: messagebox.showerror("Connection Error", "Failed to connect to Swarm servers."))
+                    self.after(0, lambda: self.swarm_var.set(False))
+                    self.after(0, lambda: self.swarm_switch.configure(state="normal"))
+            import threading
+            threading.Thread(target=test_and_connect, daemon=True).start()
         else:
+            self.history_store.set_swarm_enabled(False)
+            swarm_service.is_enabled = False
             swarm_service.stop()
 
     def change_lang(self, choice: str):
@@ -238,6 +257,13 @@ class MainWindow(ctk.CTk):
         self.lang_label.configure(text=self.t("lang_lbl"))
         self.tray_checkbox.configure(text=self.t("tray_lbl"))
         self.swarm_checkbox.configure(text=self.t("swarm_lbl"))
+        if hasattr(self, 'save_cfg_btn'):
+            self.save_cfg_btn.configure(text=self.t("save_cfg_btn"))
+        
+        if hasattr(self, 'tray_tooltip'):
+            self.tray_tooltip.text = self.t("tooltip_tray")
+        if hasattr(self, 'swarm_tooltip'):
+            self.swarm_tooltip.text = self.t("tooltip_swarm")
 
         if "🟢" in self.rust_status_label.cget("text"):
             self.rust_status_label.configure(text=self.t("rust_on"))
@@ -294,6 +320,7 @@ class MainWindow(ctk.CTk):
                     continue
 
             is_fav = any(f.get("ip") == ip for f in favorites)
+            is_armed = (self.history_store.get_armed_server() == ip)
 
             if show_favs_only and not is_fav:
                 continue
@@ -309,8 +336,8 @@ class MainWindow(ctk.CTk):
             btn = ctk.CTkButton(
                 frame,
                 text=btn_text,
-                fg_color="#2b2b2b",
-                hover_color="#3b3b3b",
+                fg_color="#3B8ED0" if is_armed else "#2b2b2b",
+                hover_color="#1F6AA5" if is_armed else "#3b3b3b",
                 text_color=("gray80", "white"),
                 command=lambda i=ip: self.select_history(i)
             )
@@ -318,9 +345,22 @@ class MainWindow(ctk.CTk):
             btn.bind("<Double-Button-1>", lambda event, f=frame, b=btn, i=ip, n=display_name: self.start_inline_edit(f, b, i, n))
 
             btn_font = ctk.CTkFont(family="Arial", size=14)
+            
+            arm_text = "⚡"
+            arm_color = "#3B8ED0" if is_armed else "#555555"
+            arm_btn = ctk.CTkButton(
+                frame,
+                text=arm_text,
+                width=28,
+                height=28,
+                font=btn_font,
+                fg_color=arm_color,
+                command=lambda i=ip: self.toggle_armed(i)
+            )
+            arm_btn.pack(side="left", padx=(0, 2))
 
             fav_text = "⭐" if is_fav else "☆"
-            fav_color = "#3B8ED0" if is_fav else "#555555"
+            fav_color = "#FADA5E" if is_fav else "#555555" # Changed to yellow
             fav_btn = ctk.CTkButton(
                 frame,
                 text=fav_text,
@@ -328,6 +368,7 @@ class MainWindow(ctk.CTk):
                 height=28,
                 font=btn_font,
                 fg_color=fav_color,
+                text_color="black" if is_fav else "white",
                 command=lambda i=ip, n=display_name: self.toggle_favorite(i, n)
             )
             fav_btn.pack(side="left", padx=(0, 2))
@@ -343,6 +384,13 @@ class MainWindow(ctk.CTk):
                 command=lambda i=ip: self.remove_from_history(i)
             )
             del_btn.pack(side="right")
+            
+    def toggle_armed(self, ip_port: str):
+        self.history_store.set_armed_server(ip_port)
+        self.refresh_history_ui()
+        # Ensure the armed server also gets selected in the combo box
+        if self.history_store.get_armed_server() == ip_port:
+            self.select_history(ip_port)
 
     def toggle_favorite(self, ip_port: str, name: str):
         self.history_store.toggle_favorite(ip_port, name)
@@ -404,8 +452,12 @@ class MainWindow(ctk.CTk):
         self.ip_entry.configure(state=state)
 
     def log(self, msg: str):
+        import time
+        from ..core.logger import app_logger
+        app_logger.info(msg)
+        ts = time.strftime("[%H:%M:%S]")
         self.log_textbox.configure(state="normal")
-        self.log_textbox.insert("end", msg + "\n")
+        self.log_textbox.insert("end", f"{ts} {msg}\n")
         self.log_textbox.see("end")
         self.log_textbox.configure(state="disabled")
 

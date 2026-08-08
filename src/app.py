@@ -49,6 +49,29 @@ class AppController(MainWindow):
         self.swarm_service.on_swarm_event = self._on_swarm_event
         if self.swarm_service.is_enabled:
             self.swarm_service.start()
+            
+        self._start_global_log_watcher()
+
+    def _start_global_log_watcher(self):
+        def handle_disconnect(reason):
+            armed = self.history_store.get_armed_server()
+            # If we are already polling, the normal logic handles it. 
+            # But if not polling, we trigger the armed reconnect.
+            if armed and not self.is_polling and not self.is_reconnecting:
+                self.log_safe(f"[⚡] Сработал авто-реконнект для вооруженного сервера: {armed}!")
+                self.start_process_force(armed)
+            
+            # Restart the watcher after a delay so it keeps listening for future disconnects
+            if not getattr(self, '_is_shutting_down', False):
+                self.after(5000, self._start_global_log_watcher)
+
+        self.global_log_watcher = LogWatcher(
+            on_disconnect=handle_disconnect,
+            on_error=lambda e: None,
+            on_event=None,
+            seek_end=True
+        )
+        self.global_log_watcher.start()
 
     def _on_connect_btn_click(self):
         self.start_process(self.get_target_ip())
@@ -713,7 +736,14 @@ class AppController(MainWindow):
         """
         BUG-04 Fix: Graceful shutdown stopping log watcher and polling loops.
         """
+        self._is_shutting_down = True
+        
         if self.log_watcher:
             self.log_watcher.stop()
             self.log_watcher = None
+            
+        if hasattr(self, 'global_log_watcher') and self.global_log_watcher:
+            self.global_log_watcher.stop()
+            self.global_log_watcher = None
+            
         super().shutdown()

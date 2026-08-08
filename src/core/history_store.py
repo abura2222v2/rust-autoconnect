@@ -136,5 +136,15 @@ class HistoryStore:
     def set_rust_path(self, val: str):
         self.data["rust_path"] = val
         self.save()
+        
+    def get_armed_server(self) -> str:
+        return self.data.get("armed_server", "")
+        
+    def set_armed_server(self, ip_port: str):
+        if self.data.get("armed_server") == ip_port:
+            self.data["armed_server"] = "" # Toggle off
+        else:
+            self.data["armed_server"] = ip_port
+        self.save()
 
 history_store = HistoryStore()
