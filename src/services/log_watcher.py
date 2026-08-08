@@ -14,47 +14,53 @@ class LogWatcher:
         self.target_log_path = target_log_path
         self.is_monitoring = False
         self._thread = None
+        self._lock = threading.Lock()
+        self._last_err = ""
 
     def start(self):
-        if self.is_monitoring:
-            return
-        self.is_monitoring = True
-        self._thread = threading.Thread(target=self._watch_loop, daemon=True)
-        self._thread.start()
+        with self._lock:
+            if self.is_monitoring:
+                return
+            self.is_monitoring = True
+            self._thread = threading.Thread(target=self._watch_loop, daemon=True)
+            self._thread.start()
 
     def stop(self):
         self.is_monitoring = False
 
     def _watch_loop(self):
-        if self.target_log_path:
-            log_path = self.target_log_path
-        else:
-            log_path = config.rust_log_path
-            
-            # Check alternate log path
-            from ..core.history_store import history_store
-            from pathlib import Path
-            rust_path = history_store.get_rust_path()
-            if rust_path:
-                alt_log = Path(rust_path) / "output_log.txt"
-                if alt_log.exists():
-                    if not log_path.exists() or os.path.getmtime(alt_log) > os.path.getmtime(log_path):
-                        log_path = alt_log
-                        from ..core.logger import app_logger
-                        app_logger.info(f"[*] Using alternate log file: {log_path}")
-
+        log_path = None
+        
         while self.is_monitoring:
-            # Wait for log file to exist
-            while self.is_monitoring and not log_path.exists():
-                time.sleep(1.0)
+            if not log_path or not log_path.exists():
+                if self.target_log_path:
+                    log_path = self.target_log_path
+                else:
+                    log_path = config.rust_log_path
+                    
+                    from ..core.history_store import history_store
+                    from pathlib import Path
+                    rust_path = history_store.get_rust_path()
+                    if rust_path:
+                        alt_log = Path(rust_path) / "output_log.txt"
+                        if alt_log.exists() and (not log_path.exists() or os.path.getmtime(alt_log) > os.path.getmtime(log_path)):
+                            log_path = alt_log
+                            from ..core.logger import app_logger
+                            app_logger.info(f"[*] Using alternate log file: {log_path}")
+                
+                if not log_path.exists():
+                    time.sleep(1.0)
+                    continue
                 
             if not self.is_monitoring:
                 return
                 
             try:
                 with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    self._last_err = ""
                     if self.seek_end:
                         f.seek(0, 2)
+                        self.seek_end = False
                     buffer = ""
                     last_inode = os.stat(log_path).st_ino
                     last_size = os.stat(log_path).st_size
@@ -92,6 +98,9 @@ class LogWatcher:
                                 self.on_disconnect(reason)
                                 return
             except Exception as e:
-                if self.is_monitoring:
-                    self.on_error(str(e))
+                err_str = str(e)
+                if self.is_monitoring and err_str != getattr(self, '_last_err', ""):
+                    if "PermissionError" not in err_str and "[WinError 32]" not in err_str:
+                        self.on_error(err_str)
+                    self._last_err = err_str
                 time.sleep(1.0)

@@ -25,6 +25,7 @@ class AppController(MainWindow):
     def __init__(self):
         super().__init__(history_mgr=history_store, i18n_mgr=i18n)
 
+        self._shutdown_event = threading.Event()
         self.is_polling = False
         self.is_reconnecting = False
         self.poll_thread = None
@@ -234,13 +235,8 @@ class AppController(MainWindow):
             
         if self.process_monitor.is_rust_running():
             import tkinter.messagebox as messagebox
-            msg = (
-                "Rust is running and will be closed to prepare the benchmark.\n\n"
-                "IMPORTANT: After the game reopens and reaches the main menu, "
-                "you MUST press [F5] to start the benchmark.\n\n"
-                "Close Rust and proceed?"
-            )
-            if messagebox.askyesno("Close Rust?", msg):
+            msg = self.t("bench_warn_running")
+            if messagebox.askyesno(self.t("close_rust_title"), msg):
                 self.process_monitor.force_kill_rust()
                 self.log_safe("[*] Closed Rust.")
             else:
@@ -249,13 +245,8 @@ class AppController(MainWindow):
                 return
         else:
             import tkinter.messagebox as messagebox
-            msg = (
-                "To run the benchmark, Rust will be launched with a custom demo.\n\n"
-                "IMPORTANT: Once the game loads into the main menu, "
-                "you MUST press [F5] inside the game to start the benchmark.\n\n"
-                "Proceed?"
-            )
-            if not messagebox.askokcancel("Benchmark Instructions", msg):
+            msg = self.t("bench_warn_f5")
+            if not messagebox.askokcancel(self.t("bench_instr_title"), msg):
                 self.log_safe("[!] Benchmark aborted.")
                 self.bench_btn.configure(state="normal")
                 return
@@ -319,6 +310,19 @@ class AppController(MainWindow):
             messagebox.showerror("Error", f"Failed to save user config:\n{e}")
 
     def run_benchmark_logic(self, rust_path):
+        # Stop existing watchers to release log file locks
+        if getattr(self, 'log_watcher', None):
+            self.log_watcher.stop()
+        if getattr(self, 'global_log_watcher', None):
+            self.global_log_watcher.stop()
+            
+        try:
+            self._run_benchmark_logic_internal(rust_path)
+        finally:
+            if not getattr(self, '_is_shutting_down', False):
+                self.after(2000, self._start_global_log_watcher)
+
+    def _run_benchmark_logic_internal(self, rust_path):
         from .core.history_store import history_store
         from .core.config import config
         
@@ -449,7 +453,7 @@ class AppController(MainWindow):
             elif "Demo is" in event or "Index created" in event:
                 if demo_start_time == 0.0:
                     demo_start_time = time.time()
-                    self.log_bench("[*] F5 Pressed! Starting map benchmark timeline...")
+                    self.log_bench(self.t("f5_pressed_log"))
             elif "Protocol mismatch" in event or "Demo protocol" in event:
                 protocol_mismatch = True
                 # Parse: "Demo protocol 2530 does not match client protocol 2544"
@@ -470,6 +474,7 @@ class AppController(MainWindow):
         try:
             bench_watcher.start()
             has_started = False
+            menu_msg_shown = False
             while not spawn_reached and self.is_benchmarking:
                 time.sleep(0.2)
                 is_running = self.process_monitor.is_rust_running()
@@ -479,10 +484,10 @@ class AppController(MainWindow):
                         self.log_bench("[*] Rust game process detected. Waiting for map load...")
                         has_started = True
                         
-                    if menu_reached:
+                    if menu_reached and not menu_msg_shown:
                         self.log_bench(f"[!] GAME READY! (Menu loaded in {round(time_to_menu, 1)}s)")
-                        self.log_bench("[!] Press F5 inside Rust to start the map benchmark!")
-                        menu_reached = False
+                        self.log_bench(self.t("f5_prompt_log"))
+                        menu_msg_shown = True
                     
                     elapsed = int(time.time() - start_time)
                     if elapsed > 0 and elapsed % 5 == 0 and elapsed != getattr(self, '_last_wait_log', 0):
@@ -558,14 +563,16 @@ class AppController(MainWindow):
                 self.after(0, lambda: self.bench_btn.configure(state="normal", fg_color="#3B8ED0", text=self.t("run_test")))
 
     def _prompt_leaderboard(self, total_time: float):
-        from .services.leaderboard_service import leaderboard_service
+        from .core.history_store import history_store
+        client_id = history_store.get_client_id()
+        
         hw_cpu = self.hardware_service.get_cpu_info()
         hw_disk = self.hardware_service.get_disk_info()
         hw_cpu_id = self.hardware_service.get_cpu_id()
         hw_disk_serial = self.hardware_service.get_disk_serial()
         
         self.log_bench("[*] Submitting hardware benchmark score to Global Top...")
-        threading.Thread(target=self._submit_score_bg, args=("HardwareTest", hw_cpu, hw_disk, total_time, hw_cpu_id, hw_disk_serial), daemon=True).start()
+        threading.Thread(target=self._submit_score_bg, args=(client_id, hw_cpu, hw_disk, total_time, hw_cpu_id, hw_disk_serial), daemon=True).start()
 
     def _auto_patch_demo(self, demo_path: str, new_protocol: int):
         # Rust demo header: 8 bytes id, 4 bytes protocol, 4 bytes save version
@@ -646,7 +653,7 @@ class AppController(MainWindow):
         threading.Thread(target=self.run_logic, args=(target,), daemon=True).start()
 
     def launch_game(self, target: str):
-        self.log(self.t("launch", url=target))
+        self.log_safe(self.t("launch", url=target))
         try:
             url = f"steam://run/{config.STEAM_APP_ID}//+connect {target}"
             if os.name == 'nt':
@@ -654,18 +661,18 @@ class AppController(MainWindow):
             else:
                 import webbrowser
                 webbrowser.open(url)
-            self.log(self.t("launch_ok"))
+            self.log_safe(self.t("launch_ok"))
             self.start_log_monitor(target)
             
             if self.swarm_service.is_enabled:
                 threading.Thread(target=self.swarm_service.broadcast_success, args=(target,), daemon=True).start()
         except Exception as e:
-            self.log(self.t("launch_err", err=str(e)))
+            self.log_safe(self.t("launch_err", err=str(e)))
 
     def save_only(self):
         target = self.get_target_ip()
         if not target or ":" not in target:
-            self.log(self.t("err_format"))
+            self.log_safe(self.t("err_format"))
             return
         threading.Thread(target=self.run_save_logic, args=(target,), daemon=True).start()
 
@@ -757,10 +764,12 @@ class AppController(MainWindow):
                         self.is_polling = False
                         self.process_monitor.force_kill_rust()
                     else:
-                        import tkinter.messagebox as messagebox
-                        msg = f"A new Rust update is available! Current: {local_buildid}, Latest: {latest_buildid}\nDo you want to run the game to apply it?"
-                        if messagebox.askyesno("Rust Update", msg):
-                            self.after(0, lambda: self.launch_game("127.0.0.1:28015")) # trigger steam launch
+                        def ask_update():
+                            import tkinter.messagebox as messagebox
+                            msg = f"A new Rust update is available! Current: {local_buildid}, Latest: {latest_buildid}\nDo you want to run the game to apply it?"
+                            if messagebox.askyesno("Rust Update", msg):
+                                self.launch_game("127.0.0.1:28015")
+                        self.after(0, ask_update)
 
                     while True:
                         if getattr(self, '_shutdown_event', threading.Event()).wait(20.0):
@@ -788,6 +797,7 @@ class AppController(MainWindow):
         BUG-04 Fix: Graceful shutdown stopping log watcher and polling loops.
         """
         self._is_shutting_down = True
+        self._shutdown_event.set()
         
         if self.log_watcher:
             self.log_watcher.stop()

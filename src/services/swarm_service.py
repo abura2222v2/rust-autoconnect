@@ -25,13 +25,14 @@ class SwarmService:
         
     def test_connection(self) -> bool:
         """Ping Supabase REST endpoint to verify connection."""
-        import requests
+        import urllib.request
         try:
-            # Quick 2-second timeout ping
-            headers = {"apikey": self.supabase_key, "Authorization": f"Bearer {self.supabase_key}"}
-            resp = requests.get(f"{self.supabase_rest_url}?limit=1", headers=headers, timeout=2.0)
-            return resp.status_code == 200
-        except Exception:
+            req = urllib.request.Request(f"{self.supabase_rest_url}?limit=1", headers={"apikey": self.supabase_key, "Authorization": f"Bearer {self.supabase_key}"})
+            with urllib.request.urlopen(req, timeout=2.0) as res:
+                return res.getcode() == 200
+        except Exception as e:
+            from ..core.logger import app_logger
+            app_logger.error(f"Swarm connection test failed: {e}")
             return False
 
     def start(self):
@@ -61,7 +62,13 @@ class SwarmService:
         payload = {
             "topic": "realtime:public:swarm_events",
             "event": "phx_join",
-            "payload": {},
+            "payload": {
+                "config": {
+                    "postgres_changes": [
+                        {"event": "INSERT", "schema": "public", "table": "swarm_events"}
+                    ]
+                }
+            },
             "ref": "1"
         }
         ws.send(json.dumps(payload))

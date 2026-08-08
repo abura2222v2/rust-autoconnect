@@ -35,7 +35,17 @@ class HistoryStore:
                         shutil.copy2(data_file, corrupted_file)
                     except Exception:
                         pass
-                    self.data = {"lang": "RU", "history": [], "favorites": [], "auto_update": True, "minimize_to_tray": False, "rust_path": ""}
+                    self.data = {
+                        "history": [],
+                        "favorites": [],
+                        "lang": "EN",
+                        "username": "",
+                        "client_id": "",
+                        "tray_enabled": True,
+                        "rust_path": "",
+                        "armed_server": "",
+                        "swarm_enabled": True
+                    }
                 except Exception:
                     pass
             elif Path("history.json").exists():
@@ -107,6 +117,23 @@ class HistoryStore:
     def get_favorites(self) -> List[Dict[str, Any]]:
         with self._lock:
             return list(self.data.get("favorites", []))
+
+    def get_username(self) -> str:
+        return self.data.get("username", "")
+
+    def get_client_id(self) -> str:
+        with self._lock:
+            cid = self.data.get("client_id", "")
+            if not cid:
+                import uuid
+                cid = str(uuid.uuid4())
+                self.data["client_id"] = cid
+                self._save_unsafe()
+            return cid
+
+    def set_username(self, name: str):
+        self.data["username"] = name
+        self._save()
 
     def get_lang(self) -> str:
         with self._lock:

@@ -101,7 +101,7 @@ class LeaderboardWindow(ctk.CTkToplevel):
         ctk.CTkLabel(header, text=self.i18n.t("lb_rank"), width=50).pack(side="left", padx=5)
         ctk.CTkLabel(header, text=self.i18n.t("lb_time"), width=70).pack(side="left", padx=5)
         ctk.CTkLabel(header, text=self.i18n.t("lb_cpu"), width=250, anchor="w").pack(side="left", padx=5)
-        ctk.CTkLabel(header, text="Disk (SSD/HDD)", width=250, anchor="w").pack(side="left", padx=5)
+        ctk.CTkLabel(header, text=self.i18n.t("lb_disk"), width=250, anchor="w").pack(side="left", padx=5)
         
         # Aggregate data by CPU + Disk using full accumulated dataset
         groups = {}
@@ -117,20 +117,25 @@ class LeaderboardWindow(ctk.CTkToplevel):
                 groups[key] = []
             groups[key].append(row)
             
-        # Sort groups by average time
+        # Sort groups by average time of top 10
         sorted_groups = []
         for key, rows in groups.items():
-            avg_time = sum(r.get('total_time', 0.0) for r in rows) / len(rows)
-            sorted_groups.append((key, avg_time, rows))
+            rows.sort(key=lambda x: x.get('total_time', 999.0))
+            top_10 = rows[:10]
+            avg_time = sum(r.get('total_time', 0.0) for r in top_10) / len(top_10)
+            sorted_groups.append((key, avg_time, top_10))
             
         sorted_groups.sort(key=lambda x: x[1], reverse=(self.sort_var.get() == "Slowest"))
             
         for i, (key, avg_time, rows) in enumerate(sorted_groups):
             rank = i + 1
             
+            container = ctk.CTkFrame(self.scroll, fg_color="transparent")
+            container.pack(fill="x", pady=2)
+            
             # Group Header Frame
-            f = ctk.CTkFrame(self.scroll)
-            f.pack(fill="x", pady=4)
+            f = ctk.CTkFrame(container)
+            f.pack(fill="x")
             
             ctk.CTkLabel(f, text=f"#{rank}", width=50, font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
             ctk.CTkLabel(f, text=f"{avg_time:.1f}s", width=70, text_color="#FADA5E", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
@@ -140,5 +145,31 @@ class LeaderboardWindow(ctk.CTkToplevel):
             
             ctk.CTkLabel(f, text=cpu_name, width=250, anchor="w", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
             ctk.CTkLabel(f, text=disk_name, width=250, anchor="w", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
+            
+            # Sub-frame for top 10 players (hidden by default)
+            sub_f = ctk.CTkFrame(container, fg_color="transparent")
+            
+            for j, row in enumerate(rows):
+                p_rank = j + 1
+                p_time = row.get('total_time', 0.0)
+                
+                row_f = ctk.CTkFrame(sub_f, fg_color=("gray80", "gray15"))
+                row_f.pack(fill="x", pady=1, padx=(60, 5))
+                ctk.CTkLabel(row_f, text=f"#{p_rank}", width=30).pack(side="left", padx=5)
+                ctk.CTkLabel(row_f, text=f"{p_time:.1f}s", width=60, text_color=("gray30", "gray70")).pack(side="left", padx=5)
+                
+            def make_toggle(frm, b):
+                def _toggle():
+                    if frm.winfo_ismapped():
+                        frm.pack_forget()
+                        b.configure(text="▼")
+                    else:
+                        frm.pack(fill="x", pady=(2, 0))
+                        b.configure(text="▲")
+                return _toggle
+                
+            btn = ctk.CTkButton(f, text="▼", width=30, height=24)
+            btn.configure(command=make_toggle(sub_f, btn))
+            btn.pack(side="right", padx=10)
             
         self.offset += self.limit

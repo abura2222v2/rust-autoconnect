@@ -2,10 +2,19 @@ import json
 import os
 import re
 import urllib.request
-import winreg
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+
+def get_steam_path() -> str:
+    import winreg
+    steam_path = r"C:\Program Files (x86)\Steam"
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
+            steam_path, _ = winreg.QueryValueEx(key, "SteamPath")
+    except Exception:
+        pass
+    return steam_path
 
 def is_force_wipe_window(now_utc: Optional[datetime] = None) -> bool:
     """

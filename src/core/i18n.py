@@ -32,12 +32,14 @@ class I18nManager:
             self.lang = lang_code
 
     def t(self, key: str, **kwargs) -> str:
-        text = self.translations.get(self.lang, {}).get(key, key)
-        if kwargs:
-            try:
-                text = text.format(**kwargs)
-            except Exception:
-                pass
+        text = self.translations.get(self.lang, {}).get(key)
+        if text is None:
+            text = self.translations.get("EN", {}).get(key, key)
+        
+        try:
+            return text.format(**kwargs)
+        except Exception:
+            pass
         return text
 
 i18n = I18nManager()
