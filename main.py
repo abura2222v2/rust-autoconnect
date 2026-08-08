@@ -262,7 +262,6 @@ class App(ctk.CTk):
         self.lang = self.data.get("lang", "RU")
         self.history = self.data.get("history", [])
         self.favorites = self.data.get("favorites", [])
-        self.favorites = self.data.get("favorites", [])
 
         self.title(self.t("title"))
         self.geometry("800x480")
@@ -328,7 +327,7 @@ class App(ctk.CTk):
         self.input_frame.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
         self.input_frame.grid_columnconfigure(0, weight=1)
 
-        self.ip_entry = ctk.CTkComboBox(self.input_frame, values=[f"{f['name']} ({f['ip']})" for f in self.favorites])
+        self.ip_entry = ctk.CTkComboBox(self.input_frame, values=[f"{f.get('name', 'Unknown')} ({f.get('ip', 'Unknown')})" for f in self.favorites])
         self.ip_entry.set("") # Empty by default
         self.ip_entry.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
@@ -456,10 +455,12 @@ class App(ctk.CTk):
                 
                 # 3. Compare
                 if local_buildid and latest_buildid and str(local_buildid) != str(latest_buildid):
-                    self.after(0, self.update_ready_label.pack, {"side": "left", "padx": 10})
+                    self.after(0, lambda: self.update_ready_label.pack(side="left", padx=10))
                     
                     if force_wipe and self.is_rust_running():
                         self.log_safe("[!] ОБНАРУЖЕН ФОРС-ВАЙП АПДЕЙТ! Закрываем игру для обновления...")
+                        # Отключаем поллинг, чтобы монитор логов не начал реконнектиться
+                        self.is_polling = False
                         try:
                             subprocess.run('taskkill /F /IM RustClient.exe', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
                         except: pass
@@ -505,7 +506,6 @@ class App(ctk.CTk):
         
         self.title(self.t("title"))
         self.history_label.configure(text=self.t("history"))
-        self.wait_check.configure(text=self.t("wait_wipe"))
         if not self.is_polling:
             self.connect_btn.configure(text=self.t("start"))
         else:
@@ -814,6 +814,9 @@ class App(ctk.CTk):
                     self.after(0, self.add_to_history, target_str, server_name)
                     
                     self.launch_game(target_str)
+                    
+                    # Reset the reconnecting flag once we successfully connect
+                    self.is_reconnecting = False
                     
                     # Instead of stopping, we transition to Log Monitoring mode
                     self.start_log_monitor(target_str)
