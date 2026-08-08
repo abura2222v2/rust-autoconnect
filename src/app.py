@@ -25,9 +25,11 @@ class AppController(MainWindow):
     def __init__(self):
         super().__init__(history_mgr=history_store, i18n_mgr=i18n)
 
+        self._state_lock = threading.Lock()
+        self._poll_stop_event = threading.Event()
         self._shutdown_event = threading.Event()
-        self.is_polling = False
-        self.is_reconnecting = False
+        self._is_polling = False
+        self._is_reconnecting = False
         self.poll_thread = None
         self.log_watcher: Optional[LogWatcher] = None
         self.a2s_client = a2s_client
@@ -52,6 +54,26 @@ class AppController(MainWindow):
             self.swarm_service.start()
             
         self._start_global_log_watcher()
+
+    @property
+    def is_polling(self) -> bool:
+        with self._state_lock:
+            return self._is_polling
+
+    @is_polling.setter
+    def is_polling(self, val: bool):
+        with self._state_lock:
+            self._is_polling = val
+
+    @property
+    def is_reconnecting(self) -> bool:
+        with self._state_lock:
+            return self._is_reconnecting
+
+    @is_reconnecting.setter
+    def is_reconnecting(self, val: bool):
+        with self._state_lock:
+            self._is_reconnecting = val
 
     def _start_global_log_watcher(self):
         def handle_disconnect(reason):
@@ -89,6 +111,7 @@ class AppController(MainWindow):
 
         self.ip_entry.configure(state="disabled")
         self.connect_btn.configure(text=self.t("stop"), fg_color="#C25A5A", hover_color="#914141")
+        self._poll_stop_event.clear()
         self.is_polling = True
         self.is_reconnecting = False
 
@@ -96,6 +119,7 @@ class AppController(MainWindow):
 
     def stop_polling(self):
         self.is_polling = False
+        self._poll_stop_event.set()
         if self.log_watcher:
             self.log_watcher.stop()
             self.log_watcher = None
@@ -193,9 +217,10 @@ class AppController(MainWindow):
 
                     current_interval = config.POLL_INTERVAL
                     for _ in range(int(current_interval * 10)):
-                        if not self.is_polling:
+                        if not self.is_polling or self._shutdown_event.is_set():
                             break
-                        time.sleep(0.1)
+                        if self._poll_stop_event.wait(0.1):
+                            break
             finally:
                 manual_join_watcher.stop()
 

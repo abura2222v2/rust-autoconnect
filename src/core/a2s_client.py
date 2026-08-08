@@ -1,4 +1,5 @@
 import socket
+import time
 import a2s
 from typing import Tuple
 
@@ -21,6 +22,9 @@ class A2SClient:
                 return True, info.server_name, info.max_players, query_port
             except a2s.exceptions.BrokenMessageError:
                 # BUG-07: Treat broken messages as offline
+                continue
+            except (OSError, ConnectionResetError):
+                time.sleep(0.5)
                 continue
             except Exception:
                 continue
