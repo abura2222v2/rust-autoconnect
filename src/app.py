@@ -201,6 +201,16 @@ class AppController(MainWindow):
     def run_benchmark(self):
         if not hasattr(self, 'gui') or not hasattr(self.gui, 'bench_btn'):
             return
+            
+        if self.process_monitor.is_rust_running():
+            import tkinter.messagebox as messagebox
+            if messagebox.askyesno("Close Rust?", "Rust is running. We must close it before copying benchmark files. Close it now?"):
+                self.process_monitor.force_kill_rust()
+                self.log_bench("[*] Closed Rust.")
+            else:
+                self.log_bench("[!] Benchmark aborted.")
+                return
+                
         self.gui.bench_btn.configure(state="disabled")
         self.gui.bench_log.configure(state="normal")
         self.gui.bench_log.delete("0.0", "end")
@@ -209,10 +219,10 @@ class AppController(MainWindow):
 
     def run_benchmark_logic(self):
         from .core.history_store import history_store
-        if not history_store.get_allow_benchmark_copy():
-            self.log_bench("[!] Отменено: Вы не разрешили копирование файлов в Настройках (галочка).")
-            self.after(0, lambda: self.gui.bench_btn.configure(state="normal"))
-            return
+        
+        # Wait until Rust is fully closed
+        while self.process_monitor.is_rust_running():
+            time.sleep(1.0)
             
         rust_path = history_store.get_rust_path()
         if not rust_path or not os.path.exists(rust_path):

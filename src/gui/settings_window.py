@@ -49,20 +49,9 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self.swarm_checkbox.grid(row=2, column=0, columnspan=2, padx=20, pady=(10, 10), sticky="w")
         
-        # Benchmark Safety Checkbox
-        self.bench_copy_var = ctk.BooleanVar(value=self.history_store.get_allow_benchmark_copy())
-        self.bench_copy_checkbox = ctk.CTkCheckBox(
-            self, text=self.i18n.t("bench_copy_lbl"), 
-            variable=self.bench_copy_var, 
-            command=self._on_bench_copy_change,
-            fg_color="#C25A5A",
-            text_color="#C25A5A"
-        )
-        self.bench_copy_checkbox.grid(row=3, column=0, columnspan=2, padx=20, pady=(10, 10), sticky="w")
-        
         # Close Button
         self.close_btn = ctk.CTkButton(self, text=self.i18n.t("close_btn"), command=self.destroy, width=100)
-        self.close_btn.grid(row=4, column=0, columnspan=2, pady=30)
+        self.close_btn.grid(row=3, column=0, columnspan=2, pady=30)
         
         # Update title based on language
         self.title(self.i18n.t("title") + " - " + self.i18n.t("settings_title"))
@@ -85,6 +74,4 @@ class SettingsWindow(ctk.CTkToplevel):
             swarm_service.start()
         else:
             swarm_service.stop()
-            
-    def _on_bench_copy_change(self):
-        self.history_store.set_allow_benchmark_copy(self.bench_copy_var.get())
+
