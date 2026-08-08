@@ -603,7 +603,7 @@ class App(ctk.CTk):
             btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
             
             # Double click to edit name
-            btn.bind("<Double-Button-1>", lambda event, i=ip, n=display_name: self.edit_history_name(i, n))
+            btn.bind("<Double-Button-1>", lambda event, f=frame, b=btn, i=ip, n=display_name: self.start_inline_edit(f, b, i, n))
             
             btn_font = ctk.CTkFont(family="Arial", size=14)
             
@@ -630,19 +630,28 @@ class App(ctk.CTk):
         # Update combo box values
         self.ip_entry.configure(values=[f"{f['name']} ({f['ip']})" for f in self.favorites])
 
-    def edit_history_name(self, ip_port, current_name):
-        dialog = ctk.CTkInputDialog(text="Enter new name for server:", title="Edit Name")
-        new_name = dialog.get_input()
-        if new_name:
-            for h in self.history:
-                if h["ip"] == ip_port:
-                    h["name"] = new_name
-            for f in self.favorites:
-                if f["ip"] == ip_port:
-                    f["name"] = new_name
-            self.save_data()
+    def start_inline_edit(self, frame, btn, ip, current_name):
+        btn.pack_forget()
+        entry = ctk.CTkEntry(frame, font=ctk.CTkFont(family="Arial", size=14))
+        entry.insert(0, current_name)
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        entry.focus()
+        
+        def save_inline(event=None):
+            new_name = entry.get().strip()
+            if new_name:
+                for h in self.history:
+                    if h["ip"] == ip:
+                        h["name"] = new_name
+                for f in self.favorites:
+                    if f["ip"] == ip:
+                        f["name"] = new_name
+                self.save_data()
+                self.ip_entry.configure(values=[f"{f.get('name', 'Unknown')} ({f.get('ip', 'Unknown')})" for f in self.favorites])
             self.refresh_history_ui()
-            self.ip_entry.configure(values=[f"{f['name']} ({f['ip']})" for f in self.favorites])
+
+        entry.bind("<Return>", save_inline)
+        entry.bind("<FocusOut>", save_inline)
 
     def select_history(self, ip_port):
         if self.is_polling:
