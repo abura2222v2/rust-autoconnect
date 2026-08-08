@@ -1,6 +1,6 @@
-customtkinter
-python-a2s
-pystray
-psutil
-Pillow
-websocket-client
+customtkinter==5.2.2
+python-a2s==1.4.2
+pystray==0.19.5
+psutil==7.2.2
+Pillow==12.3.0
+websocket-client==1.9.0
