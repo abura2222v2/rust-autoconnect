@@ -12,6 +12,9 @@ import winreg
 import urllib.request
 import re
 from datetime import datetime, timedelta, timezone
+import psutil
+import pystray
+from PIL import Image, ImageDraw
 # --- Translations ---
 LANGUAGES = {
     "RU": {
@@ -267,7 +270,12 @@ class App(ctk.CTk):
         
         self.is_polling = False
         self.poll_thread = None
-        self.auto_update = ctk.BooleanVar(value=self.data.get("auto_update", True))
+        self.is_auto_update_enabled = self.data.get("auto_update", True)
+        self.auto_update = ctk.BooleanVar(value=self.is_auto_update_enabled)
+        self.is_reconnecting = False
+        
+        self.tray_icon = None
+        self.protocol('WM_DELETE_WINDOW', self.withdraw_window)
 
         # Grid layout
         self.grid_columnconfigure(1, weight=1)
@@ -276,7 +284,7 @@ class App(ctk.CTk):
         # Left Panel (History)
         self.left_panel = ctk.CTkFrame(self, width=240, corner_radius=0)
         self.left_panel.grid(row=0, column=0, sticky="nsew")
-        self.left_panel.grid_rowconfigure(2, weight=1)
+        self.left_panel.grid_rowconfigure(3, weight=1)
 
         self.history_label = ctk.CTkLabel(self.left_panel, text=self.t("history"), font=ctk.CTkFont(size=16, weight="bold"))
         self.history_label.grid(row=0, column=0, padx=20, pady=(20, 5))
@@ -285,12 +293,18 @@ class App(ctk.CTk):
         self.filter_menu = ctk.CTkOptionMenu(self.left_panel, values=["All Servers", "Favorites"], variable=self.filter_var, command=lambda e: self.refresh_history_ui())
         self.filter_menu.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
 
+        # Smart Search
+        self.search_var = ctk.StringVar()
+        self.search_var.trace("w", lambda *args: self.refresh_history_ui())
+        self.search_entry = ctk.CTkEntry(self.left_panel, placeholder_text="Поиск...", textvariable=self.search_var)
+        self.search_entry.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
+
         self.history_scroll = ctk.CTkScrollableFrame(self.left_panel)
-        self.history_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=0)
+        self.history_scroll.grid(row=3, column=0, sticky="nsew", padx=10, pady=0)
 
         # Bottom Frame of Left Panel (Language + Status)
         self.left_bottom_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
-        self.left_bottom_frame.grid(row=3, column=0, sticky="ew", padx=10, pady=10)
+        self.left_bottom_frame.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
         self.left_bottom_frame.grid_columnconfigure(1, weight=1)
 
         # Language Selector
@@ -330,8 +344,12 @@ class App(ctk.CTk):
         self.update_ready_label.pack(side="left", padx=10)
         self.update_ready_label.pack_forget() # Hide by default
 
-        self.update_check = ctk.CTkCheckBox(self.bottom_frame, text="Auto-Update Rust", variable=self.auto_update, command=self.save_data)
+        self.update_check = ctk.CTkCheckBox(self.bottom_frame, text="Auto-Update Rust", variable=self.auto_update, command=self.on_auto_update_change)
         self.update_check.pack(side="right", padx=10)
+
+    def on_auto_update_change(self):
+        self.is_auto_update_enabled = self.auto_update.get()
+        self.save_data()
 
         # Log Frame (Now taking row 1 and row 2 space)
         self.log_frame = ctk.CTkFrame(self.right_panel)
@@ -352,21 +370,18 @@ class App(ctk.CTk):
     def check_rust_status_loop(self):
         while True:
             try:
-                if os.name == 'nt':
-                    output = subprocess.check_output('tasklist /FI "IMAGENAME eq RustClient.exe" /NH', shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode(errors='ignore')
-                    if "RustClient.exe" in output:
-                        self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_on"), text_color="#50C878"))
-                    else:
-                        self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_off"), text_color="#C25A5A"))
+                running = any(p.name() == 'RustClient.exe' for p in psutil.process_iter(['name']))
+                if running:
+                    self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_on"), text_color="#50C878"))
+                else:
+                    self.after(0, lambda: self.rust_status_label.configure(text=self.t("rust_off"), text_color="#C25A5A"))
             except Exception:
                 pass
             time.sleep(3.0)
 
     def is_rust_running(self):
         try:
-            if os.name == 'nt':
-                output = subprocess.check_output('tasklist /FI "IMAGENAME eq RustClient.exe" /NH', shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode(errors='ignore')
-                return "RustClient.exe" in output
+            return any(p.name() == 'RustClient.exe' for p in psutil.process_iter(['name']))
         except Exception:
             pass
         return False
@@ -387,7 +402,7 @@ class App(ctk.CTk):
 
     def check_rust_update(self):
         while True:
-            if not self.auto_update.get():
+            if not self.is_auto_update_enabled:
                 time.sleep(60.0)
                 continue
                 
@@ -454,21 +469,23 @@ class App(ctk.CTk):
                     # Ждем, пока Steam докачает обнову
                     while True:
                         time.sleep(20.0)
-                        
-                        new_local = None
-                        if os.path.exists(manifest_path):
-                            with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
-                                match2 = re.search(r'"buildid"\s+"(\d+)"', f.read())
-                                if match2:
-                                    new_local = match2.group(1)
-                                    
-                        if new_local and str(new_local) == str(latest_buildid):
-                            self.log_safe("[+] Обновление установлено! Запускаем Rust...")
-                            self.after(0, self.update_ready_label.pack_forget)
-                            webbrowser.open("steam://run/252490")
-                            # Небольшая пауза, чтобы не дублировать
-                            time.sleep(120.0)
-                            break
+                        try:
+                            new_local = None
+                            if os.path.exists(manifest_path):
+                                with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
+                                    match2 = re.search(r'"buildid"\s+"(\d+)"', f.read())
+                                    if match2:
+                                        new_local = match2.group(1)
+                                        
+                            if new_local and str(new_local) == str(latest_buildid):
+                                self.log_safe("[+] Обновление установлено! Запускаем Rust...")
+                                self.after(0, self.update_ready_label.pack_forget)
+                                webbrowser.open("steam://run/252490")
+                                # Небольшая пауза, чтобы не дублировать
+                                time.sleep(120.0)
+                                break
+                        except Exception:
+                            pass
                 else:
                     self.after(0, self.update_ready_label.pack_forget)
                     
@@ -555,11 +572,18 @@ class App(ctk.CTk):
             widget.destroy()
             
         show_favs_only = (self.filter_var.get() == "Favorites")
+        search_query = self.search_var.get().lower().strip()
         
         # Sort history by timestamp descending
         self.history = sorted(self.history, key=lambda x: x.get("added_at", 0), reverse=True)
         for item in self.history:
             ip = item['ip']
+            display_name = item.get('name', 'Rust Server')
+            
+            if search_query:
+                if search_query not in ip.lower() and search_query not in display_name.lower():
+                    continue
+
             is_fav = any(f["ip"] == ip for f in self.favorites)
             
             if show_favs_only and not is_fav:
@@ -568,11 +592,11 @@ class App(ctk.CTk):
             frame = ctk.CTkFrame(self.history_scroll, fg_color="transparent")
             frame.pack(fill="x", pady=2)
             
-            display_name = item.get('name', 'Rust Server')
-            if len(display_name) > 18:
-                display_name = display_name[:15] + "..."
+            short_name = display_name
+            if len(short_name) > 18:
+                short_name = short_name[:15] + "..."
             
-            btn_text = f"{ip}\n({display_name})"
+            btn_text = f"{ip}\n({short_name})"
             btn = ctk.CTkButton(frame, text=btn_text, fg_color="#2b2b2b", 
                                 hover_color="#3b3b3b", text_color=("gray80", "white"),
                                 command=lambda i=ip: self.select_history(i))
@@ -583,8 +607,12 @@ class App(ctk.CTk):
             fav_text = "⭐" if is_fav else "☆"
             fav_color = "#3B8ED0" if is_fav else "#555555"
             fav_btn = ctk.CTkButton(frame, text=fav_text, width=28, height=28, font=btn_font, fg_color=fav_color,
-                                    command=lambda i=ip, n=item.get('name', 'Rust Server'): self.toggle_favorite(i, n))
-            fav_btn.pack(side="left", padx=(0, 5))
+                                    command=lambda i=ip, n=display_name: self.toggle_favorite(i, n))
+            fav_btn.pack(side="left", padx=(0, 2))
+
+            edit_btn = ctk.CTkButton(frame, text="✎", width=28, height=28, font=btn_font, fg_color="#3B8ED0", hover_color="#36719F",
+                                    command=lambda i=ip, n=display_name: self.edit_history_name(i, n))
+            edit_btn.pack(side="left", padx=(0, 2))
 
             del_btn = ctk.CTkButton(frame, text="X", width=28, height=28, font=btn_font, fg_color="#C25A5A", hover_color="#914141",
                                     command=lambda i=ip: self.remove_from_history(i))
@@ -600,6 +628,20 @@ class App(ctk.CTk):
         self.refresh_history_ui()
         # Update combo box values
         self.ip_entry.configure(values=[f"{f['name']} ({f['ip']})" for f in self.favorites])
+
+    def edit_history_name(self, ip_port, current_name):
+        dialog = ctk.CTkInputDialog(text="Enter new name for server:", title="Edit Name")
+        new_name = dialog.get_input()
+        if new_name:
+            for h in self.history:
+                if h["ip"] == ip_port:
+                    h["name"] = new_name
+            for f in self.favorites:
+                if f["ip"] == ip_port:
+                    f["name"] = new_name
+            self.save_data()
+            self.refresh_history_ui()
+            self.ip_entry.configure(values=[f"{f['name']} ({f['ip']})" for f in self.favorites])
 
     def select_history(self, ip_port):
         if self.is_polling:
@@ -686,10 +728,8 @@ class App(ctk.CTk):
         self.ip_entry.configure(state="disabled")
         self.connect_btn.configure(text=self.t("stop"), fg_color="#C25A5A", hover_color="#914141")
         self.is_polling = True
+        self.is_reconnecting = False
         
-        # Save IP immediately when clicking Start as well
-        threading.Thread(target=self.run_save_logic, args=(target,), daemon=True).start()
-
         threading.Thread(target=self.run_logic, args=(target,), daemon=True).start()
 
     def stop_polling(self):
@@ -743,6 +783,9 @@ class App(ctk.CTk):
         is_alive, name, max_players = self.check_server_alive(real_ip, port)
         server_name = name if name else host
         
+        target_str = f"{real_ip}:{port}"
+        self.after(0, self.add_to_history, target_str, server_name)
+        
         self.log_safe(self.t("start_poll").format(ip=real_ip, port=port))
 
         if not self.is_polling: return
@@ -789,21 +832,20 @@ class App(ctk.CTk):
     def monitor_rust_logs(self, target_str):
         log_path = os.path.join(os.environ.get("USERPROFILE", ""), "AppData", "LocalLow", "Facepunch Studios LTD", "Rust", "Player.log")
         
-        # Ждем появления лог файла, если это абсолютно первый запуск игры
-        for _ in range(30):
-            if not self.is_polling:
-                return
+        while self.is_polling:
             if os.path.exists(log_path):
                 break
             time.sleep(1.0)
             
-        if not os.path.exists(log_path):
+        if not self.is_polling or not os.path.exists(log_path):
             return
+
+        disconnect_keywords = ["Disconnected", "Connection Attempt Failed", "Rejected", "Kicked", "User Cancelled", "Server Closed"]
 
         try:
             with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-                # Прыгаем в конец нового файла
                 f.seek(0, 2)
+                buffer = ""
                 
                 while self.is_polling:
                     try:
@@ -815,30 +857,45 @@ class App(ctk.CTk):
                     where = f.tell()
                     
                     if current_size == where:
+                        if not self.is_rust_running():
+                            self.log_safe("[!] Обнаружен краш или закрытие игры! Переподключаюсь...")
+                            time.sleep(2.0)
+                            if self.is_polling:
+                                self.start_process_force(target_str)
+                                return
                         time.sleep(0.5)
                         continue
                     elif current_size < where:
-                        # Файл был усечен (перезапуск игры)
-                        f.seek(0, 0)
+                        f.seek(0, 2)
+                        buffer = ""
                         continue
                         
-                    # Размер больше, значит есть новые данные
                     line = f.readline()
                     if not line:
                         time.sleep(0.1)
                         continue
                         
-                    # Перехват любого дисконнекта, кика, краша или закрытия игры
-                    disconnect_keywords = ["Disconnected", "Connection Attempt Failed", "Rejected", "Kicked", "User Cancelled", "Server Closed", "(disconnect)", "Quitting", "Exception", "Fatal error", "Crash"]
-                    if any(k in line for k in disconnect_keywords):
+                    buffer += line
+                    if not buffer.endswith("\n"):
+                        continue
+                        
+                    line_to_check = buffer
+                    buffer = ""
+                    
+                    if any(k in line_to_check for k in disconnect_keywords):
                         self.log_safe(self.t("log_err"))
                         time.sleep(2.0)
                         if self.is_polling:
-                            # Агрессивный рестарт!
-                            threading.Thread(target=self.run_logic, args=(target_str,), daemon=True).start()
-                            return # Завершаем этот поток мониторинга
+                            self.start_process_force(target_str)
+                            return
         except Exception:
             pass
+
+    def start_process_force(self, target):
+        if getattr(self, 'is_reconnecting', False):
+            return
+        self.is_reconnecting = True
+        threading.Thread(target=self.run_logic, args=(target,), daemon=True).start()
 
     def update_entry(self, text):
         state = self.ip_entry.cget("state")
@@ -857,6 +914,33 @@ class App(ctk.CTk):
             self.log_safe(self.t("launch_ok"))
         except Exception as e:
             self.log_safe(self.t("launch_err").format(err=e))
+
+    def create_tray_image(self):
+        image = Image.new('RGB', (64, 64), color=(59, 142, 208))
+        d = ImageDraw.Draw(image)
+        d.text((24, 24), "R", fill=(255, 255, 255))
+        return image
+
+    def withdraw_window(self):
+        self.withdraw()
+        if not self.tray_icon:
+            image = self.create_tray_image()
+            menu = pystray.Menu(
+                pystray.MenuItem("Показать / Show", self.show_window, default=True),
+                pystray.MenuItem("Выход / Quit", self.quit_window)
+            )
+            self.tray_icon = pystray.Icon("RustAutoConnect", image, "Rust AutoConnect", menu)
+            threading.Thread(target=self.tray_icon.run, daemon=True).start()
+
+    def show_window(self, icon, item):
+        self.tray_icon.stop()
+        self.tray_icon = None
+        self.after(0, self.deiconify)
+
+    def quit_window(self, icon, item):
+        self.tray_icon.stop()
+        self.after(0, self.destroy)
+        os._exit(0)
 
 if __name__ == "__main__":
     app = App()

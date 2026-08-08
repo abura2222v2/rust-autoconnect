@@ -1,0 +1,942 @@
+[PhysX] Initialized MultithreadedTaskDispatcher with 16 workers.
+Initialize engine version: 2022.3.41f1 (0f988161febf)
+[Subsystems] Discovering subsystems at path O:/SteamLibrary/steamapps/common/Rust/RustClient_Data/UnitySubsystems
+GfxDevice: creating device client; threaded=1; jobified=1
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+    Renderer: NVIDIA GeForce GTX 1660 SUPER (ID=0x21c4)
+    Vendor:   NVIDIA
+    VRAM:     5966 MB
+    Driver:   32.0.15.8129
+Shader 'Soft Mask/TextMeshPro/Distance Field': fallback shader 'TextMeshPro/Mobile/Distance Field' not found
+<RI> Initializing input.
+<RI> Input initialized.
+<RI> Initialized touch support.
+Shader 'TextMeshPro/Distance Field': fallback shader 'TextMeshPro/Mobile/Distance Field' not found
+[PhysX] Initialized MultithreadedTaskDispatcher with 16 workers.
+UnloadTime: 1.647500 ms
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Rust.UI.RustFlexText:SetLayoutDirty()
+TMPro.TextMeshPro:SetAllDirty()
+TMPro.TextMeshProUGUI:OnEnable()
+Rust.UI.RustFlexText:OnEnable()
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Rust.UI.RustFlexText:SetLayoutDirty()
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexAspectRatio:SetLayoutDirty()
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Rust.UI.RustFlexText:SetLayoutDirty()
+TMPro.TextMeshPro:SetAllDirty()
+TMPro.TextMeshProUGUI:OnEnable()
+Rust.UI.RustFlexText:OnEnable()
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Rust.UI.RustFlexText:SetLayoutDirty()
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Rust.UI.RustFlexText:SetLayoutDirty()
+TMPro.TextMeshProUGUI:OnRectTransformDimensionsChange()
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Rust.UI.RustFlexText:SetLayoutDirty()
+TMPro.TextMeshProUGUI:OnRectTransformDimensionsChange()
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Rust.UI.RustFlexText:SetLayoutDirty()
+TMPro.TextMeshProUGUI:OnRectTransformDimensionsChange()
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Rust.UI.RustFlexText:SetLayoutDirty()
+TMPro.TextMeshProUGUI:OnRectTransformDimensionsChange()
+UnityEngine.UI.CanvasScaler:SetReferencePixelsPerUnit(Single)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+There is no FlexLayoutManager!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+Facepunch.Flexbox.FlexLayoutManager:%07f74446a3c512bef02bc5ee2b54740e3dd140f0(FlexElementBase)
+Facepunch.Flexbox.FlexElementBase:SetLayoutDirty(Boolean)
+
+Bootstrap Startup
+NullReferenceException: Object reference not set to an instance of an object.
+  at %ff2d12c9e683aafcc19c0fb7b95399cb01633296.%694ef9dc7a2c4e986885f7b9a16fea99f6bc5212 (System.String %62a620b920c81f1635f4bdb637779ef045d00c6b, System.String %e4ea01927d3898f924efd35df795980ee35c6ce1, System.Boolean %56213371664dbcb77cd0d802c2a7c0e106e01f73) [0x00000] in <00000000000000000000000000000000>:0 
+  at Bootstrap.Update () [0x00000] in <00000000000000000000000000000000>:0 
+
+NullReferenceException: Object reference not set to an instance of an object.
+  at %ff2d12c9e683aafcc19c0fb7b95399cb01633296.%694ef9dc7a2c4e986885f7b9a16fea99f6bc5212 (System.String %62a620b920c81f1635f4bdb637779ef045d00c6b, System.String %e4ea01927d3898f924efd35df795980ee35c6ce1, System.Boolean %56213371664dbcb77cd0d802c2a7c0e106e01f73) [0x00000] in <00000000000000000000000000000000>:0 
+  at Bootstrap.Update () [0x00000] in <00000000000000000000000000000000>:0 
+
+Loading maps/maps.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/assetscenes.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/audio.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/content.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/items.preload.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/monuments.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/skinnables.preload.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/textures.0.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/textures.1.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/textures.2.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/textures.3.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Loading shared/textures.4.bundle
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%19b216268ead53a7aa127ee13801f7350839d8f8:%2ee0b4dcc052fb36656a5164a7518e45776721e1(String)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+[PhysX] Initialized MultithreadedTaskDispatcher with 16 workers.
+Shader 'TextMeshPro/Distance Field': fallback shader 'TextMeshPro/Mobile/Distance Field' not found
+Shader 'Particles/FXVille Blood World Lighting': fallback shader 'Paricles/Alpha Blended' not found
+System
+	Name: ABURA2222
+	OS:   Unknown Windows version  (6.2.9200) 64bit
+
+CPU
+	Model:  AMD Ryzen 7 9800X3D 8-Core Processor 
+	Cores:  16
+	Memory: 65081 MB
+
+GPU
+	Model:  NVIDIA GeForce GTX 1660 SUPER
+	API:    Direct3D 11.0 [level 11.1]
+	Memory: 5966 MB
+	SM:     50
+
+Process
+	Memory:   3522 MB
+
+Mono
+	Collects: 26
+	Memory:   288 MB
+
+
+Threaded texture creation has been disabled!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+TextureStreaming:%7d04939fbab10ca4056b9dbdaa1951954748ecf8(Boolean)
+TextureStreaming:%fadca2bc9d3a9a0096ca22daa5e2e681d25c17ac()
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+SteamID: 76561198826083897 (abura2222)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%8d01cdfe85a3d804bf34284059412c7e23520090:%a8607e404739276c1dc7588629281a51358a4782(%35951a4101dcba41a924a650db9f8b88e2f45fe0)
+%09a876f8f8fb1a58771f68bb5c08a8c5ca4c8260:%a8607e404739276c1dc7588629281a51358a4782(%35951a4101dcba41a924a650db9f8b88e2f45fe0)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Manifest Metadata Loaded
+	33590 pooled strings
+	14617 prefab properties
+	420 effect categories
+	2013 entity names
+Protocol: 2597.271.1
+Build Date: 09/20/2025 22:50:57
+Unity Version: 2022.3.41f1
+Changeset: 131574
+Branch: release
+Command Line: "O:\SteamLibrary\steamapps\common\Rust\RustClient.exe" 
+Setup unity update hooks
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Start>d__19:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Config Loaded
+client.hasdeclinedtutorial: "True"
+[EAC] Loading EasyAntiCheat
+Manifest Assets Loaded
+	139 skinnable objects
+Color primaries 0 is unknown or unsupported by WindowsMediaFoundation. Falling back to default may result in color shift. archive:/BuildPlayer-AssetScene-monument.6/BuildPlayer-AssetScene-props.resource
+[PhysX] Initialized MultithreadedTaskDispatcher with 16 workers.
+[PhysX] Initialized MultithreadedTaskDispatcher with 16 workers.
+Mipmap streaming has been enabled!
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+TextureStreaming:%23590521cd5a5136009f0bf0a03bce776d324e09()
+<ClientStartup>d__46:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+Shader 'Effects/Explosions/Distortion/CullBack': fallback shader 'Effects/Distortion/Free/CullOff' not found
+Shader 'TextMeshPro/Distance Field NoZTest': fallback shader 'TextMeshPro/Mobile/Distance Field' not found
+Found 1 server query result: 205.178.168.175:28010 Raknet
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Connecting: 205.178.168.175:28010 (Raknet)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Disconnect Reason: EAC: Authentication timed out (1/2)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+Client:%25359fd9bf1492fc8a44cc725e3e0180d12d3cc8(%299a77e202f665614080ce71dcb8b5bf6fe04576)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%441a7d1821ae8486eb09b0b6e8fca7709c68daff(%fb1a89add4653f0782dcf2d315488d52a9694e05)
+%8692004f0d6b976b5393ddbb4eea8297bf22b50c:%674199f429c85392dc3d125e91d86ee7ad03b7eb()
+Client:Update()
+
+Disconnected (EAC: Authentication timed out (1/2)) - returning to main menu
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+Client:OnClientDisconnected(String)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%1c5ee47eff2eaaa1af1ec3fc5e4bf810d1199077(String, Boolean)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%9d897ff6f7ad91c2fca56b64252111a97647004f(Byte, %fb1a89add4653f0782dcf2d315488d52a9694e05)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%441a7d1821ae8486eb09b0b6e8fca7709c68daff(%fb1a89add4653f0782dcf2d315488d52a9694e05)
+%8692004f0d6b976b5393ddbb4eea8297bf22b50c:%674199f429c85392dc3d125e91d86ee7ad03b7eb()
+Client:Update()
+
+Found 1 server query result: 205.178.168.175:28010 Raknet
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Connecting: 205.178.168.175:28010 (Raknet)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Disconnected (disconnect) - returning to main menu
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+Client:OnClientDisconnected(String)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%1c5ee47eff2eaaa1af1ec3fc5e4bf810d1199077(String, Boolean)
+%0bdf86098ae7a3fc9a6ec2023f8fd8ea00ee87d8:%484d1c1f68f32e5337b1ca637032e1a537a19267()
+<>c:<.cctor>b__2_417(%207418c3733352f7dadfcd31f9bc778fa36900be)
+%4048ac3574147e9f0f03ea1910d685d87838f871:%82c43c69549cb7857290bd402aac8ba0d80bda45(%207418c3733352f7dadfcd31f9bc778fa36900be)
+%4048ac3574147e9f0f03ea1910d685d87838f871:%9171ff704a7971ff19ff60cc1e09f9c877635458(%c57d40c98ef763d978cc2c32f4a1df6ce5b3334d, String, Object[])
+%9ff7862ce455ca8e25a4ba4df89ee9e651f14227:%4668c362e6a39eba9ac7fc682ea92b17c666d077(Nullable`1, Dictionary`2)
+Rust.UI.MainMenu.UI_ConnectModal:JoinServer()
+UnityEngine.Events.UnityEvent:Invoke()
+Rust.UI.RustButton:UnPress()
+UnityEngine.EventSystems.ExecuteEvents:Execute(GameObject, BaseEventData, EventFunction`1)
+UnityEngine.EventSystems.StandaloneInputModule:ReleaseMouse(PointerEventData, GameObject)
+UnityEngine.EventSystems.StandaloneInputModule:ProcessMousePress(MouseButtonEventData)
+UnityEngine.EventSystems.StandaloneInputModule:ProcessMouseEvent(Int32)
+UnityEngine.EventSystems.StandaloneInputModule:Process()
+UnityEngine.EventSystems.EventSystem:Update()
+
+Found 1 server query result: 176.118.33.7:28015 Raknet
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Connecting: 176.118.33.7:28015 (Raknet)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Disconnected (Connection Attempt Failed) - returning to main menu
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+Client:OnClientDisconnected(String)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%1c5ee47eff2eaaa1af1ec3fc5e4bf810d1199077(String, Boolean)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%9d897ff6f7ad91c2fca56b64252111a97647004f(Byte, %fb1a89add4653f0782dcf2d315488d52a9694e05)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%441a7d1821ae8486eb09b0b6e8fca7709c68daff(%fb1a89add4653f0782dcf2d315488d52a9694e05)
+%8692004f0d6b976b5393ddbb4eea8297bf22b50c:%674199f429c85392dc3d125e91d86ee7ad03b7eb()
+Client:Update()
+
+Found 1 server query result: 64.40.9.156:28017 Raknet
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Connecting: 64.40.9.156:28017 (Raknet)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Disconnected (Connection Attempt Failed) - returning to main menu
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+Client:OnClientDisconnected(String)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%1c5ee47eff2eaaa1af1ec3fc5e4bf810d1199077(String, Boolean)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%9d897ff6f7ad91c2fca56b64252111a97647004f(Byte, %fb1a89add4653f0782dcf2d315488d52a9694e05)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%441a7d1821ae8486eb09b0b6e8fca7709c68daff(%fb1a89add4653f0782dcf2d315488d52a9694e05)
+%8692004f0d6b976b5393ddbb4eea8297bf22b50c:%674199f429c85392dc3d125e91d86ee7ad03b7eb()
+Client:Update()
+
+Found 1 server query result: 64.40.9.156:28017 Raknet
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Connecting: 64.40.9.156:28017 (Raknet)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__49:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+Disconnected (Connection Attempt Failed) - returning to main menu
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+Client:OnClientDisconnected(String)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%1c5ee47eff2eaaa1af1ec3fc5e4bf810d1199077(String, Boolean)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%9d897ff6f7ad91c2fca56b64252111a97647004f(Byte, %fb1a89add4653f0782dcf2d315488d52a9694e05)
+%cbf3fbd0f612e2c23e3987a945c29b458dd52f54:%441a7d1821ae8486eb09b0b6e8fca7709c68daff(%fb1a89add4653f0782dcf2d315488d52a9694e05)
+%8692004f0d6b976b5393ddbb4eea8297bf22b50c:%674199f429c85392dc3d125e91d86ee7ad03b7eb()
+Client:Update()
+
+Quitting
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<>c:<.cctor>b__2_959(%207418c3733352f7dadfcd31f9bc778fa36900be)
+%4048ac3574147e9f0f03ea1910d685d87838f871:%82c43c69549cb7857290bd402aac8ba0d80bda45(%207418c3733352f7dadfcd31f9bc778fa36900be)
+%4048ac3574147e9f0f03ea1910d685d87838f871:%9171ff704a7971ff19ff60cc1e09f9c877635458(%c57d40c98ef763d978cc2c32f4a1df6ce5b3334d, String, Object[])
+UI_QuitModal:Quit()
+UnityEngine.Events.UnityEvent:Invoke()
+Rust.UI.RustButton:Press()
+UnityEngine.EventSystems.ExecuteEvents:Execute(GameObject, BaseEventData, EventFunction`1)
+UnityEngine.EventSystems.ExecuteEvents:ExecuteHierarchy(GameObject, BaseEventData, EventFunction`1)
+UnityEngine.EventSystems.StandaloneInputModule:ProcessMousePress(MouseButtonEventData)
+UnityEngine.EventSystems.StandaloneInputModule:ProcessMouseEvent(Int32)
+UnityEngine.EventSystems.StandaloneInputModule:Process()
+UnityEngine.EventSystems.EventSystem:Update()
+
+Steam Client Shutdown
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%8d01cdfe85a3d804bf34284059412c7e23520090:%579307ef988a42ab51200d34eab284bc2db38e7c()
+Client:%36605977cd24a83ef45ca2a90d680dd25661169d()
+

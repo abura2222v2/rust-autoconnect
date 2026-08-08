@@ -1,2 +1,5 @@
 customtkinter
 python-a2s
+pystray
+psutil
+Pillow
