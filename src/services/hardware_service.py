@@ -6,8 +6,14 @@ class HardwareService:
         if os.name != 'nt':
             return "Unknown"
         try:
-            res = subprocess.check_output(["powershell", "-NoProfile", "-Command", cmd], creationflags=subprocess.CREATE_NO_WINDOW)
+            res = subprocess.check_output(
+                ["powershell", "-NoProfile", "-Command", cmd],
+                timeout=5.0,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
             return res.decode('utf-8', errors='ignore').strip()
+        except subprocess.TimeoutExpired:
+            return "Unknown"
         except Exception:
             return "Unknown"
 
