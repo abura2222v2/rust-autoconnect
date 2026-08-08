@@ -181,7 +181,7 @@ class AppController(MainWindow):
             
         target = self.get_target_ip()
         if target == ip_port:
-            self.log_safe("[🚀] Swarm Connect: Другой игрок зашел на сервер! Мгновенный вход...")
+            self.log_safe("[🚀] Swarm Connect: Another player joined the server! Instant connect...")
             self.is_polling = False # Stop a2s polling loop
             self.start_process_force(target)
         
@@ -365,7 +365,7 @@ class AppController(MainWindow):
         self.log_watcher = LogWatcher(
             on_disconnect=lambda reason: self._on_log_disconnect(target_str, reason),
             on_error=self._on_log_error,
-            on_event=lambda event: self.log_safe(f"[*] Лог игры: {event}")
+            on_event=lambda event: self.log_safe(f"[*] Game log: {event}")
         )
         self.log_watcher.start()
 
@@ -490,18 +490,18 @@ class AppController(MainWindow):
                     self.after(0, lambda: self.update_ready_label.pack(side="left", padx=10))
 
                     if force_wipe and self.process_monitor.is_rust_running():
-                        self.log_safe("[!] ОБНАРУЖЕН ФОРС-ВАЙП АПДЕЙТ! Закрываем игру для обновления...")
+                        self.log_safe("[!] FORCE-WIPE UPDATE DETECTED! Closing game for update...")
                         self.is_polling = False
                         self.process_monitor.force_kill_rust()
                     else:
-                        self.log_safe("[!] Обновление найдено. Ждем скачивания...")
+                        self.log_safe("[!] Update found. Waiting for download...")
 
                     while True:
                         time.sleep(20.0)
                         try:
                             new_local = steam_service.get_local_buildid()
                             if new_local and str(new_local) == str(latest_buildid):
-                                self.log_safe("[+] Обновление установлено! Запускаем Rust...")
+                                self.log_safe("[+] Update installed! Starting Rust...")
                                 self.after(0, self.update_ready_label.pack_forget)
                                 webbrowser.open("steam://run/252490")
                                 time.sleep(120.0)

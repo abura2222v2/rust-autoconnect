@@ -89,7 +89,7 @@ class MainWindow(ctk.CTk):
 
         self.search_var = ctk.StringVar()
         self.search_var.trace_add("write", self._on_search_changed)
-        self.search_entry = ctk.CTkEntry(self.history_panel, placeholder_text="Поиск...", textvariable=self.search_var)
+        self.search_entry = ctk.CTkEntry(self.history_panel, placeholder_text="Search...", textvariable=self.search_var)
         self.search_entry.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
 
         self.history_scroll = ctk.CTkScrollableFrame(self.history_panel)
@@ -425,8 +425,8 @@ class MainWindow(ctk.CTk):
         if not self.tray_icon:
             image = self.create_tray_image()
             menu = pystray.Menu(
-                pystray.MenuItem("Показать / Show", self.show_window, default=True),
-                pystray.MenuItem("Выход / Quit", self.quit_window)
+                pystray.MenuItem("Show", self.show_window, default=True),
+                pystray.MenuItem("Quit", self.quit_window)
             )
             self.tray_icon = pystray.Icon("RustAutoConnect", image, "Rust AutoConnect", menu)
             threading.Thread(target=self.tray_icon.run, daemon=True).start()
