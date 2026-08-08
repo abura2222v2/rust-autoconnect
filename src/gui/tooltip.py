@@ -40,7 +40,7 @@ class ToolTip(object):
         # Adding a slightly dark theme look
         label = tk.Label(self.tw, text=self.text, justify='left',
                          background="#1e1e1e", foreground="#e0e0e0", relief='solid', borderwidth=1,
-                         font=("Arial", "9", "normal"), padx=8, pady=4)
+                         font=("Arial", "13", "normal"), padx=8, pady=4)
         label.pack(ipadx=1, ipady=1)
 
     def hidetip(self):

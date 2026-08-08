@@ -234,10 +234,28 @@ class AppController(MainWindow):
             
         if self.process_monitor.is_rust_running():
             import tkinter.messagebox as messagebox
-            if messagebox.askyesno("Close Rust?", "Rust is running. We must close it before copying benchmark files. Close it now?"):
+            msg = (
+                "Rust is running and will be closed to prepare the benchmark.\n\n"
+                "IMPORTANT: After the game reopens and reaches the main menu, "
+                "you MUST press [F5] to start the benchmark.\n\n"
+                "Close Rust and proceed?"
+            )
+            if messagebox.askyesno("Close Rust?", msg):
                 self.process_monitor.force_kill_rust()
                 self.log_safe("[*] Closed Rust.")
             else:
+                self.log_safe("[!] Benchmark aborted.")
+                self.bench_btn.configure(state="normal")
+                return
+        else:
+            import tkinter.messagebox as messagebox
+            msg = (
+                "To run the benchmark, Rust will be launched with a custom demo.\n\n"
+                "IMPORTANT: Once the game loads into the main menu, "
+                "you MUST press [F5] inside the game to start the benchmark.\n\n"
+                "Proceed?"
+            )
+            if not messagebox.askokcancel("Benchmark Instructions", msg):
                 self.log_safe("[!] Benchmark aborted.")
                 self.bench_btn.configure(state="normal")
                 return
@@ -362,16 +380,24 @@ class AppController(MainWindow):
         
         start_time = time.time()
         
-        # Delete old output_log.txt to ensure we read from the beginning of the new one
+        # Delete old logs to ensure we read from the beginning of the new one
         from pathlib import Path
-        log_path = Path(rust_path) / "output_log.txt"
+        for log_name in ["output_log.txt", "Player.log"]:
+            log_path = Path(rust_path) / log_name
+            try:
+                if log_path.exists():
+                    os.remove(log_path)
+                    self.log_bench(f"[*] Cleared old game log {log_name}.")
+            except Exception as e:
+                self.log_bench(f"[!] Warning: Could not delete old log file: {e}")
+                
+        config_appdata = os.path.join(os.environ.get('USERPROFILE', ''), "AppData", "LocalLow", "Facepunch Studios LTD", "Rust", "Player.log")
         try:
-            if log_path.exists():
-                os.remove(log_path)
-                self.log_bench("[*] Cleared old game logs.")
-        except Exception as e:
-            self.log_bench(f"[!] Warning: Could not delete old log file: {e}")
-        
+            if os.path.exists(config_appdata):
+                os.remove(config_appdata)
+        except:
+            pass
+            
         url = f"steam://run/{config.STEAM_APP_ID}//-windowed -popupwindow"
         if os.name == 'nt':
             os.startfile(url)
@@ -416,7 +442,7 @@ class AppController(MainWindow):
             on_error=lambda err: self.log_bench(f"Error: {err}"),
             on_event=bench_event,
             seek_end=False,
-            target_log_path=log_path
+            target_log_path=None
         )
         
         try:
@@ -455,6 +481,13 @@ class AppController(MainWindow):
                     break
         finally:
             bench_watcher.stop()
+            
+            if self.process_monitor.is_rust_running():
+                self.log_bench("[*] Closing Rust...")
+                self.process_monitor.force_kill_rust()
+                while self.process_monitor.is_rust_running():
+                    time.sleep(0.5)
+                    
             self.log_bench("[*] Restoring original CFG backup...")
             try:
                 if os.path.exists(cfg_backup_path):
@@ -468,22 +501,11 @@ class AppController(MainWindow):
             self.is_benchmarking = False
             
             if protocol_mismatch and detected_client_protocol:
-                bench_watcher.stop()
-                
-                # Fix: Kill Rust before patching to prevent Sharing Violation
-                if self.process_monitor.is_rust_running():
-                    self.log_bench("[*] Closing Rust to apply demo patch...")
-                    self.process_monitor.force_kill_rust()
-                    while self.process_monitor.is_rust_running():
-                        time.sleep(0.5)
-                        
                 self._auto_patch_demo(os.path.join(rust_path, "demos", "RustTweaker_bm.dem"), int(detected_client_protocol))
                 self.log_bench("[*] Demo patched! Restarting benchmark...")
                 # Start again
                 self.after(2000, self.run_benchmark)
-                return
-                
-            if spawn_reached:
+            elif spawn_reached:
                 demo_load_time = time.time() - demo_start_time if demo_start_time > 0.0 else 0.0
                 total_time = time_to_menu + demo_load_time
                 
@@ -491,8 +513,7 @@ class AppController(MainWindow):
                 self.log_bench(f"[🏆] Map Load Time: {round(demo_load_time, 1)}s")
                 self.log_bench(f"[🏆] Total Benchmark Score: {round(total_time, 1)}s")
                 
-                self.log_bench("[*] Benchmark complete! Closing game...")
-                self.process_monitor.force_kill_rust()
+                self.log_bench("[*] Benchmark complete! Game is closed.")
                 
                 if total_time < 90:
                     self.after(0, lambda: self.bench_btn.configure(state="normal", fg_color="#50C878", text="Excellent"))

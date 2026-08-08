@@ -43,56 +43,55 @@ class LogWatcher:
                         from ..core.logger import app_logger
                         app_logger.info(f"[*] Using alternate log file: {log_path}")
 
-        # Wait for log file to exist
-        while self.is_monitoring and not log_path.exists():
-            time.sleep(1.0)
-            
-        if not self.is_monitoring:
-            return
-            
-        try:
-            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                if self.seek_end:
-                    f.seek(0, 2)
-                buffer = ""
-                last_inode = os.stat(log_path).st_ino
-                last_size = os.stat(log_path).st_size
+        while self.is_monitoring:
+            # Wait for log file to exist
+            while self.is_monitoring and not log_path.exists():
+                time.sleep(1.0)
                 
-                while self.is_monitoring:
-                    try:
-                        current_stat = os.stat(log_path)
-                        if current_stat.st_ino != last_inode or current_stat.st_size < last_size:
-                            f.close()
-                            f = open(log_path, 'r', encoding='utf-8', errors='ignore')
-                            buffer = ""
-                        last_inode = current_stat.st_ino
-                        last_size = current_stat.st_size
-                    except FileNotFoundError:
-                        time.sleep(1)
-                        continue
-
-                    new_data = f.read(4096)
-                    if not new_data:
-                        time.sleep(0.5)
-                        continue
-                        
-                    buffer += new_data
+            if not self.is_monitoring:
+                return
+                
+            try:
+                with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    if self.seek_end:
+                        f.seek(0, 2)
+                    buffer = ""
+                    last_inode = os.stat(log_path).st_ino
+                    last_size = os.stat(log_path).st_size
                     
-                    if len(buffer) > 1024 * 1024:
-                        buffer = ""
-                        
-                    lines = buffer.split('\n')
-                    buffer = lines.pop()
-                    
-                    for line in lines:
-                        if self.on_event:
-                            self.on_event(line)
+                    while self.is_monitoring:
+                        try:
+                            current_stat = os.stat(log_path)
+                            if current_stat.st_ino != last_inode or current_stat.st_size < last_size:
+                                break # Break inner loop to reopen file safely
+                            last_inode = current_stat.st_ino
+                            last_size = current_stat.st_size
+                        except FileNotFoundError:
+                            break
                             
-                        if any(kw in line for kw in config.DISCONNECT_KEYWORDS):
-                            reason = line.strip()
-                            self.is_monitoring = False
-                            self.on_disconnect(reason)
-                            return
-        except Exception as e:
-            if self.is_monitoring:
-                self.on_error(str(e))
+                        new_data = f.read(4096)
+                        if not new_data:
+                            time.sleep(0.5)
+                            continue
+                            
+                        buffer += new_data
+                        
+                        if len(buffer) > 1024 * 1024:
+                            buffer = ""
+                            
+                        lines = buffer.split('\n')
+                        buffer = lines.pop()
+                        
+                        for line in lines:
+                            if self.on_event:
+                                self.on_event(line)
+                                
+                            if any(kw in line for kw in config.DISCONNECT_KEYWORDS):
+                                reason = line.strip()
+                                self.is_monitoring = False
+                                self.on_disconnect(reason)
+                                return
+            except Exception as e:
+                if self.is_monitoring:
+                    self.on_error(str(e))
+                time.sleep(1.0)

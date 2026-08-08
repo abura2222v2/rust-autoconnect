@@ -427,6 +427,11 @@ class MainWindow(ctk.CTk):
             if new_name:
                 self.history_store.update_server_name(ip, new_name)
                 self.update_favorites_combobox()
+                
+                current_text = self.ip_entry.get()
+                if current_text.endswith(f"({ip})"):
+                    self.ip_entry.set(f"{new_name} ({ip})")
+                    
             self.refresh_history_ui()
 
         entry.bind("<Return>", save_inline)

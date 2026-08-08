@@ -41,7 +41,7 @@
   "lang_lbl": "Sprache:",
   "tray_lbl": "In den Tray minimieren",
   "close_btn": "Schließen",
-  "lb_title": "🏆 Top 30 🏆",
+  "lb_title": "Hardware Benchmark",
   "lb_rank": "Rang",
   "lb_player": "Spieler",
   "lb_time": "Zeit (s)",
@@ -57,5 +57,9 @@
   "nav_bench": "Benchmark",
   "nav_settings": "Settings",
   "tab_home": "Home",
-  "lb_search": "Search Player / CPU / Disk..."
+  "lb_search": "Search Player / CPU / Disk...",
+  "tooltip_tray": "Wenn Sie auf das 'X' klicken, um das Fenster zu schließen,\nwird die App in die Taskleiste minimiert.",
+  "tooltip_swarm": "Teilt den Serverstatus mit anderen Spielern.\nWenn sich jemand anderes mit demselben Server verbindet,\nverbindet Sie Ihr Bot ebenfalls sofort.",
+  "stop_bench": "Stop",
+  "save_cfg_btn": "Save My Config"
 }

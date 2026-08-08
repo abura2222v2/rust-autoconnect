@@ -41,7 +41,7 @@
   "lang_lbl": "Idioma:",
   "tray_lbl": "Minimizar a la bandeja",
   "close_btn": "Cerrar",
-  "lb_title": "🏆 Top 30 🏆",
+  "lb_title": "Hardware Benchmark",
   "lb_rank": "Rango",
   "lb_player": "Jugador",
   "lb_time": "Tiempo (s)",
@@ -57,5 +57,9 @@
   "nav_bench": "Benchmark",
   "nav_settings": "Settings",
   "tab_home": "Home",
-  "lb_search": "Search Player / CPU / Disk..."
+  "lb_search": "Search Player / CPU / Disk...",
+  "tooltip_tray": "Al hacer clic en la 'X' para cerrar la ventana,\nla aplicación se minimizará en la bandeja del sistema.",
+  "tooltip_swarm": "Comparte el estado del servidor con otros jugadores.\nSi alguien se conecta al mismo servidor,\ntu bot te conectará al instante.",
+  "stop_bench": "Stop",
+  "save_cfg_btn": "Save My Config"
 }

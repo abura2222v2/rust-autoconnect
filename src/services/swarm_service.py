@@ -1,6 +1,8 @@
 import threading
 import json
 import websocket
+import hmac
+import hashlib
 from typing import Callable, Optional
 from ..core.config import config
 
@@ -16,7 +18,22 @@ class SwarmService:
         self.on_swarm_event: Optional[Callable[[str], None]] = None
         self.is_connected = False
         self.is_enabled = False
+        self._secret = b"RustAutoConnect_Swarm_Secret_v1"
         
+    def _sign(self, text: str) -> str:
+        return hmac.new(self._secret, text.encode('utf-8'), hashlib.sha256).hexdigest()
+        
+    def test_connection(self) -> bool:
+        """Ping Supabase REST endpoint to verify connection."""
+        import requests
+        try:
+            # Quick 2-second timeout ping
+            headers = {"apikey": self.supabase_key, "Authorization": f"Bearer {self.supabase_key}"}
+            resp = requests.get(f"{self.supabase_rest_url}?limit=1", headers=headers, timeout=2.0)
+            return resp.status_code == 200
+        except Exception:
+            return False
+
     def start(self):
         if not self.is_enabled:
             return
@@ -54,9 +71,11 @@ class SwarmService:
             data = json.loads(message)
             if data.get("event") == "INSERT" or (data.get("payload", {}).get("type") == "INSERT"):
                 record = data.get("payload", {}).get("record", {})
-                ip_port = record.get("ip_port")
-                if ip_port and self.on_swarm_event:
-                    self.on_swarm_event(ip_port)
+                raw_ip = record.get("ip_port")
+                if raw_ip and self.on_swarm_event and "|" in raw_ip:
+                    ip_port, sig = raw_ip.rsplit("|", 1)
+                    if hmac.compare_digest(self._sign(ip_port), sig):
+                        self.on_swarm_event(ip_port)
         except Exception:
             pass
             
@@ -71,7 +90,8 @@ class SwarmService:
             return
             
         import urllib.request
-        payload = {"ip_port": ip_port}
+        sig = self._sign(ip_port)
+        payload = {"ip_port": f"{ip_port}|{sig}"}
         headers = {
             "apikey": self.supabase_key,
             "Authorization": f"Bearer {self.supabase_key}",

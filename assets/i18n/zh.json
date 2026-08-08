@@ -41,7 +41,7 @@
   "lang_lbl": "语言:",
   "tray_lbl": "最小化到托盘",
   "close_btn": "关闭",
-  "lb_title": "🏆 Top 30 🏆",
+  "lb_title": "Hardware Benchmark",
   "lb_rank": "排名",
   "lb_player": "玩家",
   "lb_time": "时间 (秒)",
@@ -57,5 +57,9 @@
   "nav_bench": "Benchmark",
   "nav_settings": "Settings",
   "tab_home": "Home",
-  "lb_search": "Search Player / CPU / Disk..."
+  "lb_search": "Search Player / CPU / Disk...",
+  "tooltip_tray": "当您点击“X”关闭窗口时，\n应用程序将最小化到系统托盘。",
+  "tooltip_swarm": "与其他玩家共享服务器状态。\n如果其他人连接到同一个服务器，\n您的机器人也会立即连接您。",
+  "stop_bench": "Stop",
+  "save_cfg_btn": "Save My Config"
 }

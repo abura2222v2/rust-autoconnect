@@ -41,7 +41,7 @@
   "lang_lbl": "Langue :",
   "tray_lbl": "Réduire dans la barre d'état",
   "close_btn": "Fermer",
-  "lb_title": "🏆 Top 30 🏆",
+  "lb_title": "Hardware Benchmark",
   "lb_rank": "Rang",
   "lb_player": "Joueur",
   "lb_time": "Temps (s)",
@@ -57,5 +57,9 @@
   "nav_bench": "Benchmark",
   "nav_settings": "Settings",
   "tab_home": "Home",
-  "lb_search": "Search Player / CPU / Disk..."
+  "lb_search": "Search Player / CPU / Disk...",
+  "tooltip_tray": "Lorsque vous cliquez sur le 'X' pour fermer la fenêtre,\nl'application sera minimisée dans la zone de notification.",
+  "tooltip_swarm": "Partage le statut du serveur avec les autres joueurs.\nSi quelqu'un d'autre se connecte au même serveur,\nvotre bot vous connectera instantanément.",
+  "stop_bench": "Stop",
+  "save_cfg_btn": "Save My Config"
 }

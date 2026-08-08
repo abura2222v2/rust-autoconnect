@@ -7,6 +7,7 @@ class ProcessMonitor:
     def __init__(self):
         self.cached_pid = None
         self._lock = threading.Lock()
+        self._last_scan_time = 0.0
 
     def is_rust_running(self) -> bool:
         with self._lock:
@@ -21,6 +22,11 @@ class ProcessMonitor:
                 except Exception:
                     self.cached_pid = None
             
+            current_time = time.time()
+            if current_time - self._last_scan_time < 1.5:
+                return False
+            self._last_scan_time = current_time
+            
             # Slow path: iterate processes
             try:
                 for p in psutil.process_iter(['name']):
@@ -34,7 +40,7 @@ class ProcessMonitor:
         
     def force_kill_rust(self):
         try:
-            subprocess.run('taskkill /F /IM RustClient.exe', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.run(["taskkill", "/F", "/IM", "RustClient.exe"], creationflags=subprocess.CREATE_NO_WINDOW)
         except Exception:
             pass
 

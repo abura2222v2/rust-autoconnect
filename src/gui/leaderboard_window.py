@@ -74,28 +74,33 @@ class LeaderboardWindow(ctk.CTkToplevel):
             self.lbl_status.destroy()
             
         if is_new_search and not data:
+            for widget in self.scroll.winfo_children():
+                widget.destroy()
             ctk.CTkLabel(self.scroll, text=self.i18n.t("lb_err_empty")).pack(pady=20)
             return
             
-        if is_new_search:
-            header = ctk.CTkFrame(self.scroll)
-            header.pack(fill="x", pady=2)
-            ctk.CTkLabel(header, text=self.i18n.t("lb_rank"), width=50).pack(side="left", padx=5)
-            ctk.CTkLabel(header, text=self.i18n.t("lb_time"), width=70).pack(side="left", padx=5)
-            ctk.CTkLabel(header, text=self.i18n.t("lb_cpu"), width=250, anchor="w").pack(side="left", padx=5)
-            ctk.CTkLabel(header, text="Disk (SSD/HDD)", width=250, anchor="w").pack(side="left", padx=5)
-        
         if not data:
             self.load_more_btn.configure(state="disabled", text="End of Results")
             return
             
         self.load_more_btn.configure(text="Load More ⬇")
         
-        # Aggregate data by CPU + Disk
-        groups = {}
         for row in data:
             self.current_data.append(row)
             
+        for widget in self.scroll.winfo_children():
+            widget.destroy()
+            
+        header = ctk.CTkFrame(self.scroll)
+        header.pack(fill="x", pady=2)
+        ctk.CTkLabel(header, text=self.i18n.t("lb_rank"), width=50).pack(side="left", padx=5)
+        ctk.CTkLabel(header, text=self.i18n.t("lb_time"), width=70).pack(side="left", padx=5)
+        ctk.CTkLabel(header, text=self.i18n.t("lb_cpu"), width=250, anchor="w").pack(side="left", padx=5)
+        ctk.CTkLabel(header, text="Disk (SSD/HDD)", width=250, anchor="w").pack(side="left", padx=5)
+        
+        # Aggregate data by CPU + Disk using full accumulated dataset
+        groups = {}
+        for row in self.current_data:
             cpu_txt = row.get('cpu_model', '')
             if '[' in cpu_txt: cpu_txt = cpu_txt.split('[')[0].strip()
             
@@ -116,7 +121,7 @@ class LeaderboardWindow(ctk.CTkToplevel):
         sorted_groups.sort(key=lambda x: x[1])
             
         for i, (key, avg_time, rows) in enumerate(sorted_groups):
-            rank = self.offset + i + 1
+            rank = i + 1
             
             # Group Header Frame
             f = ctk.CTkFrame(self.scroll)

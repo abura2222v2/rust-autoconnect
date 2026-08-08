@@ -44,12 +44,16 @@
   "tab_home": "Home",
   "tab_bench": "Benchmark",
   "run_test": "Run Test",
-  "lb_title": "Global Leaderboard",
+  "lb_title": "Hardware Benchmark",
   "lb_load": "Loading...",
   "lb_err_empty": "No results.",
   "lb_rank": "Rank",
   "lb_player": "Player",
   "lb_time": "Time",
   "lb_cpu": "CPU",
-  "lb_search": "Search Player / CPU / Disk..."
+  "lb_search": "Search Player / CPU / Disk...",
+  "tooltip_tray": "When you click the 'X' to close the window,\nthe app will minimize to the system tray.",
+  "tooltip_swarm": "Shares server status with other players.\nIf someone else connects to the same server,\nyour bot will instantly connect you too.",
+  "stop_bench": "Stop",
+  "save_cfg_btn": "Save My Config"
 }
