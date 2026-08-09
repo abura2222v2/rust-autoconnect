@@ -11,24 +11,49 @@ from src.services.process_monitor import ProcessMonitor
 
 
 class TestLeaderboardService(unittest.TestCase):
-    def test_key_property(self):
+    def test_api_configuration_does_not_use_supabase_key(self):
         service = LeaderboardService()
-        with patch.dict(os.environ, {"SUPABASE_KEY": "test_env_key"}):
-            self.assertEqual(service.key, "test_env_key")
+        with patch.dict(os.environ, {"BENCHMARK_API_URL": "https://example.invalid"}):
+            self.assertEqual(service.api_url, "https://example.invalid")
+            self.assertTrue(service.is_configured)
         with patch.dict(os.environ, {}, clear=True):
-            self.assertTrue(service.key.startswith("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"))
+            self.assertEqual(service.api_url, "")
+            self.assertFalse(service.is_configured)
 
     @patch("urllib.request.urlopen")
     def test_http_request_executor(self, mock_urlopen):
         mock_res = MagicMock()
         mock_res.getcode.return_value = 200
-        mock_res.read.return_value = b'[{"username": "user1", "total_time": 10.5}]'
+        mock_res.read.return_value = b'{"items": [{"configuration_key": "a", "median_total_time": 10.5}]}'
         mock_urlopen.return_value.__enter__.return_value = mock_res
 
         service = LeaderboardService()
-        result = service.fetch_leaderboard()
+        with patch.dict(os.environ, {"BENCHMARK_API_URL": "https://example.invalid"}):
+            result = service.fetch_configurations()
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["username"], "user1")
+        self.assertEqual(result[0]["configuration_key"], "a")
+
+    @patch("urllib.request.urlopen")
+    def test_run_submission_omits_local_sync_state(self, mock_urlopen):
+        mock_res = MagicMock()
+        mock_res.getcode.return_value = 201
+        mock_res.read.return_value = b""
+        mock_urlopen.return_value.__enter__.return_value = mock_res
+
+        service = LeaderboardService()
+        run = {
+            "id": "run", "installation_id": "local", "configuration_key": "configuration",
+            "cpu": "CPU Model", "storage": "Disk Model", "storage_bus": "NVMe",
+            "benchmark_version": "v1", "time_to_menu": 5.0, "demo_load_time": 5.5,
+            "total_time": 10.5, "created_at": 1, "sync_state": "pending", "serial": "do-not-send",
+        }
+        with patch.dict(os.environ, {"BENCHMARK_API_URL": "https://example.invalid"}):
+            assert service.submit_run(run)
+
+        payload = mock_urlopen.call_args.args[0].data.decode("utf-8")
+        self.assertNotIn("sync_state", payload)
+        self.assertNotIn("serial", payload)
+        self.assertNotIn("SUPABASE_KEY", payload)
 
 
 class TestHardwareService(unittest.TestCase):
@@ -43,6 +68,12 @@ class TestHardwareService(unittest.TestCase):
             mock_check_output.assert_called_once()
             args, kwargs = mock_check_output.call_args
             self.assertEqual(kwargs.get("timeout"), 5.0)
+
+    def test_benchmark_storage_uses_the_rust_drive(self):
+        hw = HardwareService()
+        with patch("os.name", "nt"), patch.object(hw, "_run_ps", return_value='{"model":"External SSD","bus":"USB"}') as run_ps:
+            assert hw.get_benchmark_storage("E:\\Steam\\Rust") == ("External SSD", "USB")
+        self.assertIn("DriveLetter 'E'", run_ps.call_args.args[0])
 
 
 class TestSwarmService(unittest.TestCase):

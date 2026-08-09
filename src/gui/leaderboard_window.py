@@ -1,182 +1,185 @@
-import customtkinter as ctk
+"""Read-only UI for aggregated anonymous benchmark configurations."""
+
+from __future__ import annotations
+
 import threading
+
+import customtkinter as ctk
+
+from .main_window import COLORS
+
 
 class LeaderboardWindow(ctk.CTkToplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
-        self.i18n = parent.i18n
         self.offset = 0
         self.limit = 30
         self.current_data = []
-        
-        self.title(self.i18n.t("lb_title"))
-        self.geometry("850x600")
-        self.resizable(False, False)
-        
+        self._load_generation = 0
+
+        self.title("Global Benchmark")
+        self.geometry("930x640")
+        self.minsize(760, 480)
+        self.configure(fg_color=COLORS["canvas"])
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
-        
-        # Search Frame
-        self.search_frame = ctk.CTkFrame(self)
-        self.search_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
-        
-        self.search_entry = ctk.CTkEntry(self.search_frame, placeholder_text="Search Player / CPU / Disk...", width=300)
-        self.search_entry.pack(side="left", padx=10, pady=10)
-        
+
+        search_frame = ctk.CTkFrame(self, fg_color=COLORS["surface"], corner_radius=0)
+        search_frame.grid(row=0, column=0, sticky="ew", padx=14, pady=14)
+        search_frame.grid_columnconfigure(0, weight=1)
+        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Search CPU or storage", fg_color=COLORS["surface_alt"])
+        self.search_entry.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=10)
         self.sort_var = ctk.StringVar(value="Fastest")
-        self.sort_menu = ctk.CTkOptionMenu(self.search_frame, values=["Fastest", "Slowest"], variable=self.sort_var, width=100)
-        self.sort_menu.pack(side="left", padx=5, pady=10)
-        
-        self.search_btn = ctk.CTkButton(self.search_frame, text="Search", width=100, command=self._on_search)
-        self.search_btn.pack(side="left", padx=10, pady=10)
-        
-        self.scroll = ctk.CTkScrollableFrame(self)
-        self.scroll.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        
-        self.bottom_frame = ctk.CTkFrame(self)
-        self.bottom_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 10))
-        
-        self.load_more_btn = ctk.CTkButton(self.bottom_frame, text="Load More ⬇", command=self._load_more)
-        self.load_more_btn.pack(pady=10)
-        
+        self.sort_menu = ctk.CTkOptionMenu(search_frame, values=["Fastest", "Slowest"], variable=self.sort_var, width=105)
+        self.sort_menu.grid(row=0, column=1, padx=4, pady=10)
+        self.search_btn = ctk.CTkButton(search_frame, text="Search", width=90, command=self._on_search)
+        self.search_btn.grid(row=0, column=2, padx=(4, 12), pady=10)
+
+        self.scroll = ctk.CTkScrollableFrame(self, fg_color=COLORS["surface"], corner_radius=0)
+        self.scroll.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 8))
+        self.bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.bottom_frame.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 14))
+        self.load_more_btn = ctk.CTkButton(self.bottom_frame, text="Load More", command=self._load_more)
+        self.load_more_btn.pack()
+
         self.grab_set()
-        
-        self._load_data(is_new_search=True)
-        
+        if hasattr(parent, "dispatch_ui"):
+            self._load_data(is_new_search=True)
+        else:
+            ctk.CTkLabel(self.scroll, text="Leaderboard preview is ready.").pack(pady=18)
+
     def _on_search(self):
         self._load_data(is_new_search=True)
-        
+
     def _load_more(self):
         self._load_data(is_new_search=False)
-        
+
     def _load_data(self, is_new_search=True):
         if is_new_search:
+            self._load_generation += 1
             self.offset = 0
             self.current_data.clear()
             for widget in self.scroll.winfo_children():
                 widget.destroy()
-            self.lbl_status = ctk.CTkLabel(self.scroll, text=self.i18n.t("lb_load"))
-            self.lbl_status.pack(pady=10)
-            
+            ctk.CTkLabel(self.scroll, text="Loading anonymous configuration statistics...").pack(pady=18)
         self.search_btn.configure(state="disabled")
         self.load_more_btn.configure(state="disabled")
-        
+        generation = self._load_generation
         query = self.search_entry.get().strip()
-        sort_val = "asc" if self.sort_var.get() == "Fastest" else "desc"
-        threading.Thread(target=self._fetch_bg, args=(query, sort_val, is_new_search), daemon=True).start()
-        
-    def _fetch_bg(self, query, sort_val, is_new_search):
+        sort_order = "asc" if self.sort_var.get() == "Fastest" else "desc"
+        threading.Thread(
+            target=self._fetch_bg,
+            args=(query, sort_order, is_new_search, generation),
+            daemon=True,
+            name="leaderboard-fetch",
+        ).start()
+
+    def _fetch_bg(self, query, sort_order, is_new_search, generation):
         from ..services.leaderboard_service import leaderboard_service
-        data = leaderboard_service.fetch_leaderboard(limit=self.limit, offset=self.offset, search_query=query, sort_order=sort_val)
-        self.after(0, lambda: self._render_data(data, is_new_search))
-        
-    def _render_data(self, data, is_new_search):
+
+        data = leaderboard_service.fetch_configurations(self.limit, self.offset, query, sort_order)
+        self._dispatch(self._render_data, data, is_new_search, generation, leaderboard_service.last_error)
+
+    def _dispatch(self, callback, *args):
+        if hasattr(self.parent, "dispatch_ui"):
+            self.parent.dispatch_ui(callback, *args)
+        # Standalone windows are used only by local UI tests and do not own the
+        # controller queue needed for safe worker-thread callbacks.
+
+    def _render_data(self, data, is_new_search, generation=None, error=None):
+        if generation is None:
+            generation = self._load_generation
         try:
-            if not self.winfo_exists():
-                return
+            window_exists = self.winfo_exists()
         except Exception:
             return
+        if generation != self._load_generation or not window_exists:
+            return
         self.search_btn.configure(state="normal")
-        
-        if is_new_search and hasattr(self, 'lbl_status'):
-            self.lbl_status.destroy()
-            
-        if is_new_search and not data:
+        if is_new_search:
             for widget in self.scroll.winfo_children():
                 widget.destroy()
-            ctk.CTkLabel(self.scroll, text=self.i18n.t("lb_err_empty")).pack(pady=20)
-            self.load_more_btn.configure(state="disabled", text="End of Results")
+        if not data and is_new_search:
+            message = "No public results yet." if not error else "Leaderboard is unavailable or not configured."
+            ctk.CTkLabel(self.scroll, text=message, text_color=COLORS["muted"]).pack(pady=24)
+            self.load_more_btn.configure(state="disabled")
             return
-            
-        if not data or len(data) < self.limit:
-            self.load_more_btn.configure(state="disabled", text="End of Results")
-        else:
-            self.load_more_btn.configure(state="normal", text="Load More ⬇")
-            
-        if not data:
-            return
-        
-        for row in data:
-            self.current_data.append(row)
-            
+
+        normalized_data = []
+        for index, row in enumerate(data):
+            if "median_total_time" in row:
+                normalized_data.append(row)
+                continue
+            # Keep the renderer compatible with the former flat result shape.
+            normalized_data.append({
+                "configuration_key": str(row.get("configuration_key", f"legacy-{index}")),
+                "cpu": row.get("cpu", "Unknown"),
+                "storage": row.get("storage", row.get("disk", "Unknown")),
+                "median_total_time": row.get("total_time", 0.0),
+                "installation_count": row.get("installation_count", 1),
+                "run_count": row.get("run_count", 1),
+            })
+        self.current_data.extend(normalized_data)
+        self._render_rows()
+        self.offset += len(normalized_data)
+        self.load_more_btn.configure(state="normal" if len(normalized_data) == self.limit else "disabled")
+
+    def _render_rows(self):
         for widget in self.scroll.winfo_children():
             widget.destroy()
-            
-        header = ctk.CTkFrame(self.scroll)
-        header.pack(fill="x", pady=2)
-        ctk.CTkLabel(header, text=self.i18n.t("lb_rank"), width=50).pack(side="left", padx=5)
-        ctk.CTkLabel(header, text=self.i18n.t("lb_time"), width=70).pack(side="left", padx=5)
-        ctk.CTkLabel(header, text=self.i18n.t("lb_cpu"), width=250, anchor="w").pack(side="left", padx=5)
-        ctk.CTkLabel(header, text=self.i18n.t("lb_disk"), width=250, anchor="w").pack(side="left", padx=5)
-        
-        # Aggregate data by CPU + Disk using full accumulated dataset
-        groups = {}
-        for row in self.current_data:
-            cpu_txt = row.get('cpu', '')
-            if '[' in cpu_txt: cpu_txt = cpu_txt.split('[')[0].strip()
-            
-            disk_txt = row.get('disk', '')
-            if '[' in disk_txt: disk_txt = disk_txt.split('[')[0].strip()
-            
-            key = (cpu_txt, disk_txt)
-            if key not in groups:
-                groups[key] = []
-            groups[key].append(row)
-            
-        # Sort groups by average time of top 10
-        sorted_groups = []
-        for key, rows in groups.items():
-            rows.sort(key=lambda x: x.get('total_time', 999.0))
-            top_10 = rows[:10]
-            avg_time = sum(r.get('total_time', 0.0) for r in top_10) / len(top_10)
-            sorted_groups.append((key, avg_time, top_10))
-            
-        sorted_groups.sort(key=lambda x: x[1], reverse=(self.sort_var.get() == "Slowest"))
-            
-        for i, (key, avg_time, rows) in enumerate(sorted_groups):
-            rank = i + 1
-            
-            container = ctk.CTkFrame(self.scroll, fg_color="transparent")
-            container.pack(fill="x", pady=2)
-            
-            # Group Header Frame
-            f = ctk.CTkFrame(container)
-            f.pack(fill="x")
-            
-            ctk.CTkLabel(f, text=f"#{rank}", width=50, font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
-            ctk.CTkLabel(f, text=f"{avg_time:.1f}s", width=70, text_color="#FADA5E", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
-            
-            cpu_name = key[0][:40] + ("..." if len(key[0]) > 40 else "")
-            disk_name = key[1][:40] + ("..." if len(key[1]) > 40 else "")
-            
-            ctk.CTkLabel(f, text=cpu_name, width=250, anchor="w", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
-            ctk.CTkLabel(f, text=disk_name, width=250, anchor="w", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
-            
-            # Sub-frame for top 10 players (hidden by default)
-            sub_f = ctk.CTkFrame(container, fg_color="transparent")
-            
-            for j, row in enumerate(rows):
-                p_rank = j + 1
-                p_time = row.get('total_time', 0.0)
-                
-                row_f = ctk.CTkFrame(sub_f, fg_color=("gray80", "gray15"))
-                row_f.pack(fill="x", pady=1, padx=(60, 5))
-                ctk.CTkLabel(row_f, text=f"#{p_rank}", width=30).pack(side="left", padx=5)
-                ctk.CTkLabel(row_f, text=f"{p_time:.1f}s", width=60, text_color=("gray30", "gray70")).pack(side="left", padx=5)
-                
-            def make_toggle(frm, b):
-                def _toggle():
-                    if frm.winfo_ismapped():
-                        frm.pack_forget()
-                        b.configure(text="▼")
-                    else:
-                        frm.pack(fill="x", pady=(2, 0))
-                        b.configure(text="▲")
-                return _toggle
-                
-            btn = ctk.CTkButton(f, text="▼", width=30, height=24)
-            btn.configure(command=make_toggle(sub_f, btn))
-            btn.pack(side="right", padx=10)
-            
-        self.offset += self.limit
+        header = ctk.CTkFrame(self.scroll, fg_color="transparent")
+        header.pack(fill="x", padx=12, pady=(10, 4))
+        for text, width in (("#", 42), ("MEDIAN", 84), ("CPU + STORAGE", 420), ("INSTALLS", 75), ("RUNS", 60)):
+            ctk.CTkLabel(header, text=text, width=width, anchor="w", text_color=COLORS["muted"], font=ctk.CTkFont(size=10, weight="bold")).pack(side="left", padx=3)
+
+        for index, row in enumerate(self.current_data, start=1):
+            frame = ctk.CTkFrame(self.scroll, fg_color=COLORS["surface_alt"], corner_radius=4)
+            frame.pack(fill="x", padx=10, pady=2)
+            ctk.CTkLabel(frame, text=f"#{index}", width=42, anchor="w").pack(side="left", padx=6, pady=8)
+            median = float(row.get("median_total_time", 0.0))
+            ctk.CTkLabel(frame, text=f"{median:.1f}s", width=84, anchor="w", text_color=COLORS["accent"], font=ctk.CTkFont(weight="bold")).pack(side="left", padx=3)
+            cpu = str(row.get("cpu", "Unknown"))
+            storage = str(row.get("storage", "Unknown"))
+            ctk.CTkLabel(frame, text=f"{cpu} | {storage}", width=420, anchor="w").pack(side="left", padx=3)
+            ctk.CTkLabel(frame, text=str(row.get("installation_count", 0)), width=75).pack(side="left", padx=3)
+            ctk.CTkLabel(frame, text=str(row.get("run_count", 0)), width=60).pack(side="left", padx=3)
+            ctk.CTkButton(frame, text="Details", width=64, height=26, command=lambda item=row: self._load_detail(item)).pack(side="right", padx=8)
+
+    def _load_detail(self, row):
+        key = str(row.get("configuration_key", ""))
+        if not key:
+            return
+        threading.Thread(target=self._fetch_detail_bg, args=(key,), daemon=True, name="leaderboard-detail").start()
+
+    def _fetch_detail_bg(self, key):
+        from ..services.leaderboard_service import leaderboard_service
+
+        detail = leaderboard_service.fetch_configuration_detail(key)
+        self._dispatch(self._show_detail, detail)
+
+    def _show_detail(self, detail):
+        if not detail or not self.winfo_exists():
+            return
+        popup = ctk.CTkToplevel(self)
+        popup.title("Configuration details")
+        popup.geometry("540x440")
+        popup.configure(fg_color=COLORS["canvas"])
+        summary = detail.get("summary", {})
+        ctk.CTkLabel(
+            popup,
+            text=(f"Median: {float(summary.get('median_total_time', 0.0)):.1f}s\n"
+                  f"Installations: {summary.get('installation_count', 0)}\n"
+                  f"Runs: {summary.get('run_count', 0)}\n"
+                  f"Range: {summary.get('min_total_time', '?')} - {summary.get('max_total_time', '?')}s"),
+            justify="left",
+            font=ctk.CTkFont(size=14),
+        ).pack(anchor="w", padx=18, pady=18)
+        scroll = ctk.CTkScrollableFrame(popup, fg_color=COLORS["surface"])
+        scroll.pack(fill="both", expand=True, padx=18, pady=(0, 18))
+        for item in detail.get("installations", []):
+            ctk.CTkLabel(
+                scroll,
+                text=f"Anonymous installation: {float(item.get('median_total_time', 0.0)):.1f}s | {item.get('run_count', 0)} runs",
+                anchor="w",
+            ).pack(fill="x", padx=10, pady=6)

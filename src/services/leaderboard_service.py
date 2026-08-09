@@ -1,91 +1,108 @@
-import urllib.request
+"""Client for the public benchmark API.
+
+The desktop application never receives a Supabase service key and cannot write
+directly to benchmark tables. A deployed Edge Function owns validation and
+aggregation.
+"""
+
+from __future__ import annotations
+
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Any, Optional
+
+from ..core.logger import app_logger
+
 
 class LeaderboardService:
-    def __init__(self):
-        self.url = "https://eznuyydoanefceqmqxqi.supabase.co/rest/v1/benchmarks"
-        self._executor = ThreadPoolExecutor(max_workers=4)
+    def __init__(self) -> None:
+        self.last_error: Optional[str] = None
 
     @property
-    def key(self) -> str:
-        return os.environ.get('SUPABASE_KEY', '')
+    def api_url(self) -> str:
+        return os.environ.get("BENCHMARK_API_URL", "").rstrip("/")
 
-    def _http_request(self, req, timeout: int = 5):
-        def _do_request():
-            with urllib.request.urlopen(req, timeout=timeout) as res:
-                code = res.getcode() if hasattr(res, 'getcode') else res.status
-                return code, res.read()
-        return self._executor.submit(_do_request).result()
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.api_url)
 
-    def fetch_leaderboard(self, limit: int = 500, offset: int = 0, search_query: str = "", sort_order: str = "asc") -> list:
+    def _request(self, request: urllib.request.Request, timeout: float = 5.0) -> tuple[int, bytes]:
+        if not self.is_configured:
+            raise RuntimeError("Leaderboard API is not configured")
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.getcode(), response.read()
+
+    def _set_error(self, error: Exception) -> None:
+        self.last_error = type(error).__name__
+        app_logger.warning(f"Leaderboard request failed: {self.last_error}")
+
+    def submit_run(self, run: dict[str, Any]) -> bool:
+        self.last_error = None
+        if not self.is_configured:
+            self.last_error = "Leaderboard API is not configured"
+            return False
+        allowed = {
+            "id", "installation_id", "configuration_key", "cpu", "storage", "storage_bus",
+            "benchmark_version", "time_to_menu", "demo_load_time", "total_time", "created_at",
+        }
+        payload = {key: value for key, value in run.items() if key in allowed}
         try:
-            url = f"{self.url}?select=*&order=total_time.{sort_order}&limit={limit}&offset={offset}"
-            if search_query:
-                # Add basic search filter using Supabase ilike
-                import urllib.parse as uparse
-                sq = uparse.quote(f"%{search_query}%")
-                url += f"&or=(username.ilike.{sq},cpu.ilike.{sq},disk.ilike.{sq})"
-                
-            req = urllib.request.Request(url)
-            req.add_header("apikey", self.key)
-            req.add_header("Authorization", f"Bearer {self.key}")
-            
-            _, body = self._http_request(req, timeout=5)
-            data = json.loads(body.decode('utf-8'))
-            
-            # Filter out dummy test rows
-            data = [r for r in data if r.get('username') != 'TestUser']
-            
-            # Deduplicate by client_id (UUID format username) - keep only the best (fastest) score
-            user_best = {}
-            import re
-            uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
-            
-            for row in data:
-                uname = row.get('username', '')
-                if uuid_pattern.match(uname):
-                    if uname not in user_best or row.get('total_time', 999.0) < user_best[uname].get('total_time', 999.0):
-                        user_best[uname] = row
-            
-            deduped_data = list(user_best.values())
-            return deduped_data
-        except Exception as e:
-            print(e)
+            request = urllib.request.Request(
+                f"{self.api_url}/benchmark/submit",
+                data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            status, _ = self._request(request)
+            return status in (200, 201, 202)
+        except (OSError, ValueError, urllib.error.URLError) as error:
+            self._set_error(error)
+            return False
+
+    def fetch_configurations(
+        self, limit: int = 100, offset: int = 0, search_query: str = "", sort_order: str = "asc"
+    ) -> list[dict[str, Any]]:
+        self.last_error = None
+        if not self.is_configured:
+            self.last_error = "Leaderboard API is not configured"
+            return []
+        params = {
+            "limit": str(max(1, min(int(limit), 100))),
+            "offset": str(max(0, int(offset))),
+            "sort": "desc" if sort_order == "desc" else "asc",
+        }
+        if search_query.strip():
+            params["q"] = search_query.strip()[:100]
+        try:
+            request = urllib.request.Request(
+                f"{self.api_url}/benchmark/configurations?{urllib.parse.urlencode(params)}"
+            )
+            _, body = self._request(request)
+            payload = json.loads(body.decode("utf-8"))
+            rows = payload.get("items", []) if isinstance(payload, dict) else []
+            return [row for row in rows if isinstance(row, dict)]
+        except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError) as error:
+            self._set_error(error)
             return []
 
-    def submit_score(self, name: str, cpu: str, disk: str, time_seconds: float, cpu_id: str = "", disk_serial: str = "") -> bool:
+    def fetch_configuration_detail(self, configuration_key: str) -> dict[str, Any] | None:
+        self.last_error = None
+        if not self.is_configured or not configuration_key:
+            self.last_error = "Leaderboard API is not configured"
+            return None
         try:
-            cpu_model = f"{cpu} [{cpu_id}]" if cpu_id and cpu_id != cpu else cpu
-            disk_model = f"{disk} [{disk_serial}]" if disk_serial and disk_serial != disk else disk
-            
-            payload = {
-                "username": name,  # Now used as client_id
-                "cpu": cpu_model,
-                "disk": disk_model,
-                "total_time": time_seconds
-            }
-            
-            # Delete previous scores for this client_id
-            safe_name = urllib.parse.quote(name)
-            del_url = f"{self.url}?username=eq.{safe_name}"
-            del_req = urllib.request.Request(del_url, method="DELETE")
-            del_req.add_header("apikey", self.key)
-            del_req.add_header("Authorization", f"Bearer {self.key}")
-            try:
-                self._http_request(del_req, timeout=5)
-            except Exception:
-                pass # Ignore if no previous scores or network issue
-                
-            req = urllib.request.Request(self.url, data=json.dumps(payload).encode('utf-8'), method="POST")
-            req.add_header("apikey", self.key)
-            req.add_header("Authorization", f"Bearer {self.key}")
-            req.add_header("Content-Type", "application/json")
-            
-            status_code, _ = self._http_request(req, timeout=5)
-            return status_code in [200, 201]
-        except Exception:
-            return False
+            request = urllib.request.Request(
+                f"{self.api_url}/benchmark/configurations/{urllib.parse.quote(configuration_key, safe='')}"
+            )
+            _, body = self._request(request)
+            payload = json.loads(body.decode("utf-8"))
+            return payload if isinstance(payload, dict) else None
+        except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError) as error:
+            self._set_error(error)
+            return None
+
 
 leaderboard_service = LeaderboardService()

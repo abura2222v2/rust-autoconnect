@@ -4,7 +4,7 @@ An advanced, multi-threaded server auto-connector for Rust, and a global hardwar
 
 ## Features
 
-- **Hardware Benchmark (New):** Test how fast your PC (CPU + SSD) loads Rust. Automatically tracks time-to-menu and map-load times using a heavy custom demo. Results are automatically submitted to the Global World Top ranking.
+- **Hardware Benchmark:** Test how fast your CPU and the storage containing Rust load the game. The benchmark tracks time-to-menu and map-load time. Public results are anonymous configuration statistics; no disk serial numbers are uploaded.
 - **A2S Polling:** Rapidly queries the server to instantly detect when it goes online.
 - **Auto-Update Detection:** Automatically detects when a Rust game update is required and forces Steam to update.
 - **Log Watcher:** Reads Rust client logs to instantly reconnect if disconnected.

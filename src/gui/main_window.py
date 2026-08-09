@@ -1,6 +1,8 @@
 import customtkinter as ctk
+import queue
 import threading
 import pystray
+import time
 from PIL import Image, ImageDraw
 from typing import Optional
 
@@ -10,6 +12,76 @@ from ..core.history_store import history_store, HistoryStore
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+COLORS = {
+    "canvas": "#151515",
+    "sidebar": "#1A1A1A",
+    "surface": "#1C1C1C",
+    "surface_alt": "#232323",
+    "border": "#303030",
+    "text": "#E8E8E8",
+    "muted": "#9D9D9D",
+    "accent": "#E94B16",
+    "accent_hover": "#C83B0E",
+    "danger": "#DE5148",
+    "success": "#55C95D",
+}
+
+MAX_WORKSPACE_WIDTH = 920
+HOME_HISTORY_DEFAULT_WIDTH = 430
+HOME_HISTORY_MIN_WIDTH = 320
+HOME_LOG_MIN_WIDTH = 440
+BENCH_CONTROLS_DEFAULT_WIDTH = 270
+BENCH_CONTROLS_MIN_WIDTH = 220
+BENCH_LOG_MIN_WIDTH = 360
+SPLITTER_WIDTH = 6
+
+
+def _draw_icon(kind: str, color: str, size: int = 32) -> Image.Image:
+    """Create small local UI icons without adding an icon-pack dependency."""
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    stroke = max(2, size // 11)
+    inset = max(3, size // 6)
+
+    if kind.startswith("star"):
+        points = [(size // 2, inset), (size * 58 // 100, size * 40 // 100), (size - inset, size * 42 // 100), (size * 65 // 100, size * 58 // 100), (size * 73 // 100, size - inset), (size // 2, size * 70 // 100), (size * 27 // 100, size - inset), (size * 35 // 100, size * 58 // 100), (inset, size * 42 // 100), (size * 42 // 100, size * 40 // 100)]
+        if kind == "star_filled":
+            draw.polygon(points, fill=color)
+        else:
+            draw.line(points + [points[0]], fill=color, width=stroke, joint="curve")
+    elif kind == "shield":
+        points = [(size // 2, inset), (size - inset, size * 28 // 100), (size * 78 // 100, size * 68 // 100), (size // 2, size - inset), (size * 22 // 100, size * 68 // 100), (inset, size * 28 // 100)]
+        draw.line(points + [points[0]], fill=color, width=stroke, joint="curve")
+        if color == COLORS["accent"]:
+            draw.line([(size * 34 // 100, size * 52 // 100), (size * 45 // 100, size * 63 // 100), (size * 67 // 100, size * 40 // 100)], fill=color, width=stroke, joint="curve")
+    elif kind == "play":
+        draw.polygon([(size * 38 // 100, size * 27 // 100), (size * 72 // 100, size // 2), (size * 38 // 100, size * 73 // 100)], fill=color)
+    elif kind == "nav_connect":
+        draw.line((size // 2, inset, size // 2, size * 42 // 100), fill=color, width=stroke)
+        draw.line((size * 35 // 100, inset, size * 65 // 100, inset), fill=color, width=stroke)
+        draw.arc((size * 24 // 100, size * 30 // 100, size * 76 // 100, size * 84 // 100), 10, 170, fill=color, width=stroke)
+        draw.line((size * 36 // 100, size * 68 // 100, size * 64 // 100, size * 68 // 100), fill=color, width=stroke)
+    elif kind == "nav_bench":
+        draw.arc((inset, inset, size - inset, size - inset), 200, 340, fill=color, width=stroke)
+        draw.line((size // 2, size // 2, size * 66 // 100, size * 36 // 100), fill=color, width=stroke)
+        draw.ellipse((size * 45 // 100, size * 45 // 100, size * 55 // 100, size * 55 // 100), fill=color)
+    elif kind == "nav_settings":
+        draw.ellipse((size * 25 // 100, size * 25 // 100, size * 75 // 100, size * 75 // 100), outline=color, width=stroke)
+        draw.ellipse((size * 42 // 100, size * 42 // 100, size * 58 // 100, size * 58 // 100), outline=color, width=stroke)
+        for x1, y1, x2, y2 in ((50, 8, 50, 25), (50, 75, 50, 92), (8, 50, 25, 50), (75, 50, 92, 50)):
+            draw.line((size * x1 // 100, size * y1 // 100, size * x2 // 100, size * y2 // 100), fill=color, width=stroke)
+    elif kind == "brand":
+        draw.rounded_rectangle((1, 1, size - 2, size - 2), radius=max(3, size // 9), fill=COLORS["accent"])
+        node = max(3, size // 7)
+        draw.line((size * 30 // 100, size * 35 // 100, size * 70 // 100, size * 35 // 100), fill=COLORS["canvas"], width=stroke + 1)
+        draw.line((size * 35 // 100, size * 35 // 100, size * 64 // 100, size * 68 // 100), fill=COLORS["canvas"], width=stroke + 1)
+        draw.rectangle((size * 22 // 100, size * 25 // 100, size * 22 // 100 + node, size * 25 // 100 + node), fill=COLORS["canvas"])
+        draw.rectangle((size * 68 // 100, size * 25 // 100, size * 68 // 100 + node, size * 25 // 100 + node), fill=COLORS["canvas"])
+        draw.rectangle((size * 62 // 100, size * 64 // 100, size * 62 // 100 + node, size * 64 // 100 + node), fill=COLORS["canvas"])
+
+    return image
+
 
 class MainWindow(ctk.CTk):
     def __init__(self, history_mgr: Optional[HistoryStore] = None, i18n_mgr: Optional[I18nManager] = None):
@@ -22,42 +94,146 @@ class MainWindow(ctk.CTk):
         self.i18n.set_lang(self.lang)
 
         self.title(self.t("title"))
-        self.geometry("950x550")
-        self.minsize(800, 450)
+        # Windows applies the active DPI scale to Tk dimensions. These values
+        # render as the 1280x900 Command Center reference at 125% scaling.
+        self.geometry("1024x728")
+        self.minsize(900, 646)
+        self.configure(fg_color=COLORS["canvas"])
 
         self._search_timer = None
+        self._ui_callback_queue: queue.Queue[tuple] = queue.Queue()
+        self._ui_dispatch_closing = False
+        self._ui_dispatch_after_id = self.after(25, self._drain_ui_callbacks)
         self.is_auto_update_enabled = self.history_store.get_auto_update()
         self.auto_update = ctk.BooleanVar(value=self.is_auto_update_enabled)
+        self.auto_scroll = ctk.BooleanVar(value=True)
+        self.session_started_at = time.monotonic()
+        self.last_connected_var = ctk.StringVar(value="Not connected")
+        self.session_status_var = ctk.StringVar(value="Idle")
+        self.playtime_var = ctk.StringVar(value="00:00:00")
+        self._history_width = HOME_HISTORY_DEFAULT_WIDTH
+        self._bench_controls_width = BENCH_CONTROLS_DEFAULT_WIDTH
+        self._applied_history_width = None
+        self._applied_bench_controls_width = None
+        self._last_home_workspace_width = None
+        self._last_bench_workspace_width = None
+        self._split_drag_origin_x = None
+        self._split_drag_origin_width = None
+        self._pending_home_width = None
+        self._pending_bench_width = None
+        self._split_animation_after_id = None
+        self._nav_marker_after_id = None
+        self._status_pulse_after_id = None
+        self._icon_images = {
+            "brand": ctk.CTkImage(light_image=_draw_icon("brand", COLORS["accent"], 48), dark_image=_draw_icon("brand", COLORS["accent"], 48), size=(38, 38)),
+            "favorite": ctk.CTkImage(light_image=_draw_icon("star_filled", COLORS["accent"]), dark_image=_draw_icon("star_filled", COLORS["accent"]), size=(18, 18)),
+            "favorite_off": ctk.CTkImage(light_image=_draw_icon("star_outline", COLORS["muted"]), dark_image=_draw_icon("star_outline", COLORS["muted"]), size=(18, 18)),
+            "armed": ctk.CTkImage(light_image=_draw_icon("shield", COLORS["accent"]), dark_image=_draw_icon("shield", COLORS["accent"]), size=(18, 18)),
+            "disarmed": ctk.CTkImage(light_image=_draw_icon("shield", COLORS["muted"]), dark_image=_draw_icon("shield", COLORS["muted"]), size=(18, 18)),
+            "connect": ctk.CTkImage(light_image=_draw_icon("play", COLORS["text"]), dark_image=_draw_icon("play", COLORS["text"]), size=(16, 16)),
+        }
+        for icon_name in ("nav_connect", "nav_bench", "nav_settings"):
+            self._icon_images[f"{icon_name}_muted"] = ctk.CTkImage(
+                light_image=_draw_icon(icon_name, COLORS["muted"]),
+                dark_image=_draw_icon(icon_name, COLORS["muted"]),
+                size=(20, 20),
+            )
+            self._icon_images[f"{icon_name}_active"] = ctk.CTkImage(
+                light_image=_draw_icon(icon_name, COLORS["accent"]),
+                dark_image=_draw_icon(icon_name, COLORS["accent"]),
+                size=(20, 20),
+            )
 
         self.tray_icon = None
         self.protocol('WM_DELETE_WINDOW', self.shutdown)
         self.bind('<Unmap>', self.on_unmap)
 
-        # Main Grid Layout: Sidebar (0) and Content (1)
+        # Main grid layout: top bar, sidebar, and workspace.
+        self.grid_columnconfigure(0, minsize=190)
         self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, minsize=48)
+
+        self.topbar = ctk.CTkFrame(self, height=64, corner_radius=0, fg_color="#171717", border_width=1, border_color=COLORS["border"])
+        self.topbar.grid(row=0, column=0, columnspan=2, sticky="new")
+        self.topbar.grid_propagate(False)
+        self.topbar.grid_columnconfigure(1, weight=1)
+        self.brand_mark = ctk.CTkLabel(self.topbar, text="", image=self._icon_images["brand"], width=38, height=38)
+        self.brand_mark.grid(row=0, column=0, padx=(20, 10), pady=12)
+        self.brand_text = ctk.CTkFrame(self.topbar, fg_color="transparent")
+        self.brand_text.grid(row=0, column=1, sticky="w")
+        self.topbar_title = ctk.CTkLabel(self.brand_text, text="Rust AutoConnect", font=ctk.CTkFont(size=16, weight="bold"), text_color=COLORS["text"])
+        self.topbar_title.pack(anchor="w", pady=(0, 1))
+        self.topbar_subtitle = ctk.CTkLabel(self.brand_text, text="Command Center", font=ctk.CTkFont(size=12), text_color=COLORS["muted"])
+        self.topbar_subtitle.pack(anchor="w")
 
         # ==========================================
         # 1. SIDEBAR FRAME
         # ==========================================
-        self.sidebar_frame = ctk.CTkFrame(self, width=160, corner_radius=0)
-        self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
+        self.sidebar_frame = ctk.CTkFrame(self, width=190, corner_radius=0, fg_color=COLORS["sidebar"], border_width=1, border_color=COLORS["border"])
+        self.sidebar_frame.grid(row=1, column=0, sticky="nsew")
+        self.sidebar_frame.grid_propagate(False)
+        self.sidebar_frame.grid_columnconfigure(0, weight=1)
         self.sidebar_frame.grid_rowconfigure(4, weight=1)
 
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Rust AC", font=ctk.CTkFont(size=22, weight="bold"))
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 30))
+        self.nav_home_btn = self._nav_button(self.t("nav_home"), self.show_home_frame, "nav_connect")
+        self.nav_home_btn.grid(row=0, column=0, padx=4, pady=(10, 0), sticky="ew")
 
-        self.nav_home_btn = ctk.CTkButton(self.sidebar_frame, text=self.t("nav_home"), command=self.show_home_frame, fg_color="transparent", border_width=2, text_color=("gray10", "#DCE4EE"))
-        self.nav_home_btn.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+        self.nav_bench_btn = self._nav_button(self.t("nav_bench"), self.show_bench_frame, "nav_bench")
+        self.nav_bench_btn.grid(row=1, column=0, padx=4, pady=0, sticky="ew")
 
-        self.nav_bench_btn = ctk.CTkButton(self.sidebar_frame, text=self.t("nav_bench"), command=self.show_bench_frame, fg_color="transparent", border_width=2, text_color=("gray10", "#DCE4EE"))
-        self.nav_bench_btn.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
+        self.nav_settings_btn = self._nav_button(self.t("nav_settings"), self.show_settings_frame, "nav_settings")
+        self.nav_settings_btn.grid(row=2, column=0, padx=4, pady=0, sticky="ew")
+        self._nav_rows = {
+            self.nav_home_btn: 0,
+            self.nav_bench_btn: 1,
+            self.nav_settings_btn: 2,
+        }
+        self._nav_marker_padding = {
+            self.nav_home_btn: (10, 0),
+            self.nav_bench_btn: 0,
+            self.nav_settings_btn: 0,
+        }
+        self._nav_icon_names = {
+            self.nav_home_btn: "nav_connect",
+            self.nav_bench_btn: "nav_bench",
+            self.nav_settings_btn: "nav_settings",
+        }
+        self.nav_active_marker = ctk.CTkFrame(
+            self.sidebar_frame,
+            width=3,
+            height=44,
+            corner_radius=0,
+            fg_color=COLORS["accent"],
+        )
+        self.nav_active_marker.grid(row=0, column=0, padx=(3, 0), pady=(10, 0), sticky="w")
 
-        self.nav_settings_btn = ctk.CTkButton(self.sidebar_frame, text=self.t("nav_settings"), command=self.show_settings_frame, fg_color="transparent", border_width=2, text_color=("gray10", "#DCE4EE"))
-        self.nav_settings_btn.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
+        self.sidebar_footer = ctk.CTkFrame(self, height=48, corner_radius=0, fg_color="#171717", border_width=1, border_color=COLORS["border"])
+        self.sidebar_footer.grid(row=2, column=0, sticky="nsew")
+        self.sidebar_footer.grid_propagate(False)
+        self.system_status_frame = ctk.CTkFrame(self.sidebar_footer, fg_color="transparent")
+        self.system_status_frame.pack(fill="x", padx=14, pady=12)
+        self.system_status_frame.grid_columnconfigure(4, weight=1)
+        self.version_label = ctk.CTkLabel(self.system_status_frame, text="Version: v1.3.0", font=ctk.CTkFont(size=10), text_color=COLORS["muted"])
+        self.version_label.grid(row=0, column=0, sticky="w")
+        self.status_separator = ctk.CTkLabel(self.system_status_frame, text="|", font=ctk.CTkFont(size=10), text_color=COLORS["border"])
+        self.status_separator.grid(row=0, column=1, padx=6)
+        self.version_state_label = ctk.CTkLabel(self.system_status_frame, text="Checking...", font=ctk.CTkFont(size=10, weight="bold"), text_color=COLORS["muted"])
+        self.version_state_label.grid(row=0, column=2, sticky="w")
+        self.rust_status_separator = ctk.CTkLabel(self.system_status_frame, text="|", font=ctk.CTkFont(size=10), text_color=COLORS["border"])
+        self.rust_status_separator.grid(row=0, column=3, padx=6)
+        self.rust_status_label = ctk.CTkLabel(self.system_status_frame, text="Rust", font=ctk.CTkFont(size=10, weight="bold"), text_color=COLORS["danger"])
+        self.rust_status_label.grid(row=0, column=4, sticky="w")
+        self.rust_status_tooltip = ToolTip(self.rust_status_label, "Rust is not running.")
 
-        self.rust_status_label = ctk.CTkLabel(self.sidebar_frame, text=self.t("rust_off"), font=ctk.CTkFont(weight="bold"), text_color="#C25A5A")
-        self.rust_status_label.grid(row=5, column=0, padx=20, pady=(10, 20))
+        self.footer = ctk.CTkFrame(self, height=48, corner_radius=0, fg_color="#171717", border_width=1, border_color=COLORS["border"])
+        self.footer.grid(row=2, column=1, sticky="sew")
+        self.footer.grid_propagate(False)
+        self.footer.grid_columnconfigure(0, weight=1)
+        self.footer_armed_label = ctk.CTkLabel(self.footer, text="Auto-Reconnect: Disarmed", font=ctk.CTkFont(size=12, weight="bold"), text_color=COLORS["muted"])
+        self.footer_armed_label.grid(row=0, column=1, padx=(12, 14), pady=10)
+        self.disarm_btn = ctk.CTkButton(self.footer, text="Disarm", width=82, height=30, command=self.disarm_server, fg_color=COLORS["surface_alt"], hover_color="#303030", border_width=1, border_color=COLORS["border"])
+        self.disarm_btn.grid(row=0, column=2, padx=(0, 18), pady=8)
 
         # ==========================================
         # 2. CONTENT FRAMES (Overlapping Grid)
@@ -68,127 +244,439 @@ class MainWindow(ctk.CTk):
 
         # Place them all in the same grid cell
         for frame in (self.home_frame, self.bench_frame, self.settings_frame):
-            frame.grid(row=0, column=1, sticky="nsew")
+            frame.grid(row=1, column=1, sticky="nsew")
 
         # ==========================================
         # 2.1 HOME FRAME (History + Connection)
         # ==========================================
-        self.home_frame.grid_columnconfigure(1, weight=1)
-        self.home_frame.grid_rowconfigure(0, weight=1)
+        self.home_frame.grid_columnconfigure(0, weight=1)
+        self.home_frame.grid_rowconfigure(3, weight=1)
+        self.home_frame.bind("<Configure>", self._fit_home_content)
 
-        # Left side of Home: History
-        self.history_panel = ctk.CTkFrame(self.home_frame, width=260, corner_radius=0)
+        self.home_header = ctk.CTkLabel(self.home_frame, text="Connect to Server", font=ctk.CTkFont(size=17, weight="bold"), text_color=COLORS["text"])
+        self.home_header.grid(row=0, column=0, padx=20, pady=(12, 6), sticky="w")
+        self.home_subtitle = ctk.CTkLabel(self.home_frame, text="", font=ctk.CTkFont(size=1), text_color=COLORS["muted"])
+
+        self.input_frame = ctk.CTkFrame(self.home_frame, height=50, corner_radius=4, fg_color=COLORS["surface"], border_width=1, border_color=COLORS["border"])
+        self.input_frame.grid(row=1, column=0, padx=20, pady=(0, 0), sticky="w")
+        self.input_frame.grid_propagate(False)
+        self.input_frame.grid_columnconfigure(0, weight=1)
+        self.address_label = ctk.CTkLabel(self.input_frame, text="SERVER ADDRESS", font=ctk.CTkFont(size=10, weight="bold"), text_color=COLORS["muted"])
+        self.address_label.grid(row=0, column=0, padx=14, pady=(4, 0), sticky="w")
+        self.ip_entry = ctk.CTkEntry(self.input_frame, height=27, border_width=0, fg_color=COLORS["surface"], text_color=COLORS["text"], font=ctk.CTkFont(family="Consolas", size=14))
+        self.ip_entry.grid(row=1, column=0, padx=14, pady=(0, 3), sticky="ew")
+        self.connect_btn = ctk.CTkButton(self.input_frame, text="CONNECT", command=self._on_connect_btn_click, width=136, height=36, corner_radius=3, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"], font=ctk.CTkFont(size=12, weight="bold"))
+        self.connect_btn.grid(row=0, column=1, rowspan=2, padx=(8, 12), pady=(6, 0), sticky="n")
+
+        self.status_strip = ctk.CTkFrame(self.home_frame, height=38, corner_radius=0, fg_color="transparent", border_width=0)
+        self.status_strip.grid(row=2, column=0, padx=20, pady=(0, 8), sticky="w")
+        self.status_strip.grid_propagate(False)
+        self.status_strip.grid_columnconfigure(9, weight=1)
+        ctk.CTkLabel(self.status_strip, text="●", text_color=COLORS["success"], font=ctk.CTkFont(size=14)).grid(row=0, column=0, padx=(0, 6), pady=8)
+        ctk.CTkLabel(self.status_strip, text="Status:", text_color=COLORS["muted"], font=ctk.CTkFont(size=12, weight="bold")).grid(row=0, column=1, pady=8)
+        self.session_status_label = ctk.CTkLabel(self.status_strip, textvariable=self.session_status_var, font=ctk.CTkFont(size=12))
+        self.session_status_label.grid(row=0, column=2, padx=(4, 14), pady=8)
+        ctk.CTkLabel(self.status_strip, text="|", text_color=COLORS["border"]).grid(row=0, column=3, pady=8)
+        ctk.CTkLabel(self.status_strip, text="Last Connected:", text_color=COLORS["muted"], font=ctk.CTkFont(size=12)).grid(row=0, column=4, padx=(14, 4), pady=8)
+        ctk.CTkLabel(self.status_strip, textvariable=self.last_connected_var, font=ctk.CTkFont(size=12)).grid(row=0, column=5, padx=(0, 14), pady=8)
+        ctk.CTkLabel(self.status_strip, text="|", text_color=COLORS["border"]).grid(row=0, column=6, pady=8)
+        ctk.CTkLabel(self.status_strip, text="Playtime:", text_color=COLORS["muted"], font=ctk.CTkFont(size=12)).grid(row=0, column=7, padx=(14, 4), pady=8, sticky="w")
+        ctk.CTkLabel(self.status_strip, textvariable=self.playtime_var, font=ctk.CTkFont(size=12)).grid(row=0, column=8, padx=(0, 14), pady=8, sticky="w")
+        self.armed_status_label = ctk.CTkLabel(self.status_strip, text="Auto-Reconnect: Disarmed", font=ctk.CTkFont(size=12, weight="bold"), text_color=COLORS["muted"])
+        self.armed_status_label.grid(row=0, column=10, padx=(16, 0), pady=8, sticky="e")
+
+        self.home_content = ctk.CTkFrame(self.home_frame, corner_radius=0, fg_color="transparent")
+        self.home_content.grid(row=3, column=0, padx=0, pady=(0, 0), sticky="nsw")
+        self.home_content.grid_propagate(False)
+        self.home_content.grid_columnconfigure(0, minsize=HOME_HISTORY_DEFAULT_WIDTH)
+        self.home_content.grid_columnconfigure(1, minsize=SPLITTER_WIDTH)
+        self.home_content.grid_columnconfigure(2, weight=1)
+        self.home_content.grid_rowconfigure(0, weight=1)
+
+        self.history_panel = ctk.CTkFrame(self.home_content, width=HOME_HISTORY_DEFAULT_WIDTH, corner_radius=0, fg_color=COLORS["surface"], border_width=1, border_color=COLORS["border"])
         self.history_panel.grid(row=0, column=0, sticky="nsew")
-        self.history_panel.grid_rowconfigure(3, weight=1)
+        self.history_panel.grid_columnconfigure(0, weight=1)
+        self.history_panel.grid_rowconfigure(2, weight=1)
 
-        self.history_label = ctk.CTkLabel(self.history_panel, text=self.t("history"), font=ctk.CTkFont(size=16, weight="bold"))
-        self.history_label.grid(row=0, column=0, padx=20, pady=(20, 5))
+        self.history_label = ctk.CTkLabel(self.history_panel, text="SERVER HISTORY", font=ctk.CTkFont(size=13, weight="bold"), text_color=COLORS["text"])
+        self.history_label.grid(row=0, column=0, padx=16, pady=(8, 4), sticky="w")
+        self.history_actions = ctk.CTkFrame(self.history_panel, fg_color="transparent")
+        self.history_actions.grid(row=0, column=1, padx=12, pady=(6, 4), sticky="e")
+        self.import_servers_btn = ctk.CTkButton(self.history_actions, text="↓", width=24, height=24, command=self.import_server_library, fg_color="transparent", hover_color=COLORS["surface_alt"])
+        self.import_servers_btn.pack(side="left", padx=2)
+        ToolTip(self.import_servers_btn, "Import server library")
+        self.export_servers_btn = ctk.CTkButton(self.history_actions, text="↑", width=24, height=24, command=self.export_server_library, fg_color="transparent", hover_color=COLORS["surface_alt"])
+        self.export_servers_btn.pack(side="left", padx=2)
+        ToolTip(self.export_servers_btn, "Export server library")
 
-        self.filter_var = ctk.StringVar(value="All Servers")
-        self.filter_menu = ctk.CTkOptionMenu(self.history_panel, values=["All Servers", "Favorites"], variable=self.filter_var, command=lambda e: self.refresh_history_ui())
-        self.filter_menu.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.filter_var = ctk.StringVar(value="All")
+        self.filter_menu = ctk.CTkOptionMenu(self.history_panel, values=["All", "Favorites"], variable=self.filter_var, command=lambda e: self.refresh_history_ui(), width=120, fg_color=COLORS["surface_alt"], button_color=COLORS["border"], dropdown_fg_color=COLORS["surface_alt"])
+        self.filter_menu.grid(row=1, column=1, padx=(4, 16), pady=(0, 6), sticky="e")
 
         self.search_var = ctk.StringVar()
         self.search_var.trace_add("write", self._on_search_changed)
-        self.search_entry = ctk.CTkEntry(self.history_panel, placeholder_text="Search...", textvariable=self.search_var)
-        self.search_entry.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.search_entry = ctk.CTkEntry(self.history_panel, placeholder_text="Search servers...", textvariable=self.search_var, fg_color=COLORS["surface_alt"], border_color=COLORS["border"])
+        self.search_entry.grid(row=1, column=0, padx=(16, 4), pady=(0, 6), sticky="ew")
 
-        self.history_scroll = ctk.CTkScrollableFrame(self.history_panel)
-        self.history_scroll.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.history_scroll = ctk.CTkScrollableFrame(self.history_panel, fg_color="transparent")
+        self.history_scroll.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=8, pady=(0, 8))
 
-        # Right side of Home: Connection & Logs
-        self.connection_panel = ctk.CTkFrame(self.home_frame, fg_color="transparent")
-        self.connection_panel.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
+        self.home_splitter = ctk.CTkFrame(self.home_content, width=SPLITTER_WIDTH, corner_radius=0, fg_color=COLORS["canvas"], cursor="sb_h_double_arrow")
+        self.home_splitter.grid(row=0, column=1, sticky="ns")
+        self.home_splitter.bind("<ButtonPress-1>", self._start_home_resize)
+        self.home_splitter.bind("<B1-Motion>", self._resize_home_panels)
+        self.home_splitter.bind("<ButtonRelease-1>", self._finish_home_resize)
+        self.home_splitter.bind("<Double-Button-1>", self._reset_home_split)
+        self.home_splitter.bind("<Enter>", lambda _event: self._set_splitter_hover(self.home_splitter, True))
+        self.home_splitter.bind("<Leave>", lambda _event: self._set_splitter_hover(self.home_splitter, False))
+        ToolTip(self.home_splitter, "Drag to resize panels. Double-click to reset.")
+
+        self.connection_panel = ctk.CTkFrame(self.home_content, corner_radius=0, fg_color=COLORS["surface"], border_width=1, border_color=COLORS["border"])
+        self.connection_panel.grid(row=0, column=2, sticky="nsew")
         self.connection_panel.grid_columnconfigure(0, weight=1)
         self.connection_panel.grid_rowconfigure(1, weight=1)
-
-        self.input_frame = ctk.CTkFrame(self.connection_panel)
-        self.input_frame.grid(row=0, column=0, pady=(0, 10), sticky="ew")
-        self.input_frame.grid_columnconfigure(0, weight=1)
-
-        self.ip_entry = ctk.CTkComboBox(
-            self.input_frame,
-            values=[f"{f.get('name', 'Unknown')} ({f.get('ip', 'Unknown')})" for f in self.history_store.get_favorites()]
-        )
-        self.ip_entry.set("")
-        self.ip_entry.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
-
-        self.connect_btn = ctk.CTkButton(self.input_frame, text=self.t("start"), command=self._on_connect_btn_click, width=120)
-        self.connect_btn.grid(row=0, column=1, padx=10, pady=10)
-
-        self.log_frame = ctk.CTkFrame(self.connection_panel)
-        self.log_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
+        self.log_title = ctk.CTkLabel(self.connection_panel, text="ACTIVITY LOG", font=ctk.CTkFont(size=13, weight="bold"), text_color=COLORS["text"])
+        self.log_title.grid(row=0, column=0, padx=16, pady=(8, 4), sticky="w")
+        self.log_toolbar = ctk.CTkFrame(self.connection_panel, fg_color="transparent")
+        self.log_toolbar.grid(row=0, column=0, padx=16, pady=(5, 3), sticky="e")
+        self.auto_scroll_check = ctk.CTkCheckBox(self.log_toolbar, text="Auto-Scroll", variable=self.auto_scroll, checkbox_width=14, checkbox_height=14, font=ctk.CTkFont(size=11), text_color=COLORS["muted"], fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"])
+        self.auto_scroll_check.pack(side="left", padx=(0, 12))
+        self.clear_log_btn = ctk.CTkButton(self.log_toolbar, text="Clear", command=self.clear_log, width=62, height=26, fg_color=COLORS["surface_alt"], hover_color=COLORS["border"], border_width=1, border_color=COLORS["border"])
+        self.clear_log_btn.pack(side="left")
+        self.log_frame = ctk.CTkFrame(self.connection_panel, fg_color=COLORS["surface_alt"], corner_radius=2)
+        self.log_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 10))
         self.log_frame.grid_columnconfigure(0, weight=1)
         self.log_frame.grid_rowconfigure(0, weight=1)
 
-        self.log_textbox = ctk.CTkTextbox(self.log_frame, state="disabled", font=ctk.CTkFont(family="Consolas", size=13))
+        self.log_textbox = ctk.CTkTextbox(self.log_frame, state="disabled", fg_color=COLORS["surface_alt"], text_color="#D4DAE2", font=ctk.CTkFont(family="Consolas", size=12), corner_radius=4)
         self.log_textbox.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
         
-        self.bottom_frame = ctk.CTkFrame(self.connection_panel, fg_color="transparent")
-        self.bottom_frame.grid(row=2, column=0, sticky="e")
-        self.update_check = ctk.CTkCheckBox(self.bottom_frame, text="Auto-Update Rust", variable=self.auto_update, command=self.on_auto_update_change)
-        self.update_check.pack(side="right")
+        self.bottom_frame = ctk.CTkFrame(self.connection_panel, height=8, fg_color="transparent")
+        self.bottom_frame.grid(row=2, column=0, padx=16, pady=(0, 6), sticky="ew")
 
         # ==========================================
         # 2.2 BENCHMARK FRAME
         # ==========================================
         self.bench_frame.grid_columnconfigure(0, weight=1)
-        
-        self.bench_title = ctk.CTkLabel(self.bench_frame, text=self.t("tab_bench"), font=ctk.CTkFont(size=20, weight="bold"))
-        self.bench_title.pack(pady=(20,10))
-
-        self.bench_btn = ctk.CTkButton(self.bench_frame, text=self.t("run_test"), command=self._on_run_test_click, fg_color="#3B8ED0", height=40)
-        self.bench_btn.pack(pady=10)
-        
-        self.top_btn = ctk.CTkButton(self.bench_frame, text=self.t("lb_title"), command=self.open_leaderboard, fg_color="#FADA5E", text_color="black", height=40)
-        self.top_btn.pack(pady=10)
-        
-        self.hardware_label = ctk.CTkLabel(self.bench_frame, text=self.t("lb_load"), justify="left", font=ctk.CTkFont(size=14))
-        self.hardware_label.pack(pady=10)
-        
-        self.bench_log = ctk.CTkTextbox(self.bench_frame, state="disabled", font=ctk.CTkFont(family="Consolas", size=13))
-        self.bench_log.pack(fill="both", expand=True, padx=40, pady=20)
+        self.bench_frame.grid_rowconfigure(2, weight=1)
+        self.bench_frame.bind("<Configure>", self._fit_bench_content)
+        self.bench_title = ctk.CTkLabel(self.bench_frame, text=self.t("tab_bench"), font=ctk.CTkFont(size=17, weight="bold"), text_color=COLORS["text"])
+        self.bench_title.grid(row=0, column=0, padx=24, pady=(18, 4), sticky="w")
+        self.bench_subtitle = ctk.CTkLabel(self.bench_frame, text="Run a local test with guarded configuration restore.", text_color=COLORS["muted"], font=ctk.CTkFont(size=13))
+        self.bench_subtitle.grid(row=1, column=0, padx=24, pady=(0, 12), sticky="w")
+        self.bench_content = ctk.CTkFrame(self.bench_frame, fg_color="transparent")
+        self.bench_content.grid(row=2, column=0, padx=20, pady=(0, 0), sticky="nsw")
+        self.bench_content.grid_propagate(False)
+        self.bench_content.grid_columnconfigure(0, minsize=BENCH_CONTROLS_DEFAULT_WIDTH)
+        self.bench_content.grid_columnconfigure(1, minsize=SPLITTER_WIDTH)
+        self.bench_content.grid_columnconfigure(2, weight=1)
+        self.bench_content.grid_rowconfigure(0, weight=1)
+        self.bench_controls = ctk.CTkFrame(self.bench_content, width=270, fg_color=COLORS["surface"], corner_radius=0, border_width=1, border_color=COLORS["border"])
+        self.bench_controls.grid(row=0, column=0, sticky="nsew")
+        self.bench_btn = ctk.CTkButton(self.bench_controls, text=self.t("run_test"), command=self._on_run_test_click, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"], height=42, font=ctk.CTkFont(weight="bold"))
+        self.bench_btn.pack(fill="x", padx=16, pady=(18, 8))
+        self.bench_mode_label = ctk.CTkLabel(self.bench_controls, text="Hardware benchmark", font=ctk.CTkFont(size=12, weight="bold"), text_color=COLORS["text"])
+        self.bench_mode_label.pack(anchor="w", padx=16, pady=(12, 6))
+        self.hardware_label = ctk.CTkLabel(self.bench_controls, text=self.t("lb_load"), justify="left", wraplength=260, text_color=COLORS["muted"], font=ctk.CTkFont(size=13))
+        self.hardware_label.pack(fill="x", padx=16, pady=(0, 18))
+        local_run_count = len(self.history_store.get_benchmark_runs())
+        summary_text = "Local results: no completed runs" if not local_run_count else f"Local results: {local_run_count} completed runs"
+        self.benchmark_summary_label = ctk.CTkLabel(self.bench_controls, text=summary_text, justify="left", wraplength=260, text_color=COLORS["muted"], font=ctk.CTkFont(size=12))
+        self.benchmark_summary_label.pack(fill="x", padx=16, pady=(0, 18))
+        self.bench_splitter = ctk.CTkFrame(self.bench_content, width=SPLITTER_WIDTH, corner_radius=0, fg_color=COLORS["canvas"], cursor="sb_h_double_arrow")
+        self.bench_splitter.grid(row=0, column=1, sticky="ns")
+        self.bench_splitter.bind("<ButtonPress-1>", self._start_bench_resize)
+        self.bench_splitter.bind("<B1-Motion>", self._resize_bench_panels)
+        self.bench_splitter.bind("<ButtonRelease-1>", self._finish_bench_resize)
+        self.bench_splitter.bind("<Double-Button-1>", self._reset_bench_split)
+        self.bench_splitter.bind("<Enter>", lambda _event: self._set_splitter_hover(self.bench_splitter, True))
+        self.bench_splitter.bind("<Leave>", lambda _event: self._set_splitter_hover(self.bench_splitter, False))
+        ToolTip(self.bench_splitter, "Drag to resize panels. Double-click to reset.")
+        self.bench_results_panel = ctk.CTkFrame(self.bench_content, fg_color=COLORS["surface"], corner_radius=0, border_width=1, border_color=COLORS["border"])
+        self.bench_results_panel.grid(row=0, column=2, sticky="nsew")
+        self.bench_results_panel.grid_columnconfigure(0, weight=1)
+        self.bench_results_panel.grid_rowconfigure(1, weight=1)
+        self.bench_view_var = ctk.StringVar(value="Run log")
+        self.bench_view_tabs = ctk.CTkSegmentedButton(
+            self.bench_results_panel,
+            values=["Run log", "Online ranking"],
+            variable=self.bench_view_var,
+            command=self.show_benchmark_view,
+            fg_color=COLORS["surface_alt"],
+            selected_color=COLORS["accent"],
+            selected_hover_color=COLORS["accent_hover"],
+            unselected_color=COLORS["surface_alt"],
+            unselected_hover_color=COLORS["border"],
+        )
+        self.bench_view_tabs.grid(row=0, column=0, padx=14, pady=(12, 8), sticky="w")
+        self.bench_views = ctk.CTkFrame(self.bench_results_panel, fg_color="transparent")
+        self.bench_views.grid(row=1, column=0, padx=14, pady=(0, 14), sticky="nsew")
+        self.bench_views.grid_rowconfigure(0, weight=1)
+        self.bench_views.grid_columnconfigure(0, weight=1)
+        self.bench_log = ctk.CTkTextbox(self.bench_views, state="disabled", fg_color=COLORS["surface_alt"], text_color="#D4DAE2", font=ctk.CTkFont(family="Consolas", size=12), corner_radius=2)
+        self.bench_online_ranking = ctk.CTkScrollableFrame(self.bench_views, fg_color=COLORS["surface_alt"], corner_radius=2)
+        for view in (self.bench_log, self.bench_online_ranking):
+            view.grid(row=0, column=0, sticky="nsew")
+        self.show_benchmark_view("Run log")
 
         # ==========================================
         # 2.3 SETTINGS FRAME
         # ==========================================
-        self.settings_frame.grid_columnconfigure(1, weight=1)
-        
-        self.settings_title = ctk.CTkLabel(self.settings_frame, text=self.t("settings_title"), font=ctk.CTkFont(size=20, weight="bold"))
-        self.settings_title.grid(row=0, column=0, columnspan=2, padx=40, pady=(40, 20), sticky="w")
+        self.settings_frame.grid_columnconfigure(1, weight=0)
+        self.settings_title = ctk.CTkLabel(self.settings_frame, text=self.t("settings_title"), font=ctk.CTkFont(size=17, weight="bold"), text_color=COLORS["text"])
+        self.settings_title.grid(row=0, column=0, columnspan=2, padx=24, pady=(18, 4), sticky="w")
+        self.settings_subtitle = ctk.CTkLabel(self.settings_frame, text="Configure local application behavior.", font=ctk.CTkFont(size=13), text_color=COLORS["muted"])
+        self.settings_subtitle.grid(row=1, column=0, columnspan=2, padx=24, pady=(0, 12), sticky="w")
+        self.settings_panel = ctk.CTkFrame(self.settings_frame, fg_color=COLORS["surface"], corner_radius=0, border_width=1, border_color=COLORS["border"])
+        self.settings_panel.grid(row=2, column=0, columnspan=2, padx=20, pady=(0, 0), sticky="nw")
+        self.settings_panel.grid_columnconfigure(1, weight=0)
 
         # Language
-        self.lang_label = ctk.CTkLabel(self.settings_frame, text=self.t("lang_lbl"), font=ctk.CTkFont(weight="bold"))
-        self.lang_label.grid(row=1, column=0, padx=40, pady=(20, 10), sticky="w")
+        self.lang_label = ctk.CTkLabel(self.settings_panel, text=self.t("lang_lbl"), font=ctk.CTkFont(weight="bold"))
+        self.lang_label.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
         
         self.lang_menu = ctk.CTkOptionMenu(
-            self.settings_frame,
+            self.settings_panel,
             values=list(I18nManager.LANG_MAP.values()),
             command=self.change_lang,
-            width=200
+            width=200,
+            fg_color=COLORS["surface_alt"],
+            button_color=COLORS["border"],
+            button_hover_color=COLORS["accent_hover"],
+            dropdown_fg_color=COLORS["surface_alt"],
         )
-        self.lang_menu.grid(row=1, column=1, padx=40, pady=(20, 10), sticky="w")
+        self.lang_menu.grid(row=0, column=1, padx=20, pady=(20, 10), sticky="w")
         self.lang_menu.set(self.history_store.get_lang())
 
         # Tray Checkbox
         self.tray_var = ctk.BooleanVar(value=self.history_store.get_minimize_to_tray())
-        self.tray_checkbox = ctk.CTkCheckBox(self.settings_frame, text=self.t("tray_lbl"), variable=self.tray_var, command=self._on_tray_change)
-        self.tray_checkbox.grid(row=2, column=0, columnspan=2, padx=40, pady=20, sticky="w")
+        self.tray_checkbox = ctk.CTkCheckBox(self.settings_panel, text=self.t("tray_lbl"), variable=self.tray_var, command=self._on_tray_change, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], border_color=COLORS["muted"])
+        self.tray_checkbox.grid(row=1, column=0, columnspan=2, padx=20, pady=12, sticky="w")
         self.tray_tooltip = ToolTip(self.tray_checkbox, self.t("tooltip_tray"))
 
         # Swarm Checkbox
         self.swarm_var = ctk.BooleanVar(value=self.history_store.get_swarm_enabled())
-        self.swarm_checkbox = ctk.CTkCheckBox(self.settings_frame, text=self.t("swarm_lbl"), variable=self.swarm_var, command=self._on_swarm_change)
-        self.swarm_checkbox.grid(row=3, column=0, columnspan=2, padx=40, pady=10, sticky="w")
+        self.swarm_checkbox = ctk.CTkCheckBox(self.settings_panel, text=self.t("swarm_lbl"), variable=self.swarm_var, command=self._on_swarm_change, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], border_color=COLORS["muted"])
+        self.swarm_checkbox.grid(row=2, column=0, columnspan=2, padx=20, pady=12, sticky="w")
         self.swarm_tooltip = ToolTip(self.swarm_checkbox, self.t("tooltip_swarm"))
 
+        self.auto_update_settings = ctk.CTkCheckBox(
+            self.settings_panel,
+            text="Auto-Update Rust",
+            variable=self.auto_update,
+            command=self.on_auto_update_change,
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            border_color=COLORS["muted"],
+        )
+        self.auto_update_settings.grid(row=3, column=0, columnspan=2, padx=20, pady=12, sticky="w")
+
         # Save User Config Button
-        self.save_cfg_btn = ctk.CTkButton(self.settings_frame, text=self.t("save_cfg_btn"), command=self.save_user_config)
-        self.save_cfg_btn.grid(row=4, column=0, columnspan=2, padx=40, pady=20, sticky="w")
+        self.save_cfg_btn = ctk.CTkButton(self.settings_panel, text=self.t("save_cfg_btn"), command=self.save_user_config, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"])
+        self.save_cfg_btn.grid(row=4, column=0, columnspan=2, padx=20, pady=(16, 20), sticky="w")
 
         # Start by showing Home
         self.refresh_history_ui()
+        self.update_favorites_combobox()
+        self._refresh_session_state()
         self.show_home_frame()
+
+    def _nav_button(self, text, command, icon_name):
+        return ctk.CTkButton(
+            self.sidebar_frame, text=text, image=self._icon_images[f"{icon_name}_muted"], compound="left", command=command, anchor="w", height=44, border_spacing=10,
+            corner_radius=0, fg_color="transparent", hover_color=COLORS["surface_alt"],
+            text_color=COLORS["muted"],
+        )
+
+    def _fit_home_content(self, event):
+        """Keep the workspace within the actual available window width."""
+        content_width = max(0, event.width)
+        width = max(0, content_width - 40)
+        if content_width == self._last_home_workspace_width:
+            return
+        self._last_home_workspace_width = content_width
+        self.home_content.configure(width=content_width)
+        self.input_frame.configure(width=width)
+        self.status_strip.configure(width=width)
+        self._apply_home_split(content_width)
+
+    def _apply_home_split(self, workspace_width: int) -> None:
+        self._history_width = self._clamp_home_split(self._history_width, workspace_width)
+        if self._history_width == self._applied_history_width:
+            return
+        self._applied_history_width = self._history_width
+        self.home_content.grid_columnconfigure(0, minsize=self._history_width)
+        self.history_panel.configure(width=self._history_width)
+
+    @staticmethod
+    def _home_split_limits(workspace_width: int) -> tuple[int, int]:
+        history_min = min(HOME_HISTORY_MIN_WIDTH, max(220, workspace_width - SPLITTER_WIDTH - HOME_LOG_MIN_WIDTH))
+        log_min = min(HOME_LOG_MIN_WIDTH, max(220, workspace_width - SPLITTER_WIDTH - history_min))
+        history_max = max(history_min, workspace_width - SPLITTER_WIDTH - log_min)
+        return history_min, history_max
+
+    def _clamp_home_split(self, requested_width: int, workspace_width: int) -> int:
+        minimum, maximum = self._home_split_limits(workspace_width)
+        return max(minimum, min(requested_width, maximum))
+
+    def _start_home_resize(self, event) -> None:
+        self._split_drag_origin_x = event.x_root
+        self._split_drag_origin_width = self._history_width
+        self._set_splitter_hover(self.home_splitter, True)
+
+    def _resize_home_panels(self, event) -> None:
+        if self._split_drag_origin_x is None or self._split_drag_origin_width is None:
+            return
+        requested_width = self._split_drag_origin_width + self._scaled_drag_delta(
+            self.home_content, event.x_root - self._split_drag_origin_x
+        )
+        self._pending_home_width = self._clamp_home_split(requested_width, self.home_content.winfo_width())
+        self._schedule_split_update()
+
+    def _finish_home_resize(self, _event) -> None:
+        self._flush_pending_split_update()
+        self._split_drag_origin_x = None
+        self._split_drag_origin_width = None
+        self._set_splitter_hover(self.home_splitter, False)
+
+    def _reset_home_split(self, _event) -> None:
+        self._history_width = HOME_HISTORY_DEFAULT_WIDTH
+        self._apply_home_split(self.home_content.winfo_width())
+
+    def _fit_bench_content(self, event) -> None:
+        width = max(0, event.width - 40)
+        if width == self._last_bench_workspace_width:
+            return
+        self._last_bench_workspace_width = width
+        self.bench_content.configure(width=width)
+        self._apply_bench_split(width)
+
+    def _apply_bench_split(self, workspace_width: int) -> None:
+        self._bench_controls_width = self._clamp_bench_split(self._bench_controls_width, workspace_width)
+        if self._bench_controls_width == self._applied_bench_controls_width:
+            return
+        self._applied_bench_controls_width = self._bench_controls_width
+        self.bench_content.grid_columnconfigure(0, minsize=self._bench_controls_width)
+        self.bench_controls.configure(width=self._bench_controls_width)
+
+    @staticmethod
+    def _bench_split_limits(workspace_width: int) -> tuple[int, int]:
+        controls_min = min(BENCH_CONTROLS_MIN_WIDTH, max(180, workspace_width - SPLITTER_WIDTH - BENCH_LOG_MIN_WIDTH))
+        log_min = min(BENCH_LOG_MIN_WIDTH, max(220, workspace_width - SPLITTER_WIDTH - controls_min))
+        controls_max = max(controls_min, workspace_width - SPLITTER_WIDTH - log_min)
+        return controls_min, controls_max
+
+    def _clamp_bench_split(self, requested_width: int, workspace_width: int) -> int:
+        minimum, maximum = self._bench_split_limits(workspace_width)
+        return max(minimum, min(requested_width, maximum))
+
+    def _start_bench_resize(self, event) -> None:
+        self._split_drag_origin_x = event.x_root
+        self._split_drag_origin_width = self._bench_controls_width
+        self._set_splitter_hover(self.bench_splitter, True)
+
+    def _resize_bench_panels(self, event) -> None:
+        if self._split_drag_origin_x is None or self._split_drag_origin_width is None:
+            return
+        requested_width = self._split_drag_origin_width + self._scaled_drag_delta(
+            self.bench_content, event.x_root - self._split_drag_origin_x
+        )
+        self._pending_bench_width = self._clamp_bench_split(requested_width, self.bench_content.winfo_width())
+        self._schedule_split_update()
+
+    def _finish_bench_resize(self, _event) -> None:
+        self._flush_pending_split_update()
+        self._split_drag_origin_x = None
+        self._split_drag_origin_width = None
+        self._set_splitter_hover(self.bench_splitter, False)
+
+    def _reset_bench_split(self, _event) -> None:
+        self._bench_controls_width = BENCH_CONTROLS_DEFAULT_WIDTH
+        self._apply_bench_split(self.bench_content.winfo_width())
+
+    @staticmethod
+    def _set_splitter_hover(splitter, is_hovered: bool) -> None:
+        """Keep resize feedback visible without leaving a bright drag artifact."""
+        splitter.configure(fg_color="#303030" if is_hovered else COLORS["canvas"])
+
+    @staticmethod
+    def _scaled_drag_delta(widget, delta: int) -> int:
+        configured_width = max(1, int(widget.cget("width")))
+        actual_width = max(1, widget.winfo_width())
+        return round(delta / max(1.0, actual_width / configured_width))
+
+    def _schedule_split_update(self) -> None:
+        if self._split_animation_after_id is None:
+            self._split_animation_after_id = self.after(33, self._flush_split_update)
+
+    def _flush_split_update(self) -> None:
+        self._split_animation_after_id = None
+        self._apply_pending_split_update()
+
+    def _flush_pending_split_update(self) -> None:
+        if self._split_animation_after_id is not None:
+            self.after_cancel(self._split_animation_after_id)
+            self._split_animation_after_id = None
+        self._apply_pending_split_update()
+
+    def _apply_pending_split_update(self) -> None:
+        if self._pending_home_width is not None:
+            self._history_width = self._pending_home_width
+            self._pending_home_width = None
+            self._apply_home_split(self.home_content.winfo_width())
+        if self._pending_bench_width is not None:
+            self._bench_controls_width = self._pending_bench_width
+            self._pending_bench_width = None
+            self._apply_bench_split(self.bench_content.winfo_width())
+
+    def _status_item(self, label, value, column):
+        container = ctk.CTkFrame(self.status_strip, fg_color="transparent")
+        container.grid(row=0, column=column, padx=16, pady=12, sticky="ew")
+        ctk.CTkLabel(container, text=label, font=ctk.CTkFont(size=10, weight="bold"), text_color=COLORS["muted"]).pack(anchor="w")
+        ctk.CTkLabel(container, textvariable=value, font=ctk.CTkFont(size=13, weight="bold"), text_color=COLORS["text"]).pack(anchor="w", pady=(3, 0))
+
+    def _refresh_session_state(self):
+        elapsed = int(time.monotonic() - self.session_started_at)
+        hours, remainder = divmod(elapsed, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        self.playtime_var.set(f"{hours:02}:{minutes:02}:{seconds:02}")
+        self._refresh_session_state_once()
+        self._session_state_after_id = self.after(1000, self._refresh_session_state)
+
+    def _refresh_session_state_once(self):
+        armed = self.history_store.get_armed_server()
+        if armed:
+            self.armed_status_label.configure(text="Auto-Reconnect: Armed", text_color=COLORS["accent"])
+            self.footer_armed_label.configure(text="Auto-Reconnect: Armed", text_color=COLORS["accent"])
+            self.disarm_btn.configure(state="normal")
+        else:
+            self.armed_status_label.configure(text="Auto-Reconnect: Disarmed", text_color=COLORS["muted"])
+            self.footer_armed_label.configure(text="Auto-Reconnect: Disarmed", text_color=COLORS["muted"])
+            self.disarm_btn.configure(state="disabled")
+
+    def set_connection_state(self, state: str, target: Optional[str] = None):
+        self.session_status_var.set(state)
+        self._pulse_status(self.session_status_label, COLORS["accent"] if state != "Idle" else COLORS["text"])
+        if target:
+            self.last_connected_var.set(target)
+
+    def set_rust_status(self, is_running: bool) -> None:
+        color = "#2ECC71" if is_running else COLORS["danger"]
+        self.rust_status_label.configure(text="Rust", text_color=color)
+        self.rust_status_tooltip.text = "Rust is running." if is_running else "Rust is not running."
+        self._pulse_status(self.rust_status_label, color, rest_color=color)
+
+    def set_version_status(self, version: str, status: str, color: str) -> None:
+        self.version_label.configure(text=f"Version: {version}")
+        self.version_state_label.configure(text=status, text_color=color)
+
+    def update_benchmark_summary(self, run: dict):
+        if not hasattr(self, "benchmark_summary_label"):
+            return
+        run_count = len(self.history_store.get_benchmark_runs(run.get("configuration_key", "")))
+        self.benchmark_summary_label.configure(
+            text=f"Current config: {run.get('total_time', 0):.1f}s\nLocal runs for this config: {run_count}"
+        )
 
     # --- NAVIGATION LOGIC ---
     def show_home_frame(self):
@@ -205,11 +693,43 @@ class MainWindow(ctk.CTk):
         
     def _highlight_nav(self, active_btn):
         # Reset all
-        self.nav_home_btn.configure(fg_color="transparent")
-        self.nav_bench_btn.configure(fg_color="transparent")
-        self.nav_settings_btn.configure(fg_color="transparent")
+        for button in (self.nav_home_btn, self.nav_bench_btn, self.nav_settings_btn):
+            icon_name = self._nav_icon_names[button]
+            button.configure(fg_color="transparent", text_color=COLORS["muted"], image=self._icon_images[f"{icon_name}_muted"])
         # Highlight active
-        active_btn.configure(fg_color=("gray75", "gray25"))
+        active_icon = self._nav_icon_names[active_btn]
+        active_btn.configure(fg_color="#252525", text_color=COLORS["text"], image=self._icon_images[f"{active_icon}_active"])
+        self.after_idle(lambda: self._animate_nav_marker(active_btn))
+
+    def _animate_nav_marker(self, active_btn) -> None:
+        target_y = active_btn.winfo_y()
+        target_height = active_btn.winfo_height()
+        if target_height <= 1:
+            return
+        if self._nav_marker_after_id is not None:
+            self.after_cancel(self._nav_marker_after_id)
+        start_y = self.nav_active_marker.winfo_y()
+        self.nav_active_marker.grid_forget()
+        self.nav_active_marker.place(x=3, y=start_y)
+        self.nav_active_marker.lift()
+        steps = 12
+
+        def tick(step: int = 0) -> None:
+            progress = step / steps
+            eased = 1 - (1 - progress) ** 3
+            self.nav_active_marker.place_configure(y=round(start_y + (target_y - start_y) * eased))
+            if step < steps:
+                self._nav_marker_after_id = self.after(16, tick, step + 1)
+            else:
+                self._nav_marker_after_id = None
+
+        tick()
+
+    def _pulse_status(self, label, color: str, rest_color: Optional[str] = None) -> None:
+        if self._status_pulse_after_id is not None:
+            self.after_cancel(self._status_pulse_after_id)
+        label.configure(text_color=color)
+        self._status_pulse_after_id = self.after(220, lambda: label.configure(text_color=rest_color or COLORS["text"]))
 
     # --- SETTINGS LOGIC ---
     def _on_tray_change(self):
@@ -217,6 +737,31 @@ class MainWindow(ctk.CTk):
 
     def save_user_config(self):
         pass
+
+    def _dispatch_ui(self, callback, *args, **kwargs):
+        dispatcher = getattr(self, "dispatch_ui", None)
+        if callable(dispatcher):
+            dispatcher(callback, *args, **kwargs)
+            return
+        if self._ui_dispatch_closing:
+            return
+        if threading.current_thread() is threading.main_thread():
+            callback(*args, **kwargs)
+            return
+        self._ui_callback_queue.put((callback, args, kwargs))
+
+    def _drain_ui_callbacks(self) -> None:
+        while not self._ui_dispatch_closing:
+            try:
+                callback, args, kwargs = self._ui_callback_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                callback(*args, **kwargs)
+            except Exception:
+                continue
+        if not self._ui_dispatch_closing:
+            self._ui_dispatch_after_id = self.after(25, self._drain_ui_callbacks)
 
     def _on_swarm_change(self):
         from ..services.swarm_service import swarm_service
@@ -229,12 +774,12 @@ class MainWindow(ctk.CTk):
                     self.history_store.set_swarm_enabled(True)
                     swarm_service.is_enabled = True
                     swarm_service.start()
-                    self.after(0, lambda: self.swarm_checkbox.configure(state="normal"))
+                    self._dispatch_ui(self.swarm_checkbox.configure, state="normal")
                 else:
                     import tkinter.messagebox as messagebox
-                    self.after(0, lambda: messagebox.showerror("Connection Error", "Failed to connect to Swarm servers."))
-                    self.after(0, lambda: self.swarm_var.set(False))
-                    self.after(0, lambda: self.swarm_checkbox.configure(state="normal"))
+                    self._dispatch_ui(messagebox.showerror, "Connection Error", "Failed to connect to Swarm servers.")
+                    self._dispatch_ui(self.swarm_var.set, False)
+                    self._dispatch_ui(self.swarm_checkbox.configure, state="normal")
             import threading
             threading.Thread(target=test_and_connect, daemon=True).start()
         else:
@@ -255,7 +800,6 @@ class MainWindow(ctk.CTk):
         self.nav_settings_btn.configure(text=self.t("nav_settings"))
         self.bench_title.configure(text=self.t("tab_bench"))
         self.bench_btn.configure(text=self.t("run_test"))
-        self.top_btn.configure(text=self.t("lb_title"))
         self.settings_title.configure(text=self.t("settings_title"))
         self.lang_label.configure(text=self.t("lang_lbl"))
         self.tray_checkbox.configure(text=self.t("tray_lbl"))
@@ -267,11 +811,6 @@ class MainWindow(ctk.CTk):
             self.tray_tooltip.text = self.t("tooltip_tray")
         if hasattr(self, 'swarm_tooltip'):
             self.swarm_tooltip.text = self.t("tooltip_swarm")
-
-        if "🟢" in self.rust_status_label.cget("text"):
-            self.rust_status_label.configure(text=self.t("rust_on"))
-        else:
-            self.rust_status_label.configure(text=self.t("rust_off"))
 
         self.refresh_history_ui()
 
@@ -294,17 +833,64 @@ class MainWindow(ctk.CTk):
     def _on_run_test_click(self):
         pass # Override in AppController
 
-    def open_leaderboard(self):
-        from .leaderboard_window import LeaderboardWindow
-        if not hasattr(self, 'lb_window') or not self.lb_window.winfo_exists():
-            self.lb_window = LeaderboardWindow(self)
-        else:
-            self.lb_window.focus()
+    def show_benchmark_view(self, view_name: str) -> None:
+        if self.bench_view_var.get() != view_name:
+            self.bench_view_var.set(view_name)
+        views = {
+            "Run log": self.bench_log,
+            "Online ranking": self.bench_online_ranking,
+        }
+        view = views.get(view_name, self.bench_log)
+        view.tkraise()
+        if view_name == "Online ranking":
+            self._load_online_benchmark_ranking()
+
+    def _clear_benchmark_view(self, view) -> None:
+        for widget in view.winfo_children():
+            widget.destroy()
+
+    def _load_online_benchmark_ranking(self) -> None:
+        self._clear_benchmark_view(self.bench_online_ranking)
+        loading = ctk.CTkLabel(self.bench_online_ranking, text="Loading online ranking...", text_color=COLORS["muted"])
+        loading.pack(anchor="w", padx=12, pady=12)
+
+        def load() -> None:
+            from ..services.leaderboard_service import leaderboard_service
+            rows = leaderboard_service.fetch_configurations(limit=50)
+            error = leaderboard_service.last_error
+            self._dispatch_ui(self._render_online_benchmark_ranking, rows, error)
+
+        threading.Thread(target=load, daemon=True, name="benchmark-ranking").start()
+
+    def _render_online_benchmark_ranking(self, rows, error: Optional[str]) -> None:
+        if self.bench_view_var.get() != "Online ranking":
+            return
+        self._clear_benchmark_view(self.bench_online_ranking)
+        if error:
+            ctk.CTkLabel(self.bench_online_ranking, text=f"Online ranking unavailable: {error}", text_color=COLORS["muted"]).pack(anchor="w", padx=12, pady=12)
+            return
+        if not rows:
+            ctk.CTkLabel(self.bench_online_ranking, text="No online benchmark results yet.", text_color=COLORS["muted"]).pack(anchor="w", padx=12, pady=12)
+            return
+        for index, row_data in enumerate(rows, start=1):
+            total = row_data.get("best_total_time") or row_data.get("total_time")
+            score = f"{total:.1f}s" if isinstance(total, (int, float)) else "-"
+            row = ctk.CTkFrame(self.bench_online_ranking, fg_color="transparent", corner_radius=0)
+            row.pack(fill="x", padx=10, pady=3)
+            ctk.CTkLabel(row, text=f"{index}. {row_data.get('cpu', 'Unknown CPU')}", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", fill="x", expand=True)
+            ctk.CTkLabel(row, text=score, text_color=COLORS["accent"], font=ctk.CTkFont(size=12, weight="bold")).pack(side="right")
+            ctk.CTkLabel(self.bench_online_ranking, text=str(row_data.get("storage", "Unknown storage")), anchor="w", font=ctk.CTkFont(size=11), text_color=COLORS["muted"]).pack(fill="x", padx=10)
 
     def update_favorites_combobox(self):
-        favorites = self.history_store.get_favorites()
-        values = [f"{f.get('name', 'Unknown')} ({f.get('ip', 'Unknown')})" for f in favorites]
-        self.ip_entry.configure(values=values)
+        """Compatibility hook retained after replacing the address dropdown."""
+        return None
+
+    def set_address(self, value: str) -> None:
+        state = self.ip_entry.cget("state")
+        self.ip_entry.configure(state="normal")
+        self.ip_entry.delete(0, "end")
+        self.ip_entry.insert(0, value)
+        self.ip_entry.configure(state=state)
 
     def refresh_history_ui(self):
         for widget in self.history_scroll.winfo_children():
@@ -317,6 +903,7 @@ class MainWindow(ctk.CTk):
         history_items = sorted(history_items, key=lambda x: x.get("added_at", 0), reverse=True)
         favorites = self.history_store.get_favorites()
 
+        visible_items = []
         for item in history_items:
             ip = item['ip']
             display_name = item.get('name', 'Rust Server')
@@ -331,65 +918,86 @@ class MainWindow(ctk.CTk):
             if show_favs_only and not is_fav:
                 continue
 
-            frame = ctk.CTkFrame(self.history_scroll, fg_color="transparent")
-            frame.pack(fill="x", pady=2)
+            visible_items.append((item, is_fav))
 
-            short_name = display_name
-            if len(short_name) > 30:
-                short_name = short_name[:27] + "..."
+        # Keep favorites at the top, followed by regular recent servers.
+        visible_items.sort(key=lambda entry: (not entry[1], -entry[0].get("added_at", 0)))
+        section = None
+        for item, is_fav in visible_items:
+            ip = item['ip']
+            display_name = item.get('name', 'Rust Server')
+            is_armed = (self.history_store.get_armed_server() == ip)
 
-            btn_text = f"{ip}\n({short_name})"
-            btn = ctk.CTkButton(
-                frame,
-                text=btn_text,
-                fg_color="#3B8ED0" if is_armed else "#2b2b2b",
-                hover_color="#1F6AA5" if is_armed else "#3b3b3b",
-                text_color=("gray80", "white"),
-                command=lambda i=ip: self.select_history(i)
-            )
-            btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
-            btn.bind("<Double-Button-1>", lambda event, f=frame, b=btn, i=ip, n=display_name: self.start_inline_edit(f, b, i, n))
+            next_section = "FAVORITES" if is_fav else "RECENT SERVERS"
+            if next_section != section:
+                section = next_section
+                ctk.CTkLabel(
+                    self.history_scroll,
+                    text=section,
+                    anchor="w",
+                    font=ctk.CTkFont(size=11, weight="bold"),
+                    text_color=COLORS["accent"] if is_fav else COLORS["muted"],
+                ).pack(fill="x", padx=10, pady=(10, 5), anchor="w")
 
-            btn_font = ctk.CTkFont(family="Arial", size=14)
-            
-            arm_text = "⚡"
-            arm_color = "#3B8ED0" if is_armed else "#555555"
-            arm_btn = ctk.CTkButton(
-                frame,
-                text=arm_text,
-                width=28,
-                height=28,
-                font=btn_font,
-                fg_color=arm_color,
-                command=lambda i=ip: self.toggle_armed(i)
-            )
-            arm_btn.pack(side="left", padx=(0, 2))
+            frame = ctk.CTkFrame(self.history_scroll, height=52, corner_radius=0, fg_color="transparent")
+            frame.pack(fill="x", padx=4, pady=1)
+            frame.grid_propagate(False)
+            frame.grid_columnconfigure(1, weight=1)
 
-            fav_text = "⭐" if is_fav else "☆"
-            fav_color = "#FADA5E" if is_fav else "#555555" # Changed to yellow
             fav_btn = ctk.CTkButton(
                 frame,
-                text=fav_text,
-                width=28,
-                height=28,
-                font=btn_font,
-                fg_color=fav_color,
-                text_color="black" if is_fav else "white",
-                command=lambda i=ip, n=display_name: self.toggle_favorite(i, n)
+                text="",
+                image=self._icon_images["favorite"] if is_fav else self._icon_images["favorite_off"],
+                width=34,
+                height=34,
+                corner_radius=0,
+                fg_color="transparent",
+                hover_color=COLORS["surface_alt"],
+                command=lambda i=ip, n=display_name: self.toggle_favorite(i, n),
             )
-            fav_btn.pack(side="left", padx=(0, 2))
+            fav_btn.grid(row=0, column=0, padx=(0, 5), pady=8)
+            ToolTip(fav_btn, "Toggle favorite")
 
-            del_btn = ctk.CTkButton(
+            text_frame = ctk.CTkFrame(frame, fg_color="transparent")
+            text_frame.grid(row=0, column=1, sticky="ew", pady=5)
+            title = ctk.CTkLabel(text_frame, text=display_name[:38], anchor="w", font=ctk.CTkFont(size=14), text_color=COLORS["text"])
+            title.pack(fill="x", anchor="w")
+            endpoint = ctk.CTkLabel(text_frame, text=f"client.connect {ip}", anchor="w", font=ctk.CTkFont(size=11), text_color=COLORS["muted"])
+            endpoint.pack(fill="x", anchor="w")
+            for widget in (text_frame, title, endpoint):
+                widget.bind("<Button-1>", lambda event, i=ip: self.select_history(i))
+                widget.bind("<Double-Button-1>", lambda event, i=ip: self.edit_server_metadata(i))
+
+            arm_btn = ctk.CTkButton(
                 frame,
-                text="X",
-                width=28,
-                height=28,
-                font=btn_font,
-                fg_color="#C25A5A",
-                hover_color="#914141",
-                command=lambda i=ip: self.remove_from_history(i)
+                text="",
+                image=self._icon_images["armed"] if is_armed else self._icon_images["disarmed"],
+                width=34,
+                height=34,
+                corner_radius=0,
+                fg_color="transparent",
+                hover_color=COLORS["surface_alt"],
+                command=lambda i=ip: self.toggle_armed(i),
             )
-            del_btn.pack(side="right")
+            arm_btn.grid(row=0, column=2, padx=2, pady=8)
+            ToolTip(arm_btn, "Arm auto-reconnect")
+
+            go_btn = ctk.CTkButton(
+                frame,
+                text="",
+                image=self._icon_images["connect"],
+                width=34,
+                height=34,
+                corner_radius=2,
+                fg_color=COLORS["surface_alt"],
+                hover_color="#303030",
+                border_width=1,
+                border_color=COLORS["border"],
+                command=lambda i=ip: self._connect_history_server(i),
+            )
+            go_btn.grid(row=0, column=3, padx=(3, 0), pady=8)
+            ToolTip(go_btn, "Connect to server")
+            ctk.CTkFrame(self.history_scroll, height=1, corner_radius=0, fg_color="#2A2A2A").pack(fill="x", padx=8)
             
     def toggle_armed(self, ip_port: str):
         self.history_store.set_armed_server(ip_port)
@@ -397,11 +1005,84 @@ class MainWindow(ctk.CTk):
         # Ensure the armed server also gets selected in the combo box
         if self.history_store.get_armed_server() == ip_port:
             self.select_history(ip_port)
+        self._refresh_session_state_once()
+
+    def disarm_server(self):
+        armed = self.history_store.get_armed_server()
+        if not armed:
+            return
+        self.history_store.set_armed_server(armed)
+        self.refresh_history_ui()
+        self._refresh_session_state_once()
 
     def toggle_favorite(self, ip_port: str, name: str):
         self.history_store.toggle_favorite(ip_port, name)
         self.refresh_history_ui()
         self.update_favorites_combobox()
+
+    def edit_server_metadata(self, ip_port: str):
+        item = next((entry for entry in self.history_store.get_history() if entry.get("ip") == ip_port), None)
+        if not item:
+            return
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Server details")
+        dialog.geometry("460x300")
+        dialog.configure(fg_color=COLORS["canvas"])
+        dialog.transient(self)
+        dialog.grab_set()
+
+        ctk.CTkLabel(dialog, text=item.get("name", ip_port), font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=20, pady=(20, 8))
+        tags_entry = ctk.CTkEntry(dialog, placeholder_text="Tags separated by commas", fg_color=COLORS["surface_alt"])
+        tags_entry.insert(0, ", ".join(item.get("tags", [])))
+        tags_entry.pack(fill="x", padx=20, pady=6)
+        note_box = ctk.CTkTextbox(dialog, height=120, fg_color=COLORS["surface_alt"])
+        note_box.insert("1.0", item.get("note", ""))
+        note_box.pack(fill="both", expand=True, padx=20, pady=6)
+
+        def save_metadata():
+            tags = tags_entry.get().split(",")
+            self.history_store.update_server_metadata(ip_port, tags, note_box.get("1.0", "end-1c"))
+            dialog.destroy()
+            self.refresh_history_ui()
+
+        ctk.CTkButton(dialog, text="Save", command=save_metadata, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"]).pack(anchor="e", padx=20, pady=(4, 20))
+
+    def export_server_library(self):
+        from tkinter import filedialog, messagebox
+        import json
+
+        destination = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export server library",
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+        )
+        if not destination:
+            return
+        try:
+            with open(destination, "w", encoding="utf-8") as file:
+                json.dump(self.history_store.export_server_library(), file, ensure_ascii=False, indent=2)
+            messagebox.showinfo("Export complete", "Server library exported.", parent=self)
+        except OSError as error:
+            messagebox.showerror("Export failed", f"Unable to write the server library: {type(error).__name__}", parent=self)
+
+    def import_server_library(self):
+        from tkinter import filedialog, messagebox
+        import json
+
+        source = filedialog.askopenfilename(parent=self, title="Import server library", filetypes=[("JSON files", "*.json")])
+        if not source:
+            return
+        try:
+            with open(source, "r", encoding="utf-8") as file:
+                payload = json.load(file)
+            added, updated = self.history_store.import_server_library(payload)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            messagebox.showerror("Import failed", f"Invalid server library: {type(error).__name__}", parent=self)
+            return
+        self.refresh_history_ui()
+        self.update_favorites_combobox()
+        messagebox.showinfo("Import complete", f"Added: {added}\nUpdated: {updated}", parent=self)
 
     def remove_from_history(self, ip_port: str):
         self.history_store.remove_from_history(ip_port)
@@ -436,7 +1117,7 @@ class MainWindow(ctk.CTk):
                 
                 current_text = self.ip_entry.get()
                 if current_text.endswith(f"({ip})"):
-                    self.ip_entry.set(f"{new_name} ({ip})")
+                    self.set_address(f"{new_name} ({ip})")
                     
             self.refresh_history_ui()
 
@@ -448,22 +1129,24 @@ class MainWindow(ctk.CTk):
         return save_inline
 
     def select_history(self, ip_port: str):
-        self.ip_entry.set(ip_port)
+        self.set_address(ip_port)
+
+    def _connect_history_server(self, ip_port: str):
+        self.select_history(ip_port)
+        self._on_connect_btn_click()
 
     def get_target_ip(self) -> str:
         target = self.ip_entry.get().strip()
         if "(" in target and ")" in target:
             target = target.split("(")[-1].replace(")", "").strip()
+        if target.lower().startswith("client.connect "):
+            target = target.split(None, 1)[1].strip()
         return target
 
     def update_entry(self, text: str):
-        state = self.ip_entry.cget("state")
-        self.ip_entry.configure(state="normal")
-        self.ip_entry.set(text)
-        self.ip_entry.configure(state=state)
+        self.set_address(text)
 
     def log(self, msg: str, color: Optional[str] = None):
-        import time
         from ..core.logger import app_logger
         app_logger.info(msg)
         ts = time.strftime("[%H:%M:%S]")
@@ -482,7 +1165,13 @@ class MainWindow(ctk.CTk):
         lines = int(self.log_textbox.index('end-1c').split('.')[0])
         if lines > 500:
             self.log_textbox.delete('1.0', '2.0')
-        self.log_textbox.see("end")
+        if self.auto_scroll.get():
+            self.log_textbox.see("end")
+        self.log_textbox.configure(state="disabled")
+
+    def clear_log(self):
+        self.log_textbox.configure(state="normal")
+        self.log_textbox.delete("1.0", "end")
         self.log_textbox.configure(state="disabled")
 
     def log_safe(self, msg: str, color: Optional[str] = None):
@@ -529,6 +1218,13 @@ class MainWindow(ctk.CTk):
         self.after(0, self.shutdown)
 
     def shutdown(self):
+        self._ui_dispatch_closing = True
+        if self._ui_dispatch_after_id is not None:
+            self.after_cancel(self._ui_dispatch_after_id)
+        if self._search_timer is not None:
+            self.after_cancel(self._search_timer)
+        if hasattr(self, "_session_state_after_id"):
+            self.after_cancel(self._session_state_after_id)
         try:
             self.destroy()
         except Exception:

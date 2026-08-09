@@ -20,18 +20,25 @@ class SwarmService:
         
         self.is_connected = False
         self.is_enabled = False
+        self._stop_event = threading.Event()
+        self._reconnect_lock = threading.Lock()
+        self._reconnect_pending = False
         
         self.current_room: Optional[str] = None
         self.current_ip_port: Optional[str] = None
         self.presence_keys = set()
         
-        secret = os.environ.get('SWARM_SECRET', b'RustAutoConnect_Swarm_Secret_v1')
+        secret = os.environ.get('SWARM_SECRET', '')
         if isinstance(secret, str):
             secret = secret.encode('utf-8')
         self._secret = secret
         
         import uuid
         self.client_id = str(uuid.uuid4())
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.supabase_key and self._secret)
         
     def _sign(self, text: str) -> str:
         secret = os.environ.get('SWARM_SECRET', self._secret)
@@ -50,11 +57,14 @@ class SwarmService:
                 return res.getcode() == 200
         except Exception as e:
             from ..core.logger import app_logger
-            app_logger.error(f"Swarm connection test failed: {e}")
+            app_logger.error(f"Swarm connection test failed: {type(e).__name__}")
             return False
 
     def start(self):
-        if not self.is_enabled:
+        if not self.is_enabled or not self.is_configured:
+            if self.is_enabled and not self.is_configured:
+                from ..core.logger import app_logger
+                app_logger.warning("Swarm is enabled but credentials are not configured.")
             return
         if self.ws_thread and self.ws_thread.is_alive():
             return
@@ -69,10 +79,12 @@ class SwarmService:
             on_close=self._on_close
         )
         self.ws_thread = threading.Thread(target=self.ws.run_forever, daemon=True)
+        self._stop_event.clear()
         self.ws_thread.start()
         
     def stop(self):
         self.is_enabled = False
+        self._stop_event.set()
         if self.ws:
             self.ws.close()
             
@@ -97,8 +109,9 @@ class SwarmService:
             }
             try:
                 self.ws.send(json.dumps(payload))
-            except:
-                pass
+            except websocket.WebSocketException as error:
+                from ..core.logger import app_logger
+                app_logger.warning(f"Failed to leave swarm room: {type(error).__name__}")
         self.current_room = None
         self.current_ip_port = None
         if self.on_presence_update:
@@ -133,10 +146,12 @@ class SwarmService:
             self.ws.send(json.dumps(track_msg))
         except Exception as e:
             from ..core.logger import app_logger
-            app_logger.error(f"Failed to join room: {e}")
+            app_logger.error(f"Failed to join room: {type(e).__name__}")
             
     def _on_open(self, ws):
         self.is_connected = True
+        with self._reconnect_lock:
+            self._reconnect_pending = False
         
         # Start heartbeat loop required by Phoenix/Supabase
         def heartbeat_loop(current_ws):
@@ -145,7 +160,8 @@ class SwarmService:
             while self.is_connected and self.ws:
                 if self.ws is not current_ws:
                     break
-                time.sleep(25)
+                if self._stop_event.wait(25):
+                    break
                 if not self.is_connected or self.ws is not current_ws:
                     break
                 try:
@@ -156,7 +172,7 @@ class SwarmService:
                         "ref": str(ref)
                     }))
                     ref += 1
-                except:
+                except websocket.WebSocketException:
                     break
                         
         threading.Thread(target=heartbeat_loop, args=(ws,), daemon=True).start()
@@ -196,17 +212,23 @@ class SwarmService:
                 
         except Exception as e:
             from ..core.logger import app_logger
-            app_logger.error(f"Swarm message error: {e}")
+            app_logger.error(f"Swarm message error: {type(e).__name__}")
             
     def _on_error(self, ws, error):
-        pass
+        from ..core.logger import app_logger
+        app_logger.warning(f"Swarm WebSocket error: {type(error).__name__}")
         
     def _on_close(self, ws, status_code, msg):
         self.is_connected = False
-        if self.is_enabled:
+        if self.is_enabled and not self._stop_event.is_set():
             import time
+            with self._reconnect_lock:
+                if self._reconnect_pending:
+                    return
+                self._reconnect_pending = True
             def reconnect():
-                time.sleep(5)
+                if self._stop_event.wait(5):
+                    return
                 if self.is_enabled and not self.is_connected:
                     self.start()
             threading.Thread(target=reconnect, daemon=True).start()
@@ -231,6 +253,6 @@ class SwarmService:
             self.ws.send(json.dumps(payload))
         except Exception as e:
             from ..core.logger import app_logger
-            app_logger.error(f"Failed to broadcast: {e}")
+            app_logger.error(f"Failed to broadcast: {type(e).__name__}")
 
 swarm_service = SwarmService()

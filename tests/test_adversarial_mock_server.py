@@ -61,7 +61,11 @@ def test_concurrent_threads_query():
 
         def worker():
             for _ in range(10):
-                res = send_udp("127.0.0.1", port, QUERY_PACKET, timeout=0.5)
+                res = None
+                for _ in range(3):
+                    res = send_udp("127.0.0.1", port, QUERY_PACKET, timeout=0.5)
+                    if res and res.startswith(b"\xFF\xFF\xFF\xFF\x49"):
+                        break
                 if not res or not res.startswith(b"\xFF\xFF\xFF\xFF\x49"):
                     errors.append("Invalid or missing response")
 

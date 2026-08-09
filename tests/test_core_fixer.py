@@ -47,14 +47,11 @@ def test_history_store_flush_fsync(tmp_path, monkeypatch):
         assert mock_fsync.called
 
 
-def test_a2s_client_wsaeconnreset_sleep():
+def test_a2s_client_connection_reset_returns_offline_without_delay():
     client = A2SClient(timeout=0.1, offsets=(0,))
     with patch("a2s.info", side_effect=ConnectionResetError("WSAECONNRESET")):
-        with patch("time.sleep") as mock_sleep:
-            is_alive, name, max_players, port = client.check_server_alive("127.0.0.1", 28015)
-            assert not is_alive
-            assert mock_sleep.called
-            mock_sleep.assert_called_with(0.5)
+        is_alive, name, max_players, port = client.check_server_alive("127.0.0.1", 28015)
+        assert (is_alive, name, max_players, port) == (False, "", 0, 28015)
 
 
 def test_logger_appdata_path(monkeypatch, tmp_path):

@@ -37,6 +37,17 @@ class ProcessMonitor:
                     continue
             
             return False
+
+    def get_rust_pids(self) -> set[int]:
+        """Return the current Rust client PIDs without changing cached state."""
+        pids = set()
+        for process in psutil.process_iter(['name']):
+            try:
+                if process.info['name'] == 'RustClient.exe':
+                    pids.add(process.pid)
+            except (psutil.Error, OSError):
+                continue
+        return pids
         
     def force_kill_rust(self):
         with self._lock:
@@ -46,5 +57,15 @@ class ProcessMonitor:
                 from ..core.logger import app_logger
                 app_logger.error(f"Failed to kill Rust: {e}")
             self.cached_pid = None
+
+    def force_kill_pid(self, pid: int):
+        with self._lock:
+            try:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], timeout=5.0, creationflags=subprocess.CREATE_NO_WINDOW)
+            except (OSError, subprocess.SubprocessError) as error:
+                from ..core.logger import app_logger
+                app_logger.error(f"Failed to kill Rust PID {pid}: {error}")
+            if self.cached_pid == pid:
+                self.cached_pid = None
 
 process_monitor = ProcessMonitor()
