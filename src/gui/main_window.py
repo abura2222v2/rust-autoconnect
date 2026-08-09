@@ -35,6 +35,7 @@ BENCH_CONTROLS_DEFAULT_WIDTH = 270
 BENCH_CONTROLS_MIN_WIDTH = 220
 BENCH_LOG_MIN_WIDTH = 360
 SPLITTER_WIDTH = 6
+SPLIT_FRAME_INTERVAL_MS = 16
 
 
 def _draw_icon(kind: str, color: str, size: int = 32) -> Image.Image:
@@ -286,7 +287,7 @@ class MainWindow(ctk.CTk):
         self.armed_status_label.grid(row=0, column=10, padx=(16, 0), pady=8, sticky="e")
 
         self.home_content = ctk.CTkFrame(self.home_frame, corner_radius=0, fg_color="transparent")
-        self.home_content.grid(row=3, column=0, padx=0, pady=(0, 0), sticky="nsw")
+        self.home_content.grid(row=3, column=0, padx=0, pady=(0, 0), sticky="nsew")
         self.home_content.grid_propagate(False)
         self.home_content.grid_columnconfigure(0, minsize=HOME_HISTORY_DEFAULT_WIDTH)
         self.home_content.grid_columnconfigure(1, minsize=SPLITTER_WIDTH)
@@ -327,9 +328,6 @@ class MainWindow(ctk.CTk):
         self.home_splitter.bind("<B1-Motion>", self._resize_home_panels)
         self.home_splitter.bind("<ButtonRelease-1>", self._finish_home_resize)
         self.home_splitter.bind("<Double-Button-1>", self._reset_home_split)
-        self.home_splitter.bind("<Enter>", lambda _event: self._set_splitter_hover(self.home_splitter, True))
-        self.home_splitter.bind("<Leave>", lambda _event: self._set_splitter_hover(self.home_splitter, False))
-        ToolTip(self.home_splitter, "Drag to resize panels. Double-click to reset.")
 
         self.connection_panel = ctk.CTkFrame(self.home_content, corner_radius=0, fg_color=COLORS["surface"], border_width=1, border_color=COLORS["border"])
         self.connection_panel.grid(row=0, column=2, sticky="nsew")
@@ -365,7 +363,7 @@ class MainWindow(ctk.CTk):
         self.bench_subtitle = ctk.CTkLabel(self.bench_frame, text="Run a local test with guarded configuration restore.", text_color=COLORS["muted"], font=ctk.CTkFont(size=13))
         self.bench_subtitle.grid(row=1, column=0, padx=24, pady=(0, 12), sticky="w")
         self.bench_content = ctk.CTkFrame(self.bench_frame, fg_color="transparent")
-        self.bench_content.grid(row=2, column=0, padx=20, pady=(0, 0), sticky="nsw")
+        self.bench_content.grid(row=2, column=0, padx=20, pady=(0, 0), sticky="nsew")
         self.bench_content.grid_propagate(False)
         self.bench_content.grid_columnconfigure(0, minsize=BENCH_CONTROLS_DEFAULT_WIDTH)
         self.bench_content.grid_columnconfigure(1, minsize=SPLITTER_WIDTH)
@@ -389,9 +387,6 @@ class MainWindow(ctk.CTk):
         self.bench_splitter.bind("<B1-Motion>", self._resize_bench_panels)
         self.bench_splitter.bind("<ButtonRelease-1>", self._finish_bench_resize)
         self.bench_splitter.bind("<Double-Button-1>", self._reset_bench_split)
-        self.bench_splitter.bind("<Enter>", lambda _event: self._set_splitter_hover(self.bench_splitter, True))
-        self.bench_splitter.bind("<Leave>", lambda _event: self._set_splitter_hover(self.bench_splitter, False))
-        ToolTip(self.bench_splitter, "Drag to resize panels. Double-click to reset.")
         self.bench_results_panel = ctk.CTkFrame(self.bench_content, fg_color=COLORS["surface"], corner_radius=0, border_width=1, border_color=COLORS["border"])
         self.bench_results_panel.grid(row=0, column=2, sticky="nsew")
         self.bench_results_panel.grid_columnconfigure(0, weight=1)
@@ -522,7 +517,7 @@ class MainWindow(ctk.CTk):
     def _start_home_resize(self, event) -> None:
         self._split_drag_origin_x = event.x_root
         self._split_drag_origin_width = self._history_width
-        self._set_splitter_hover(self.home_splitter, True)
+        self._set_splitter_drag_active(self.home_splitter, True)
 
     def _resize_home_panels(self, event) -> None:
         if self._split_drag_origin_x is None or self._split_drag_origin_width is None:
@@ -537,7 +532,7 @@ class MainWindow(ctk.CTk):
         self._flush_pending_split_update()
         self._split_drag_origin_x = None
         self._split_drag_origin_width = None
-        self._set_splitter_hover(self.home_splitter, False)
+        self._set_splitter_drag_active(self.home_splitter, False)
 
     def _reset_home_split(self, _event) -> None:
         self._history_width = HOME_HISTORY_DEFAULT_WIDTH
@@ -573,7 +568,7 @@ class MainWindow(ctk.CTk):
     def _start_bench_resize(self, event) -> None:
         self._split_drag_origin_x = event.x_root
         self._split_drag_origin_width = self._bench_controls_width
-        self._set_splitter_hover(self.bench_splitter, True)
+        self._set_splitter_drag_active(self.bench_splitter, True)
 
     def _resize_bench_panels(self, event) -> None:
         if self._split_drag_origin_x is None or self._split_drag_origin_width is None:
@@ -588,16 +583,16 @@ class MainWindow(ctk.CTk):
         self._flush_pending_split_update()
         self._split_drag_origin_x = None
         self._split_drag_origin_width = None
-        self._set_splitter_hover(self.bench_splitter, False)
+        self._set_splitter_drag_active(self.bench_splitter, False)
 
     def _reset_bench_split(self, _event) -> None:
         self._bench_controls_width = BENCH_CONTROLS_DEFAULT_WIDTH
         self._apply_bench_split(self.bench_content.winfo_width())
 
     @staticmethod
-    def _set_splitter_hover(splitter, is_hovered: bool) -> None:
-        """Keep resize feedback visible without leaving a bright drag artifact."""
-        splitter.configure(fg_color="#303030" if is_hovered else COLORS["canvas"])
+    def _set_splitter_drag_active(splitter, is_active: bool) -> None:
+        """Show a stable resize state without reacting to pointer enter/leave events."""
+        splitter.configure(fg_color=COLORS["border"] if is_active else COLORS["canvas"])
 
     @staticmethod
     def _scaled_drag_delta(widget, delta: int) -> int:
@@ -607,7 +602,7 @@ class MainWindow(ctk.CTk):
 
     def _schedule_split_update(self) -> None:
         if self._split_animation_after_id is None:
-            self._split_animation_after_id = self.after(33, self._flush_split_update)
+            self._split_animation_after_id = self.after(SPLIT_FRAME_INTERVAL_MS, self._flush_split_update)
 
     def _flush_split_update(self) -> None:
         self._split_animation_after_id = None

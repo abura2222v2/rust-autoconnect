@@ -227,6 +227,30 @@ def test_splitters_clamp_and_reset_at_constrained_widths(temp_env):
         app.after_cancel(app._search_timer)
     app.destroy()
 
+
+def test_splitter_drag_does_not_change_geometry_or_install_hover_handlers(temp_env):
+    store = HistoryStore()
+    app = MainWindow(history_mgr=store)
+    app.withdraw()
+
+    home_width = app.home_splitter.cget("width")
+    bench_width = app.bench_splitter.cget("width")
+
+    app._set_splitter_drag_active(app.home_splitter, True)
+    app._set_splitter_drag_active(app.home_splitter, False)
+    app._set_splitter_drag_active(app.bench_splitter, True)
+    app._set_splitter_drag_active(app.bench_splitter, False)
+
+    assert app.home_splitter.cget("width") == home_width
+    assert app.bench_splitter.cget("width") == bench_width
+    assert app.home_splitter.bind("<Enter>") in (None, "")
+    assert app.bench_splitter.bind("<Leave>") in (None, "")
+
+    if app._search_timer:
+        app.after_cancel(app._search_timer)
+    app.destroy()
+
+
 def test_log_textbox_truncation(temp_env):
     store = HistoryStore()
     app = MainWindow(history_mgr=store)
