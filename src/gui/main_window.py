@@ -462,21 +462,31 @@ class MainWindow(ctk.CTk):
         self.ip_entry.set(text)
         self.ip_entry.configure(state=state)
 
-    def log(self, msg: str):
+    def log(self, msg: str, color: Optional[str] = None):
         import time
         from ..core.logger import app_logger
         app_logger.info(msg)
         ts = time.strftime("[%H:%M:%S]")
         self.log_textbox.configure(state="normal")
-        self.log_textbox.insert("end", f"{ts} {msg}\n")
+        
+        # Insert time timestamp normally
+        self.log_textbox.insert("end", f"{ts} ")
+        
+        if color:
+            tag_name = f"color_{color.replace('#', '')}"
+            self.log_textbox.tag_config(tag_name, foreground=color)
+            self.log_textbox.insert("end", f"{msg}\n", tag_name)
+        else:
+            self.log_textbox.insert("end", f"{msg}\n")
+            
         lines = int(self.log_textbox.index('end-1c').split('.')[0])
         if lines > 500:
             self.log_textbox.delete('1.0', '2.0')
         self.log_textbox.see("end")
         self.log_textbox.configure(state="disabled")
 
-    def log_safe(self, msg: str):
-        self.after(0, lambda: self.log(msg))
+    def log_safe(self, msg: str, color: Optional[str] = None):
+        self.after(0, lambda: self.log(msg, color=color))
 
     def create_tray_image(self):
         image = Image.new('RGB', (64, 64), color=(59, 142, 208))
@@ -498,7 +508,7 @@ class MainWindow(ctk.CTk):
                 pystray.MenuItem("Quit", self.quit_window)
             )
             self.tray_icon = pystray.Icon("RustAutoConnect", image, "Rust AutoConnect", menu)
-            threading.Thread(target=self.tray_icon.run, daemon=True).start()
+            self.tray_icon.run_detached()
 
     def show_window(self, icon=None, item=None):
         if self.tray_icon:

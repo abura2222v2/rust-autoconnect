@@ -50,6 +50,7 @@ class AppController(MainWindow):
         self.swarm_service = swarm_service
         self.swarm_service.is_enabled = self.history_store.get_swarm_enabled()
         self.swarm_service.on_swarm_event = self._on_swarm_event
+        self.swarm_service.on_presence_update = self._on_swarm_presence
         if self.swarm_service.is_enabled:
             self.swarm_service.start()
             
@@ -114,6 +115,13 @@ class AppController(MainWindow):
         self._poll_stop_event.clear()
         self.is_polling = True
         self.is_reconnecting = False
+        
+        # Reset UI log spam flags
+        self._ui_logged_ans = False
+        self._ui_logged_wait = False
+        self._ui_logged_err = False
+        
+        self.swarm_service.join_room(target_str)
 
         threading.Thread(target=self.run_logic, args=(target_str,), daemon=True).start()
 
@@ -123,6 +131,8 @@ class AppController(MainWindow):
         if self.log_watcher:
             self.log_watcher.stop()
             self.log_watcher = None
+            
+        self.swarm_service.leave_room()
 
         self.connect_btn.configure(
             text=self.t("start"), fg_color=['#3B8ED0', '#1F6AA5'], hover_color=['#36719F', '#144870']
@@ -198,13 +208,26 @@ class AppController(MainWindow):
                         if is_alive:
                             if max_players > 0:
                                 success_count += 1
-                                self.log_safe(self.t("poll_ans", name=server_name))
+                                from .core.logger import app_logger
+                                app_logger.info(self.t("poll_ans", name=server_name))
+                                # Only log to UI once
+                                if not getattr(self, '_ui_logged_ans', False):
+                                    self.log_safe(self.t("poll_ans", name=server_name))
+                                    self._ui_logged_ans = True
                             else:
                                 success_count = 0
-                                self.log_safe(self.t("wait_ready"))
+                                from .core.logger import app_logger
+                                app_logger.info(self.t("wait_ready"))
+                                if not getattr(self, '_ui_logged_wait', False):
+                                    self.log_safe(self.t("wait_ready"))
+                                    self._ui_logged_wait = True
                         else:
                             success_count = 0
-                            self.log_safe(self.t("poll_err", sec=config.POLL_INTERVAL))
+                            from .core.logger import app_logger
+                            app_logger.info(self.t("poll_err", sec=config.POLL_INTERVAL))
+                            if not getattr(self, '_ui_logged_err', False):
+                                self.log_safe(self.t("poll_err", sec=config.POLL_INTERVAL))
+                                self._ui_logged_err = True
 
                         if success_count >= 2:
                             self.log_safe(self.t("stable"))
@@ -243,10 +266,14 @@ class AppController(MainWindow):
             
         target = self.get_target_ip()
         if target == ip_port:
-            self.log_safe("[🚀] Swarm Connect: Another player joined the server! Instant connect...")
+            self.log_safe("[🚀] Swarm Connect: Другой игрок зашел на сервер! Моментальное подключение...")
             self.is_polling = False # Stop a2s polling loop
             self.launch_game(target)
             self.start_log_monitor(target)
+            
+    def _on_swarm_presence(self, count: int):
+        if count > 0:
+            self.after(0, lambda: self.log(f"[🔥] Swarm: {count} чел. ждут этот сервер вместе с вами", color="#2ECC71"))
         
     def _load_hardware(self):
         hw_cpu = self.hardware_service.get_cpu_info()
@@ -467,8 +494,9 @@ class AppController(MainWindow):
         def bench_event(event):
             nonlocal spawn_reached, menu_reached, protocol_mismatch, detected_client_protocol
             nonlocal time_to_menu, demo_start_time
-            # Log the game output so we can see why it's failing
-            self.log_bench(f"[GAME] {event}")
+            # Log the game output to file only, keep UI clean
+            from .core.logger import app_logger
+            app_logger.debug(f"[GAME] {event}")
             
             if "Spawning" in event or "LocalPlayer" in event or "Client connected" in event:
                 spawn_reached = True
@@ -644,7 +672,9 @@ class AppController(MainWindow):
         self.is_connected = False
         
         def handle_event(event):
-            self.log_safe(f"[*] Game log: {event}")
+            from .core.logger import app_logger
+            app_logger.info(f"[*] Game log: {event}")
+            # Do NOT spam the UI with every game log line
             if not getattr(self, 'is_connected', False) and ("Client connected" in event or "Spawning" in event):
                 self.is_connected = True
                 conn_time = round(time.time() - getattr(self, 'connection_start_time', time.time()), 1)

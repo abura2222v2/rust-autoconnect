@@ -40,7 +40,6 @@ class LeaderboardService:
             
             # Deduplicate by client_id (UUID format username) - keep only the best (fastest) score
             user_best = {}
-            deduped_data = []
             import re
             uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
             
@@ -49,10 +48,8 @@ class LeaderboardService:
                 if uuid_pattern.match(uname):
                     if uname not in user_best or row.get('total_time', 999.0) < user_best[uname].get('total_time', 999.0):
                         user_best[uname] = row
-                else:
-                    deduped_data.append(row)
             
-            deduped_data.extend(user_best.values())
+            deduped_data = list(user_best.values())
             return deduped_data
         except Exception as e:
             print(e)
@@ -71,7 +68,8 @@ class LeaderboardService:
             }
             
             # Delete previous scores for this client_id
-            del_url = f"{self.url}?username=eq.{name}"
+            safe_name = urllib.parse.quote(name)
+            del_url = f"{self.url}?username=eq.{safe_name}"
             del_req = urllib.request.Request(del_url, method="DELETE")
             del_req.add_header("apikey", self.key)
             del_req.add_header("Authorization", f"Bearer {self.key}")

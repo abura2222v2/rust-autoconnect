@@ -28,13 +28,13 @@ class ProcessMonitor:
             self._last_scan_time = current_time
             
             # Slow path: iterate processes
-            try:
-                for p in psutil.process_iter(['name']):
+            for p in psutil.process_iter(['name']):
+                try:
                     if p.info['name'] == 'RustClient.exe':
                         self.cached_pid = p.pid
                         return True
-            except Exception:
-                pass
+                except Exception:
+                    continue
             
             return False
         

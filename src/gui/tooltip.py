@@ -30,6 +30,8 @@ class ToolTip(object):
             self.widget.after_cancel(id)
 
     def showtip(self, event=None):
+        if self.tw:
+            return
         x = y = 0
         x += self.widget.winfo_rootx() + 25
         y += self.widget.winfo_rooty() + 25

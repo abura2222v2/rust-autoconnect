@@ -29,13 +29,17 @@ class LogWatcher:
         self.is_monitoring = False
         self._thread = None
         self._lock = threading.Lock()
+        self._thread_finished = threading.Event()
+        self._thread_finished.set()
         self._last_err = ""
 
     def start(self):
         with self._lock:
             if self.is_monitoring:
                 return
+            self._thread_finished.wait()
             self.is_monitoring = True
+            self._thread_finished.clear()
             self._thread = threading.Thread(target=self._watch_loop, daemon=True)
             self._thread.start()
 
@@ -118,3 +122,5 @@ class LogWatcher:
                         self.on_error(err_str)
                     self._last_err = err_str
                 time.sleep(1.0)
+        
+        self._thread_finished.set()

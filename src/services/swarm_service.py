@@ -9,21 +9,29 @@ from ..core.config import config
 
 class SwarmService:
     def __init__(self):
-        self.supabase_ws_url = "wss://eznuyydoanefceqmqxqi.supabase.co/realtime/v1/websocket"
-        self.supabase_rest_url = "https://eznuyydoanefceqmqxqi.supabase.co/rest/v1/swarm_events"
-        self.supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6bnV5eWRvYW5lZmNlcW1xeHFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxNzAyNDgsImV4cCI6MjEwMTc0NjI0OH0.nCxZbqr3m0r242kUBY3RSpF_iwh7vRtBw_nVTxwe-tI"
+        self.supabase_ws_url = os.environ.get('SUPABASE_WS_URL', "wss://eznuyydoanefceqmqxqi.supabase.co/realtime/v1/websocket")
+        self.supabase_key = os.environ.get('SUPABASE_KEY', "")
         
         self.ws: Optional[websocket.WebSocketApp] = None
         self.ws_thread: Optional[threading.Thread] = None
         
         self.on_swarm_event: Optional[Callable[[str], None]] = None
+        self.on_presence_update: Optional[Callable[[int], None]] = None
+        
         self.is_connected = False
         self.is_enabled = False
         
-        secret = os.environ.get('SWARM_SECRET', b'default')
+        self.current_room: Optional[str] = None
+        self.current_ip_port: Optional[str] = None
+        self.presence_keys = set()
+        
+        secret = os.environ.get('SWARM_SECRET', b'RustAutoConnect_Swarm_Secret_v1')
         if isinstance(secret, str):
             secret = secret.encode('utf-8')
         self._secret = secret
+        
+        import uuid
+        self.client_id = str(uuid.uuid4())
         
     def _sign(self, text: str) -> str:
         secret = os.environ.get('SWARM_SECRET', self._secret)
@@ -35,7 +43,9 @@ class SwarmService:
         """Ping Supabase REST endpoint to verify connection."""
         import urllib.request
         try:
-            req = urllib.request.Request(f"{self.supabase_rest_url}?limit=1", headers={"apikey": self.supabase_key, "Authorization": f"Bearer {self.supabase_key}"})
+            # We ping the benchmarks table to test connection since we know it exists
+            test_url = "https://eznuyydoanefceqmqxqi.supabase.co/rest/v1/benchmarks?limit=1"
+            req = urllib.request.Request(test_url, headers={"apikey": self.supabase_key, "Authorization": f"Bearer {self.supabase_key}"})
             with urllib.request.urlopen(req, timeout=2.0) as res:
                 return res.getcode() == 200
         except Exception as e:
@@ -66,17 +76,76 @@ class SwarmService:
         if self.ws:
             self.ws.close()
             
+    def join_room(self, ip_port: str):
+        if not self.is_enabled:
+            return
+            
+        self.current_ip_port = ip_port
+        room_name = f"realtime:room_{ip_port.replace('.', '_').replace(':', '_')}"
+        self.current_room = room_name
+        
+        if self.is_connected and self.ws:
+            self._send_join(room_name)
+            
+    def leave_room(self):
+        if self.is_connected and self.ws and self.current_room:
+            payload = {
+                "topic": self.current_room,
+                "event": "phx_leave",
+                "payload": {},
+                "ref": "leave"
+            }
+            try:
+                self.ws.send(json.dumps(payload))
+            except:
+                pass
+        self.current_room = None
+        self.current_ip_port = None
+        if self.on_presence_update:
+            self.on_presence_update(0)
+            
+    def _send_join(self, room_name: str):
+        payload = {
+            "topic": room_name,
+            "event": "phx_join",
+            "payload": {
+                "config": {
+                    "broadcast": { "ack": False },
+                    "presence": { "key": self.client_id }
+                }
+            },
+            "ref": "join"
+        }
+        try:
+            self.ws.send(json.dumps(payload))
+            
+            # Send track event for Presence
+            track_msg = {
+                "topic": room_name,
+                "event": "presence",
+                "payload": {
+                    "type": "presence",
+                    "event": "track",
+                    "payload": {"status": "waiting"}
+                },
+                "ref": "track"
+            }
+            self.ws.send(json.dumps(track_msg))
+        except Exception as e:
+            from ..core.logger import app_logger
+            app_logger.error(f"Failed to join room: {e}")
+            
     def _on_open(self, ws):
         self.is_connected = True
         
         # Start heartbeat loop required by Phoenix/Supabase
         def heartbeat_loop(current_ws):
             import time
-            ref = 2
+            ref = 100
             while self.is_connected and self.ws:
                 if self.ws is not current_ws:
                     break
-                time.sleep(30)
+                time.sleep(25)
                 if not self.is_connected or self.ws is not current_ws:
                     break
                 try:
@@ -91,32 +160,43 @@ class SwarmService:
                     break
                         
         threading.Thread(target=heartbeat_loop, args=(ws,), daemon=True).start()
-        payload = {
-            "topic": "realtime:public:swarm_events",
-            "event": "phx_join",
-            "payload": {
-                "config": {
-                    "postgres_changes": [
-                        {"event": "INSERT", "schema": "public", "table": "swarm_events"}
-                    ]
-                }
-            },
-            "ref": "1"
-        }
-        ws.send(json.dumps(payload))
+        
+        if self.current_room:
+            self._send_join(self.current_room)
         
     def _on_message(self, ws, message):
         try:
             data = json.loads(message)
-            if data.get("event") == "INSERT" or (data.get("payload", {}).get("type") == "INSERT"):
-                record = data.get("payload", {}).get("record", {})
-                raw_ip = record.get("ip_port")
-                if raw_ip and self.on_swarm_event and "|" in raw_ip:
-                    ip_port, sig = raw_ip.rsplit("|", 1)
-                    if hmac.compare_digest(self._sign(ip_port), sig):
-                        self.on_swarm_event(ip_port)
-        except Exception:
-            pass
+            event = data.get("event")
+            
+            # Handle Broadcast
+            if event == "broadcast":
+                payload = data.get("payload", {})
+                if payload.get("event") == "server_connected":
+                    raw_ip = payload.get("payload", {}).get("ip_port")
+                    if raw_ip and self.on_swarm_event and "|" in raw_ip:
+                        ip_port, sig = raw_ip.rsplit("|", 1)
+                        if hmac.compare_digest(self._sign(ip_port), sig):
+                            if ip_port == self.current_ip_port:
+                                self.on_swarm_event(ip_port)
+                                
+            # Handle Presence
+            elif event == "presence_state":
+                state = data.get("payload", {})
+                self.presence_keys = set(state.keys())
+                if self.on_presence_update:
+                    self.on_presence_update(len(self.presence_keys))
+            elif event == "presence_diff":
+                joins = data.get("payload", {}).get("joins", {})
+                leaves = data.get("payload", {}).get("leaves", {})
+                self.presence_keys.update(joins.keys())
+                self.presence_keys.difference_update(leaves.keys())
+                if self.on_presence_update:
+                    self.on_presence_update(len(self.presence_keys))
+                
+        except Exception as e:
+            from ..core.logger import app_logger
+            app_logger.error(f"Swarm message error: {e}")
             
     def _on_error(self, ws, error):
         pass
@@ -132,24 +212,25 @@ class SwarmService:
             threading.Thread(target=reconnect, daemon=True).start()
         
     def broadcast_success(self, ip_port: str):
-        if not self.is_enabled:
+        if not self.is_enabled or not self.is_connected or not self.ws or not self.current_room:
             return
             
-        import urllib.request
         sig = self._sign(ip_port)
-        payload = {"ip_port": f"{ip_port}|{sig}"}
-        headers = {
-            "apikey": self.supabase_key,
-            "Authorization": f"Bearer {self.supabase_key}",
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
+        payload = {
+            "topic": self.current_room,
+            "event": "broadcast",
+            "payload": {
+                "type": "broadcast",
+                "event": "server_connected",
+                "payload": {"ip_port": f"{ip_port}|{sig}"}
+            },
+            "ref": "broadcast"
         }
         
         try:
-            req = urllib.request.Request(self.supabase_rest_url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=5) as res:
-                pass
-        except Exception:
-            pass
+            self.ws.send(json.dumps(payload))
+        except Exception as e:
+            from ..core.logger import app_logger
+            app_logger.error(f"Failed to broadcast: {e}")
 
 swarm_service = SwarmService()

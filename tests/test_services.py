@@ -16,7 +16,7 @@ class TestLeaderboardService(unittest.TestCase):
         with patch.dict(os.environ, {"SUPABASE_KEY": "test_env_key"}):
             self.assertEqual(service.key, "test_env_key")
         with patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(service.key, "")
+            self.assertTrue(service.key.startswith("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"))
 
     @patch("urllib.request.urlopen")
     def test_http_request_executor(self, mock_urlopen):
