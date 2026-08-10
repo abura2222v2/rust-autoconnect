@@ -1,5 +1,7 @@
 import os
 import asyncio
+import threading
+import concurrent.futures
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -23,21 +25,43 @@ class LogWatcher:
         self.target_log_path = target_log_path
         self.is_monitoring = False
         self._task: Optional[asyncio.Task] = None
-        self._stop_event = asyncio.Event()
+        self._stop_event = threading.Event()
+        self._task_future = None
         self._last_error = ""
 
-    def start(self) -> None:
+    def start(self, loop=None) -> None:
         if self.is_monitoring:
             return
         self._stop_event.clear()
         self.is_monitoring = True
-        self._task = asyncio.create_task(self._watch_loop(), name="rust-log-watcher")
+        if loop is None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                pass
+        if loop is not None:
+            try:
+                running_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                running_loop = None
+            if loop is running_loop:
+                self._task = loop.create_task(self._watch_loop(), name="rust-log-watcher")
+            else:
+                self._task_future = asyncio.run_coroutine_threadsafe(self._watch_loop(), loop)
+        else:
+            raise RuntimeError("LogWatcher requires an event loop.")
 
     def stop(self) -> None:
         self.is_monitoring = False
         self._stop_event.set()
         if self._task:
-            self._task.cancel()
+            loop = self._task.get_loop()
+            if loop.is_closed():
+                pass
+            else:
+                loop.call_soon_threadsafe(self._task.cancel)
+        if getattr(self, '_task_future', None):
+            self._task_future.cancel()
 
     def _resolve_log_path(self) -> Path:
         if self.target_log_path:
@@ -65,10 +89,9 @@ class LogWatcher:
                 if not log_path or not log_path.exists():
                     log_path = self._resolve_log_path()
                     if not log_path.exists():
-                        try:
-                            await asyncio.wait_for(self._stop_event.wait(), timeout=1.0)
-                        except asyncio.TimeoutError:
-                            pass
+                        for _ in range(10):
+                            if self._stop_event.is_set(): break
+                            await asyncio.sleep(0.1)
                         continue
                 try:
                     with log_path.open("r", encoding="utf-8", errors="ignore") as file:
@@ -89,10 +112,9 @@ class LogWatcher:
                             last_size = current_size
                             new_data = file.read(4096)
                             if not new_data:
-                                try:
-                                    await asyncio.wait_for(self._stop_event.wait(), timeout=0.5)
-                                except asyncio.TimeoutError:
-                                    pass
+                                for _ in range(5):
+                                    if self._stop_event.is_set(): break
+                                    await asyncio.sleep(0.1)
                                 continue
                             buffer = (buffer + new_data)[-1024 * 1024:]
                             lines = buffer.split("\n")
@@ -121,10 +143,9 @@ class LogWatcher:
                                     return
                 except OSError as error:
                     self._report_error(error)
-                    try:
-                        await asyncio.wait_for(self._stop_event.wait(), timeout=1.0)
-                    except asyncio.TimeoutError:
-                        pass
+                    for _ in range(10):
+                            if self._stop_event.is_set(): break
+                            await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             pass
         finally:

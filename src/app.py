@@ -207,7 +207,7 @@ class AppController(MainWindow):
             on_event=handle_event,
             seek_end=True
         )
-        self.global_log_watcher.start()
+        self.global_log_watcher.start(loop=self.async_loop)
 
     def _schedule_global_watcher_restart(self):
         if self._global_watcher_after_id is not None:
@@ -689,7 +689,7 @@ class AppController(MainWindow):
         )
         
         try:
-            bench_watcher.start()
+            bench_watcher.start(loop=self.async_loop)
             url = f"steam://run/{config.STEAM_APP_ID}//-windowed -popupwindow"
             if os.name == 'nt':
                 os.startfile(url)
@@ -982,7 +982,7 @@ class AppController(MainWindow):
             on_event=handle_event
         )
         self.log_watcher = watcher
-        watcher.start()
+        watcher.start(loop=self.async_loop)
 
     def _on_log_disconnect(self, target_str: str, source_watcher, reason: str):
         if not self.is_polling or self.log_watcher is not source_watcher:
