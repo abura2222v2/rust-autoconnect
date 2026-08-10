@@ -912,19 +912,14 @@ class AppController(MainWindow):
             self.log_bench(self.t("bench_result_not_saved", err=type(e).__name__))
             app_logger.error(f"Failed to submit benchmark run: {type(e).__name__}")
 
-    async def _retry_pending_benchmark_runs(self) -> None:
+    def _retry_pending_benchmark_runs(self) -> None:
         """Retry retained benchmark uploads without exposing a user-facing history."""
-        import asyncio
         for run in history_store.get_benchmark_runs():
             if self._shutdown_event.is_set():
                 return
             if run.get("sync_state") == "pending":
-                # Assuming _submit_benchmark_run_bg is a sync method that performs HTTP
-                await asyncio.to_thread(self._submit_benchmark_run_bg, run)
-                # Sleep briefly to avoid spamming the backend
-                try:
-                    await asyncio.sleep(1.0)
-                except asyncio.CancelledError:
+                self._submit_benchmark_run_bg(run)
+                if self._shutdown_event.wait(1.0):
                     break
 
     def log_bench(self, msg: str):
@@ -1115,11 +1110,10 @@ class AppController(MainWindow):
             return
         self.set_address(ip_port)
 
-    async def check_rust_status_loop(self):
+    def check_rust_status_loop(self):
         self.is_rust_was_running = False
         last_status = None
-        import asyncio
-        while True:
+        while not self._shutdown_event.is_set():
             is_running = self.process_monitor.is_rust_running()
             if is_running:
                 self.is_rust_was_running = True
@@ -1134,12 +1128,7 @@ class AppController(MainWindow):
                     self.is_rust_was_running = False
                     self.dispatch_ui(self._handle_unexpected_rust_exit)
             
-            # Use asyncio sleep for graceful shutdown via cancellation
-            try:
-                await asyncio.sleep(2.0)
-            except asyncio.CancelledError:
-                break
-            if self._shutdown_event.is_set():
+            if self._shutdown_event.wait(2.0):
                 break
 
     def _handle_unexpected_rust_exit(self) -> None:
@@ -1154,15 +1143,10 @@ class AppController(MainWindow):
         session.observe_server_down()
         self.start_process_force(session.requested_endpoint)
 
-    async def check_rust_update_loop(self):
-        import asyncio
-        while True:
+    def check_rust_update_loop(self):
+        while not self._shutdown_event.is_set():
             if not self.history_store.get_auto_update():
-                try:
-                    await asyncio.sleep(60.0)
-                except asyncio.CancelledError:
-                    break
-                if self._shutdown_event.is_set():
+                if self._shutdown_event.wait(60.0):
                     break
                 continue
 
@@ -1171,19 +1155,12 @@ class AppController(MainWindow):
 
             rust_running = self.process_monitor.is_rust_running()
             if not force_wipe and rust_running:
-                try:
-                    await asyncio.sleep(interval)
-                except asyncio.CancelledError:
-                    break
-                if self._shutdown_event.is_set():
+                if self._shutdown_event.wait(interval):
                     break
                 continue
 
             try:
-                # Assuming fetch_latest_buildid and get_local_buildid might be slightly blocking but are fast HTTP requests,
-                # we can wrap them in asyncio.to_thread to be safe, but steam_service might need refactoring too.
-                # For now, we will leave them as is since they are fast, or use asyncio.to_thread:
-                latest_buildid = await asyncio.to_thread(steam_service.fetch_latest_buildid)
+                latest_buildid = steam_service.fetch_latest_buildid()
                 local_buildid = steam_service.get_local_buildid()
 
                 if local_buildid and latest_buildid and str(local_buildid) != str(latest_buildid):
@@ -1191,18 +1168,13 @@ class AppController(MainWindow):
             except Exception:
                 pass
 
-            try:
-                await asyncio.sleep(interval)
-            except asyncio.CancelledError:
-                break
-            if self._shutdown_event.is_set():
+            if self._shutdown_event.wait(interval):
                 break
 
-    async def check_application_version(self):
+    def check_application_version(self):
         from .services.release_service import LOCAL_VERSION, is_newer_version, release_service
-        import asyncio
 
-        latest_version = await asyncio.to_thread(release_service.fetch_latest_version)
+        latest_version = release_service.fetch_latest_version()
         if latest_version is None:
             status, color = "Offline", "#98A2B3"
         elif is_newer_version(latest_version, LOCAL_VERSION):
