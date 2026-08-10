@@ -81,14 +81,20 @@ def test_forced_reconnect_starts_a_new_poll_operation():
     controller.swarm_service = MagicMock()
     controller.t = lambda key: "Stop"
 
-    with patch("asyncio.run_coroutine_threadsafe") as mock_rct:
+    with patch("src.app.threading.Thread") as thread:
         AppController.start_process_force(controller, "127.0.0.1:28015")
 
     assert controller.is_polling is True
     assert controller.is_reconnecting is True
     assert controller._poll_stop_event.is_set() is False
     assert controller._poll_operation > 2
-    mock_rct.assert_called_once()
+    thread.assert_called_once_with(
+        target=controller.run_logic,
+        args=("127.0.0.1:28015", controller._poll_operation),
+        daemon=True,
+        name="forced-server-poll",
+    )
+    thread.return_value.start.assert_called_once()
 
 
 def test_deferred_benchmark_restore_reenables_button_after_rust_exits():
@@ -216,7 +222,7 @@ def test_pending_benchmark_runs_are_retried_on_startup():
     store.get_benchmark_runs.return_value = [pending, synced]
 
     with patch("src.app.history_store", store):
-        asyncio.run(AppController._retry_pending_benchmark_runs(controller))
+        AppController._retry_pending_benchmark_runs(controller)
 
     controller._submit_benchmark_run_bg.assert_called_once_with(pending)
 
@@ -227,7 +233,7 @@ def test_application_version_keeps_installed_version_and_reports_update():
     controller.dispatch_ui = lambda callback, *args, **kwargs: callback(*args, **kwargs)
 
     with patch("src.services.release_service.release_service.fetch_latest_version", return_value="v1.4.0"):
-        asyncio.run(AppController.check_application_version(controller))
+        AppController.check_application_version(controller)
 
     controller.set_version_status.assert_called_once_with("v1.3.0", "Update: v1.4.0", "#F97316")
 
@@ -238,7 +244,7 @@ def test_application_version_reports_offline_without_replacing_local_version():
     controller.dispatch_ui = lambda callback, *args, **kwargs: callback(*args, **kwargs)
 
     with patch("src.services.release_service.release_service.fetch_latest_version", return_value=None):
-        asyncio.run(AppController.check_application_version(controller))
+        AppController.check_application_version(controller)
 
     controller.set_version_status.assert_called_once_with("v1.3.0", "Offline", "#98A2B3")
 

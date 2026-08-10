@@ -106,7 +106,7 @@ def test_bug_01_reconnect_finally_cleanup(temp_env):
 
     app.is_reconnecting = True
     app._poll_operation = 1
-    asyncio.run(app.run_logic("invalid_target_no_colon", 1))
+    app.run_logic("invalid_target_no_colon", 1)
     assert app.is_reconnecting is False
 
     app.shutdown()

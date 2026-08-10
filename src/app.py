@@ -1117,13 +1117,13 @@ class AppController(MainWindow):
             is_running = self.process_monitor.is_rust_running()
             if is_running:
                 self.is_rust_was_running = True
-                if last_status != "running":
-                    self.dispatch_ui(self.set_rust_status, "Running", COLORS["status_running"])
-                    last_status = "running"
+                if last_status is not True:
+                    self.dispatch_ui(self.set_rust_status, True)
+                    last_status = True
             else:
-                if last_status != "not_running":
-                    self.dispatch_ui(self.set_rust_status, "Not Running", COLORS["status_stopped"])
-                    last_status = "not_running"
+                if last_status is not False:
+                    self.dispatch_ui(self.set_rust_status, False)
+                    last_status = False
                 if getattr(self, 'is_rust_was_running', False):
                     self.is_rust_was_running = False
                     self.dispatch_ui(self._handle_unexpected_rust_exit)

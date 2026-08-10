@@ -788,11 +788,12 @@ class MainWindow(ctk.CTk):
         messagebox.showinfo(self.t("tg_bot_title"), self.t("tg_bot_msg", code=code), parent=self)
 
     def dispatch_ui(self, callback, *args, **kwargs):
-        if getattr(self, "_ui_dispatch_closing", False) or not self.winfo_exists():
+        if getattr(self, "_ui_dispatch_closing", False):
             return
         if threading.current_thread() is threading.main_thread():
             try:
-                callback(*args, **kwargs)
+                if self.winfo_exists():
+                    callback(*args, **kwargs)
             except Exception as error:
                 from ..core.logger import app_logger
                 app_logger.warning(f"UI callback failed: {type(error).__name__}")
