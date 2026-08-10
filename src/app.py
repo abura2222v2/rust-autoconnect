@@ -469,14 +469,6 @@ class AppController(MainWindow):
             return
             
         import tkinter.messagebox as messagebox
-        if not messagebox.askyesno(
-            self.t("bench_confirm_title"),
-            self.t("bench_confirm_msg"),
-        ):
-            self.log_safe(self.t("bench_aborted_permission"))
-            self.bench_btn.configure(state="normal")
-            return
-
         if self.process_monitor.is_rust_running():
             msg = self.t("bench_warn_running")
             if messagebox.askyesno(self.t("close_rust_title"), msg):
@@ -487,11 +479,13 @@ class AppController(MainWindow):
                 self.bench_btn.configure(state="normal")
                 return
         else:
-            msg = self.t("bench_warn_f5")
-            if not messagebox.askokcancel(self.t("bench_instr_title"), msg):
-                self.log_safe(self.t("bench_aborted"))
-                self.bench_btn.configure(state="normal")
-                return
+            pass # No early return, proceed to combined instruction
+            
+        combined_msg = f"{self.t('bench_confirm_msg')}\n\n{self.t('bench_warn_f5')}"
+        if not messagebox.askokcancel(self.t("bench_instr_title"), combined_msg):
+            self.log_safe(self.t("bench_aborted"))
+            self.bench_btn.configure(state="normal")
+            return
                 
         if getattr(self, 'is_benchmarking', False):
             return
