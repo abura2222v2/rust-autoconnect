@@ -59,29 +59,37 @@ class AppController(MainWindow):
         self._active_session: Optional[ConnectionSession] = None
         self._last_smart_phase: Optional[ConnectionPhase] = None
         self.log_watcher: Optional[LogWatcher] = None
-        self.bm_worker = None
         self.a2s_client = a2s_client
         self.process_monitor = process_monitor
         self.server_intelligence = server_intelligence_service
-        from .services.server_intelligence_service import ServerIntelligenceWorker, BattleMetricsAPIClient
-        self.ServerIntelligenceWorker = ServerIntelligenceWorker
-        self.BattleMetricsAPIClient = BattleMetricsAPIClient
         self._ui_queue_after_id = self.after(50, self._drain_ui_queue)
 
         from .services.hardware_service import hardware_service
         self.hardware_service = hardware_service
         
         self.log_safe(self.t("ready"))
-        
+        # Asyncio integration
+        import asyncio
+        self.async_loop = asyncio.new_event_loop()
+        self.async_thread = threading.Thread(target=self._run_async_loop, daemon=True, name="async-loop")
+        self.async_thread.start()
+
         # Start background status and update monitoring loops
-        threading.Thread(target=self.check_rust_status_loop, daemon=True).start()
-        threading.Thread(target=self.check_rust_update_loop, daemon=True).start()
-        threading.Thread(target=self.check_application_version, daemon=True).start()
-        threading.Thread(target=self._retry_pending_benchmark_runs, daemon=True).start()
+        asyncio.run_coroutine_threadsafe(self.check_rust_status_loop(), self.async_loop)
+        asyncio.run_coroutine_threadsafe(self.check_rust_update_loop(), self.async_loop)
+        asyncio.run_coroutine_threadsafe(self.check_application_version(), self.async_loop)
+        asyncio.run_coroutine_threadsafe(self._retry_pending_benchmark_runs(), self.async_loop)
+        
+        # Keep load_hardware synchronous as it calls blocking wmi/psutil
         threading.Thread(target=self._load_hardware, daemon=True).start()
         
         # Init Swarm Service
         from .services.swarm_service import swarm_service
+
+    def _run_async_loop(self):
+        import asyncio
+        asyncio.set_event_loop(self.async_loop)
+        self.async_loop.run_forever()
         self.swarm_service = swarm_service
         self.swarm_service.is_enabled = self.history_store.get_swarm_enabled()
         self.swarm_service.on_swarm_event = self._on_swarm_event
@@ -176,6 +184,17 @@ class AppController(MainWindow):
                 self.dispatch_ui(self._schedule_global_watcher_restart)
 
         def handle_event(event):
+            import re
+            match = re.search(r"(?:Connecting to|Client connected to)\s+([a-zA-Z0-9.-]+:\d{1,5})", event, re.IGNORECASE)
+            if match and self.history_store.get_auto_arm():
+                ip_port = match.group(1)
+                if getattr(self, '_last_armed_from_log', None) != ip_port:
+                    self._last_armed_from_log = ip_port
+                    self.history_store.set_armed_server(ip_port)
+                    self.dispatch_ui(self.refresh_history_ui)
+                    self.dispatch_ui(self._refresh_session_state_once)
+                    self.log_safe(self.t("auto_armed_server", default=f"Auto-Armed server: {ip_port}"), "#F97316")
+
             session = self._active_session
             if self.is_polling and (not session or not session.launched_by_app) and ("Client connected" in event or "Spawning" in event):
                 self.log_safe(self.t("manual_conn_detected"), "#98A2B3")
@@ -222,8 +241,8 @@ class AppController(MainWindow):
         self._ui_logged_wait = False
         self._ui_logged_err = False
         
-        self.poll_thread = threading.Thread(target=self.run_logic, args=(target_str, operation_id), daemon=True, name="server-poll")
-        self.poll_thread.start()
+        import asyncio
+        self.poll_task = asyncio.run_coroutine_threadsafe(self.run_logic(target_str, operation_id), self.async_loop)
 
     def stop_polling(self, explicit: bool = True):
         self.is_polling = False
@@ -238,11 +257,6 @@ class AppController(MainWindow):
         if log_watcher:
             log_watcher.stop()
             self.log_watcher = None
-            
-        bm_worker = self.__dict__.get('bm_worker')
-        if bm_worker:
-            bm_worker.stop()
-            self.bm_worker = None
             
         self.swarm_service.leave_room()
 
@@ -259,11 +273,12 @@ class AppController(MainWindow):
     def stop_polling_safe(self, explicit: bool = True):
         self.stop_polling(explicit)
 
-    def run_logic(self, target: str, operation_id: Optional[int] = None):
+    async def run_logic(self, target: str, operation_id: Optional[int] = None):
         """
         BUG-01 Fix: Wrap reconnect polling logic in try...finally block
         to guarantee self.is_reconnecting = False is ALWAYS executed.
         """
+        import asyncio
         if operation_id is None:
             operation_id = self._poll_operation
         session = self._active_session
@@ -283,7 +298,8 @@ class AppController(MainWindow):
             real_ip = host
             try:
                 self.log_safe(self.t("dns_resolve", host=host))
-                real_ip = socket.gethostbyname(host)
+                # gethostbyname is blocking, run in executor
+                real_ip = await asyncio.to_thread(socket.gethostbyname, host)
                 if real_ip != host:
                     self.log_safe(self.t("dns_ok", ip=real_ip))
             except socket.gaierror:
@@ -293,7 +309,7 @@ class AppController(MainWindow):
 
             canonical_target = f"{real_ip}:{port}"
             session.canonical_endpoint = canonical_target
-            remote_schedule = self.server_intelligence.get_schedule(canonical_target)
+            remote_schedule = await asyncio.to_thread(self.server_intelligence.get_schedule, canonical_target)
             schedule = {"wipe_at": remote_schedule.wipe_at, "wipe_source": remote_schedule.source}
             if not schedule["wipe_at"]:
                 # Legacy local schedules remain a fallback for existing users;
@@ -305,30 +321,12 @@ class AppController(MainWindow):
                 session.wipe_at = datetime.fromtimestamp(schedule["wipe_at"], timezone.utc)
                 session.wipe_source = schedule["wipe_source"]
                 self.log_safe(f"Wipe schedule: {schedule['wipe_source'] or 'shared cache'}.", "#98A2B3")
-            self.swarm_service.join_room(canonical_target)
+            
+            # Swarm might block slightly but it's okay for now, or to_thread it
+            await asyncio.to_thread(self.swarm_service.join_room, canonical_target)
+            
             self.dispatch_ui(self.history_store.add_to_history, target, host, operation=("poll", operation_id))
             self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
-
-            # Start BattleMetrics Worker
-            bm_token = self.history_store.get_battlemetrics_api_key()
-            self.bm_worker = self.ServerIntelligenceWorker(
-                endpoint=canonical_target,
-                api_token=bm_token if bm_token else None
-            )
-            self.bm_worker.start()
-            
-            # Optionally use BattleMetrics wipe time if it overrides
-            bm_status = self.bm_worker.poll_now()
-            if bm_status and bm_status.get("rust_wipe_time"):
-                try:
-                    # ISO 8601 string: 2026-08-01T14:00:00Z
-                    wipe_str = bm_status["rust_wipe_time"].replace("Z", "+00:00")
-                    bm_wipe_time = datetime.fromisoformat(wipe_str).astimezone(timezone.utc)
-                    session.wipe_at = bm_wipe_time
-                    session.wipe_source = "BattleMetrics"
-                    self.log_safe(f"BattleMetrics wipe schedule updated: {bm_status['rust_wipe_time']}", "#55C95D")
-                except Exception:
-                    pass
 
             self.log_safe(self.t("start_poll", ip=real_ip, port=port))
 
@@ -350,16 +348,22 @@ class AppController(MainWindow):
                             self.log_safe(labels[phase], "#F97316" if phase != ConnectionPhase.SCHEDULED else "#98A2B3")
                         self._last_smart_phase = phase
 
-                    status = self.a2s_client.get_server_status(real_ip, port, self._poll_stop_event)
+                    status = await self.a2s_client.get_server_status(real_ip, port, self._poll_stop_event)
                     if status.server_name:
                         server_name = status.server_name
                     ready = status.alive and status.max_players > 0 and status.has_join_capacity
                     if ready:
                         # A second short local probe is faster than waiting for the
                         # old full polling interval and filters partial startup.
-                        if self._poll_stop_event.wait(PollingPolicy().confirmation_gap_seconds):
+                        for _ in range(int(PollingPolicy().confirmation_gap_seconds * 10)):
+                            if self._poll_stop_event.is_set():
+                                break
+                            await asyncio.sleep(0.1)
+                            
+                        if self._poll_stop_event.is_set():
                             break
-                        confirmation = self.a2s_client.get_server_status(real_ip, port, self._poll_stop_event)
+                            
+                        confirmation = await self.a2s_client.get_server_status(real_ip, port, self._poll_stop_event)
                         if confirmation.alive and confirmation.max_players > 0 and confirmation.has_join_capacity:
                             session.consume_hint()
                             session.phase = ConnectionPhase.LAUNCH_REQUESTED
@@ -377,11 +381,14 @@ class AppController(MainWindow):
                     current_interval = session.interval_seconds()
                     deadline = time.monotonic() + current_interval
                     while self._is_current_poll_operation(operation_id) and time.monotonic() < deadline:
-                        if self._poll_stop_event.wait(0.1):
+                        if self._poll_stop_event.is_set():
                             break
                         if self._poll_wake_event.is_set():
                             self._poll_wake_event.clear()
                             break
+                        await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            pass
         finally:
             if self._is_current_poll_operation(operation_id):
                 self.is_reconnecting = False
@@ -911,13 +918,20 @@ class AppController(MainWindow):
         else:
             self.log_bench(self.t("leaderboard_unavailable_pending"))
 
-    def _retry_pending_benchmark_runs(self) -> None:
+    async def _retry_pending_benchmark_runs(self) -> None:
         """Retry retained benchmark uploads without exposing a user-facing history."""
+        import asyncio
         for run in history_store.get_benchmark_runs():
             if self._shutdown_event.is_set():
                 return
             if run.get("sync_state") == "pending":
-                self._submit_benchmark_run_bg(run)
+                # Assuming _submit_benchmark_run_bg is a sync method that performs HTTP
+                await asyncio.to_thread(self._submit_benchmark_run_bg, run)
+                # Sleep briefly to avoid spamming the backend
+                try:
+                    await asyncio.sleep(1.0)
+                except asyncio.CancelledError:
+                    break
 
     def log_bench(self, msg: str):
         self.dispatch_ui(self._log_bench_ui, msg)
@@ -1016,8 +1030,8 @@ class AppController(MainWindow):
         self._poll_stop_event.clear()
         self._poll_wake_event.clear()
         operation_id = self._next_poll_operation()
-        self.poll_thread = threading.Thread(target=self.run_logic, args=(target, operation_id), daemon=True, name="forced-server-poll")
-        self.poll_thread.start()
+        import asyncio
+        self.poll_task = asyncio.run_coroutine_threadsafe(self.run_logic(target, operation_id), self.async_loop)
 
     def launch_game(self, target: str):
         if not _is_valid_endpoint(target):
@@ -1098,28 +1112,31 @@ class AppController(MainWindow):
             return
         self.set_address(ip_port)
 
-    def check_rust_status_loop(self):
+    async def check_rust_status_loop(self):
         self.is_rust_was_running = False
         last_status = None
+        import asyncio
         while True:
             is_running = self.process_monitor.is_rust_running()
             if is_running:
-                if last_status is not True:
-                    self.dispatch_ui(self.set_rust_status, True)
-                    self.log_safe(self.t("rust_process_running"), "#55C95D")
-                    last_status = True
                 self.is_rust_was_running = True
+                if last_status != "running":
+                    self.dispatch_ui(self.set_rust_status, "Running", COLORS["status_running"])
+                    last_status = "running"
             else:
-                if last_status is not False:
-                    self.dispatch_ui(self.set_rust_status, False)
-                    self.log_safe(self.t("rust_process_not_running"), "#DE5148")
-                    last_status = False
+                if last_status != "not_running":
+                    self.dispatch_ui(self.set_rust_status, "Not Running", COLORS["status_stopped"])
+                    last_status = "not_running"
                 if getattr(self, 'is_rust_was_running', False):
                     self.is_rust_was_running = False
                     self.dispatch_ui(self._handle_unexpected_rust_exit)
             
-            # Use event wait instead of raw sleep for graceful shutdown
-            if getattr(self, '_shutdown_event', threading.Event()).wait(2.0):
+            # Use asyncio sleep for graceful shutdown via cancellation
+            try:
+                await asyncio.sleep(2.0)
+            except asyncio.CancelledError:
+                break
+            if self._shutdown_event.is_set():
                 break
 
     def _handle_unexpected_rust_exit(self) -> None:
@@ -1134,10 +1151,15 @@ class AppController(MainWindow):
         session.observe_server_down()
         self.start_process_force(session.requested_endpoint)
 
-    def check_rust_update_loop(self):
+    async def check_rust_update_loop(self):
+        import asyncio
         while True:
             if not self.history_store.get_auto_update():
-                if getattr(self, '_shutdown_event', threading.Event()).wait(60.0):
+                try:
+                    await asyncio.sleep(60.0)
+                except asyncio.CancelledError:
+                    break
+                if self._shutdown_event.is_set():
                     break
                 continue
 
@@ -1146,12 +1168,19 @@ class AppController(MainWindow):
 
             rust_running = self.process_monitor.is_rust_running()
             if not force_wipe and rust_running:
-                if getattr(self, '_shutdown_event', threading.Event()).wait(interval):
+                try:
+                    await asyncio.sleep(interval)
+                except asyncio.CancelledError:
+                    break
+                if self._shutdown_event.is_set():
                     break
                 continue
 
             try:
-                latest_buildid = steam_service.fetch_latest_buildid()
+                # Assuming fetch_latest_buildid and get_local_buildid might be slightly blocking but are fast HTTP requests,
+                # we can wrap them in asyncio.to_thread to be safe, but steam_service might need refactoring too.
+                # For now, we will leave them as is since they are fast, or use asyncio.to_thread:
+                latest_buildid = await asyncio.to_thread(steam_service.fetch_latest_buildid)
                 local_buildid = steam_service.get_local_buildid()
 
                 if local_buildid and latest_buildid and str(local_buildid) != str(latest_buildid):
@@ -1159,13 +1188,18 @@ class AppController(MainWindow):
             except Exception:
                 pass
 
-            if getattr(self, '_shutdown_event', threading.Event()).wait(interval):
+            try:
+                await asyncio.sleep(interval)
+            except asyncio.CancelledError:
+                break
+            if self._shutdown_event.is_set():
                 break
 
-    def check_application_version(self):
+    async def check_application_version(self):
         from .services.release_service import LOCAL_VERSION, is_newer_version, release_service
+        import asyncio
 
-        latest_version = release_service.fetch_latest_version()
+        latest_version = await asyncio.to_thread(release_service.fetch_latest_version)
         if latest_version is None:
             status, color = "Offline", "#98A2B3"
         elif is_newer_version(latest_version, LOCAL_VERSION):

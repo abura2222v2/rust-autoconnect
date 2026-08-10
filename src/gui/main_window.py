@@ -473,23 +473,36 @@ class MainWindow(ctk.CTk):
         )
         self.auto_update_settings.grid(row=3, column=0, columnspan=2, padx=20, pady=12, sticky="w")
         
-        self.bm_key_label = ctk.CTkLabel(self.settings_panel, text=self.t("bm_api_key_lbl"), font=ctk.CTkFont(weight="bold"))
-        self.bm_key_label.grid(row=4, column=0, padx=20, pady=(12, 4), sticky="w")
-        self.bm_key_entry = ctk.CTkEntry(self.settings_panel, placeholder_text=self.t("bm_api_key_placeholder"), width=250)
-        self.bm_key_entry.grid(row=5, column=0, padx=20, pady=0, sticky="w")
-        self.bm_key_entry.insert(0, self.history_store.get_battlemetrics_api_key())
-        
-        self.bm_link = ctk.CTkLabel(self.settings_panel, text=self.t("bm_get_key_link"), font=ctk.CTkFont(size=11, underline=True), text_color=COLORS["accent"], cursor="hand2")
-        self.bm_link.grid(row=6, column=0, padx=20, pady=(4, 12), sticky="w")
-        self.bm_link.bind("<Button-1>", lambda e: os.startfile("https://www.battlemetrics.com/developers"))
+        # Auto-Arm Checkbox
+        self.auto_arm_var = ctk.BooleanVar(value=self.history_store.get_auto_arm())
+        self.auto_arm_checkbox = ctk.CTkCheckBox(
+            self.settings_panel,
+            text=self.t("auto_arm_lbl", default="Auto-Arm server on manual connect"),
+            variable=self.auto_arm_var,
+            command=self._on_auto_arm_change,
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            border_color=COLORS["muted"],
+        )
+        self.auto_arm_checkbox.grid(row=4, column=0, columnspan=2, padx=20, pady=12, sticky="w")
 
-        # Save User Config Button
-        self.save_cfg_btn = ctk.CTkButton(self.settings_panel, text=self.t("save_cfg_btn"), command=self.save_user_config, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"])
-        self.save_cfg_btn.grid(row=7, column=0, padx=20, pady=20, sticky="w")
+        # Telegram Bot Linking
+        self.tg_frame = ctk.CTkFrame(self.settings_panel, fg_color="transparent")
+        self.tg_frame.grid(row=5, column=0, columnspan=2, padx=20, pady=12, sticky="w")
+        self.tg_status_lbl = ctk.CTkLabel(self.tg_frame, text=self.t("tg_status_unlinked", default="Telegram: Not Linked"), text_color=COLORS["muted"])
+        self.tg_status_lbl.pack(side="left", padx=(0, 10))
+        self.tg_link_btn = ctk.CTkButton(
+            self.tg_frame,
+            text=self.t("tg_link_btn", default="Link Telegram Bot"),
+            command=self._on_tg_link_click,
+            width=120,
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"]
+        )
+        self.tg_link_btn.pack(side="left")
 
         # Start by showing Home
         self.refresh_history_ui()
-        self.update_favorites_combobox()
         self._refresh_session_state()
         self.show_home_frame()
 
@@ -750,11 +763,16 @@ class MainWindow(ctk.CTk):
     # --- SETTINGS LOGIC ---
     def _on_tray_change(self):
         self.history_store.set_minimize_to_tray(self.tray_var.get())
-        self.history_store.set_swarm_enabled(self.swarm_var.get())
-        self.history_store.set_battlemetrics_api_key(self.bm_key_entry.get().strip())
 
-    def save_user_config(self):
-        pass
+    def _on_auto_arm_change(self):
+        self.history_store.set_auto_arm(self.auto_arm_var.get())
+
+    def _on_tg_link_click(self):
+        import random
+        from tkinter import messagebox
+        code = f"{random.randint(1000, 9999)}"
+        # We will implement the actual Supabase DB link later.
+        messagebox.showinfo("Telegram Bot", f"Open Telegram and find @RustAutoConnectBot\n\nSend this code to the bot: {code}\n\n(Note: Bot is currently being deployed to the cloud, this is a placeholder).", parent=self)
 
     def _dispatch_ui(self, callback, *args, **kwargs):
         dispatcher = getattr(self, "dispatch_ui", None)
@@ -844,11 +862,6 @@ class MainWindow(ctk.CTk):
         self.tray_checkbox.configure(text=self.t("tray_lbl"))
         self.swarm_checkbox.configure(text=self.t("swarm_lbl"))
         self.auto_update_settings.configure(text=self.t("check_rust_updates"))
-        self.bm_key_label.configure(text=self.t("bm_api_key_lbl"))
-        self.bm_key_entry.configure(placeholder_text=self.t("bm_api_key_placeholder"))
-        self.bm_link.configure(text=self.t("bm_get_key_link"))
-        if hasattr(self, 'save_cfg_btn'):
-            self.save_cfg_btn.configure(text=self.t("save_cfg_btn"))
         
         if hasattr(self, 'tray_tooltip'):
             self.tray_tooltip.text = self.t("tooltip_tray")
@@ -930,9 +943,6 @@ class MainWindow(ctk.CTk):
             ctk.CTkLabel(row, text=score, text_color=COLORS["accent"], font=ctk.CTkFont(size=12, weight="bold")).pack(side="right")
             ctk.CTkLabel(self.bench_online_ranking, text=str(row_data.get("storage", "Unknown storage")), anchor="w", font=ctk.CTkFont(size=11), text_color=COLORS["muted"]).pack(fill="x", padx=10)
 
-    def update_favorites_combobox(self):
-        """Compatibility hook retained after replacing the address dropdown."""
-        return None
 
     def set_address(self, value: str) -> None:
         state = self.ip_entry.cget("state")
@@ -1049,6 +1059,13 @@ class MainWindow(ctk.CTk):
             ctk.CTkFrame(self.history_scroll, height=1, corner_radius=0, fg_color="#2A2A2A").pack(fill="x", padx=8)
             
     def toggle_armed(self, ip_port: str):
+        import tkinter.messagebox as messagebox
+        is_currently_armed = (self.history_store.get_armed_server() == ip_port)
+        if not is_currently_armed:
+            msg = self.t("arm_warning_msg", default="Warning! The bot will relentlessly try to reconnect to this server upon any disconnection.\n\nDo you want to proceed?")
+            if not messagebox.askyesno(self.t("arm_warning_title", default="Arm Server?"), msg, parent=self):
+                return
+                
         self.history_store.set_armed_server(ip_port)
         self.refresh_history_ui()
         # Ensure the armed server also gets selected in the combo box
@@ -1067,7 +1084,6 @@ class MainWindow(ctk.CTk):
     def toggle_favorite(self, ip_port: str, name: str):
         self.history_store.toggle_favorite(ip_port, name)
         self.refresh_history_ui()
-        self.update_favorites_combobox()
 
     def edit_server_metadata(self, ip_port: str):
         item = next((entry for entry in self.history_store.get_history() if entry.get("ip") == ip_port), None)
@@ -1130,7 +1146,6 @@ class MainWindow(ctk.CTk):
             messagebox.showerror(self.t("import_failed"), self.t("import_failed_msg", err=type(error).__name__), parent=self)
             return
         self.refresh_history_ui()
-        self.update_favorites_combobox()
         messagebox.showinfo(self.t("import_complete"), self.t("import_complete_msg", added=added, updated=updated), parent=self)
 
     def remove_from_history(self, ip_port: str):
@@ -1162,7 +1177,6 @@ class MainWindow(ctk.CTk):
             new_name = entry.get().strip()
             if new_name:
                 self.history_store.update_server_name(ip, new_name)
-                self.update_favorites_combobox()
                 
                 current_text = self.ip_entry.get()
                 if current_text.endswith(f"({ip})"):

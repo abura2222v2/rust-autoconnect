@@ -1,8 +1,9 @@
+import asyncio
 import socket
-import threading
 import time
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
+import threading
 
 import a2s
 
@@ -32,13 +33,14 @@ class A2SClient:
         self._cached_ports: dict[tuple[str, int], int] = {}
         self._last_discovery: dict[tuple[str, int], float] = {}
         self.discovery_cooldown = discovery_cooldown
+        # Still using threading.Lock for simple dict access, it's safe in async if not blocking
         self._lock = threading.Lock()
 
-    def _query(self, ip: str, port: int, stop_event: Optional[threading.Event]) -> Optional[ServerStatus]:
+    async def _query(self, ip: str, port: int, stop_event: Union[threading.Event, asyncio.Event, None]) -> Optional[ServerStatus]:
         if stop_event and stop_event.is_set():
             return None
         try:
-            info = a2s.info((ip, port), timeout=self.timeout)
+            info = await a2s.ainfo((ip, port), timeout=self.timeout)
             return ServerStatus(
                 alive=True,
                 server_name=str(getattr(info, "server_name", "")),
@@ -47,20 +49,16 @@ class A2SClient:
                 max_players=max(0, int(getattr(info, "max_players", 0))),
                 query_port=port,
             )
-        except (a2s.exceptions.BrokenMessageError, OSError, socket.timeout, ValueError):
+        except (a2s.exceptions.BrokenMessageError, OSError, socket.timeout, ValueError, asyncio.TimeoutError):
             return None
         except Exception as error:
             app_logger.warning(f"A2S query failed for {ip}:{port}: {type(error).__name__}")
             return None
 
-    def get_server_status(
-        self, ip: str, base_port: int, stop_event: Optional[threading.Event] = None
+    async def get_server_status(
+        self, ip: str, base_port: int, stop_event: Union[threading.Event, asyncio.Event, None] = None
     ) -> ServerStatus:
-        """Return a bounded A2S status without repeatedly scanning every port.
-
-        A cached query port is tried first. Remaining allowed offsets are probed
-        concurrently only for initial discovery and after a discovery cooldown.
-        """
+        """Return a bounded A2S status without repeatedly scanning every port."""
         if not 1 <= base_port <= 65535 or (stop_event and stop_event.is_set()):
             return ServerStatus(False, query_port=base_port)
 
@@ -69,11 +67,11 @@ class A2SClient:
             cached_port = self._cached_ports.get(key)
 
         if cached_port:
-            cached_result = self._query(ip, cached_port, stop_event)
+            cached_result = await self._query(ip, cached_port, stop_event)
             if cached_result:
                 return cached_result
         else:
-            base_result = self._query(ip, base_port, stop_event)
+            base_result = await self._query(ip, base_port, stop_event)
             if base_result:
                 with self._lock:
                     self._cached_ports[key] = base_port
@@ -83,8 +81,6 @@ class A2SClient:
         with self._lock:
             last_discovery = self._last_discovery.get(key)
             if last_discovery is not None and now - last_discovery < self.discovery_cooldown:
-                # The cached port (or base port) was already queried above. Do not do a full
-                # offset discovery scan on every turbo tick while discovery is cooling down.
                 return ServerStatus(False, query_port=cached_port or base_port)
             self._last_discovery[key] = now
 
@@ -96,25 +92,23 @@ class A2SClient:
         if not ports:
             return ServerStatus(False, query_port=base_port)
 
-        # Discovery is infrequent and intentionally serial.  This keeps one
-        # in-flight UDP query per endpoint and avoids leftover workers after a
-        # fast successful response.
-        for query_port in ports:
-            if stop_event and stop_event.is_set():
-                break
-            result = self._query(ip, query_port, stop_event)
-            if result:
+        # Execute queries concurrently for faster discovery
+        tasks = [self._query(ip, p, stop_event) for p in ports]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in results:
+            if isinstance(result, ServerStatus) and result.alive:
                 with self._lock:
                     self._cached_ports[key] = result.query_port
                 return result
 
         return ServerStatus(False, query_port=base_port)
 
-    def check_server_alive(
-        self, ip: str, base_port: int, stop_event: Optional[threading.Event] = None
+    async def check_server_alive(
+        self, ip: str, base_port: int, stop_event: Union[threading.Event, asyncio.Event, None] = None
     ) -> Tuple[bool, str, int, int]:
         """Compatibility wrapper for legacy callers."""
-        status = self.get_server_status(ip, base_port, stop_event)
+        status = await self.get_server_status(ip, base_port, stop_event)
         return status.alive, status.server_name, status.max_players, status.query_port
 
 

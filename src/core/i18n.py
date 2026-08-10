@@ -11,8 +11,8 @@ def detect_os_language() -> str:
             try:
                 import ctypes
                 lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0xFF
-                # 0x19: Russian, 0x09: English, 0x0a: Spanish, 0x0c: French, 0x07: German, 0x04: Chinese
-                mapping = {0x19: "RU", 0x09: "EN", 0x0A: "ES", 0x0C: "FR", 0x07: "DE", 0x04: "ZH"}
+                # 0x19: Russian, 0x09: English, 0x0a: Spanish, 0x0c: French, 0x07: German, 0x04: Chinese, 0x22: Ukrainian
+                mapping = {0x19: "RU", 0x09: "EN", 0x0A: "ES", 0x0C: "FR", 0x07: "DE", 0x04: "ZH", 0x22: "UK"}
                 if lang_id in mapping:
                     return mapping[lang_id]
             except Exception:
@@ -29,6 +29,8 @@ def detect_os_language() -> str:
             loc_str = str(loc).upper()
             if "RU" in loc_str or "RUSSIAN" in loc_str:
                 return "RU"
+            if "UK" in loc_str or "UKRAINIAN" in loc_str:
+                return "UK"
             if "ES" in loc_str or "SPANISH" in loc_str:
                 return "ES"
             if "FR" in loc_str or "FRENCH" in loc_str:
@@ -47,6 +49,7 @@ def detect_os_language() -> str:
 class I18nManager:
     LANG_MAP = {
         "RU": "RU - Русский",
+        "UK": "UK - Українська",
         "EN": "EN - English",
         "ES": "ES - Español",
         "FR": "FR - Français",
