@@ -11,11 +11,14 @@ class LogWatcher:
     """Read appended Rust log lines from a cancellable asyncio background task."""
 
     def __init__(self, on_disconnect: Callable[[str], None], on_error: Callable[[str], None],
-                 on_event: Optional[Callable[[str], None]] = None, seek_end: bool = True,
+                 on_event: Optional[Callable[[str], None]] = None, 
+                 on_queue_update: Optional[Callable[[int], None]] = None,
+                 seek_end: bool = True,
                  target_log_path: Optional[Path] = None):
         self.on_disconnect = on_disconnect
         self.on_error = on_error
         self.on_event = on_event
+        self.on_queue_update = on_queue_update
         self.seek_end = seek_end
         self.target_log_path = target_log_path
         self.is_monitoring = False
@@ -99,6 +102,19 @@ class LogWatcher:
                                     return
                                 if self.on_event:
                                     self.on_event(line)
+                                if self.on_queue_update:
+                                    # Typical rust logs: "Position 15 of 200" or "[Queue] Position: 15 / 200"
+                                    # Fallback simple search: look for "queue" and some number pattern
+                                    line_lower = line.lower()
+                                    if "queue" in line_lower or "position" in line_lower:
+                                        import re
+                                        m = re.search(r'(?:position|queue)[^\d]+(\d+)(?:\s*(?:of|/)\s*(\d+))?', line_lower)
+                                        if m:
+                                            try:
+                                                pos = int(m.group(1))
+                                                self.on_queue_update(pos)
+                                            except ValueError:
+                                                pass
                                 if any(keyword in line for keyword in config.DISCONNECT_KEYWORDS) or (" " not in line.strip() and "|0x" in line and line.rstrip().endswith("|-1")):
                                     self.is_monitoring = False
                                     self.on_disconnect(line.strip())

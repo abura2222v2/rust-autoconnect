@@ -20,6 +20,7 @@ from .services.log_watcher import LogWatcher
 from .services.process_monitor import process_monitor
 from .services.server_intelligence_service import server_intelligence_service
 from .services import steam_service
+from .services.telegram_service import telegram_service
 from .gui.main_window import COLORS, MainWindow
 from .core.logger import app_logger
 
@@ -1242,3 +1243,5 @@ class AppController(MainWindow):
             swarm_service.stop()
             
         super().shutdown()
+
+

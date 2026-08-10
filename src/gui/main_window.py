@@ -9,6 +9,7 @@ from typing import Optional
 from .tooltip import ToolTip
 from ..core.i18n import i18n, I18nManager
 from ..core.history_store import history_store, HistoryStore
+from ..services.telegram_service import telegram_service
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -477,7 +478,7 @@ class MainWindow(ctk.CTk):
         self.auto_arm_var = ctk.BooleanVar(value=self.history_store.get_auto_arm())
         self.auto_arm_checkbox = ctk.CTkCheckBox(
             self.settings_panel,
-            text=self.t("auto_arm_lbl", default="Auto-Arm server on manual connect"),
+            text=self.t("auto_arm_lbl"),
             variable=self.auto_arm_var,
             command=self._on_auto_arm_change,
             fg_color=COLORS["accent"],
@@ -489,11 +490,12 @@ class MainWindow(ctk.CTk):
         # Telegram Bot Linking
         self.tg_frame = ctk.CTkFrame(self.settings_panel, fg_color="transparent")
         self.tg_frame.grid(row=5, column=0, columnspan=2, padx=20, pady=12, sticky="w")
-        self.tg_status_lbl = ctk.CTkLabel(self.tg_frame, text=self.t("tg_status_unlinked", default="Telegram: Not Linked"), text_color=COLORS["muted"])
+        code_txt = f"Code: {telegram_service.link_code}" if telegram_service.link_code else self.t("tg_status_unlinked")
+        self.tg_status_lbl = ctk.CTkLabel(self.tg_frame, text=code_txt, text_color=COLORS["muted"])
         self.tg_status_lbl.pack(side="left", padx=(0, 10))
         self.tg_link_btn = ctk.CTkButton(
             self.tg_frame,
-            text=self.t("tg_link_btn", default="Link Telegram Bot"),
+            text=self.t("tg_link_btn"),
             command=self._on_tg_link_click,
             width=120,
             fg_color=COLORS["accent"],
@@ -658,7 +660,14 @@ class MainWindow(ctk.CTk):
             self.disarm_btn.configure(state="disabled")
 
     def set_connection_state(self, state: str, target: Optional[str] = None):
-        display_state = self.t(state) if state in ("Idle", "Monitoring", "Launching", "Connected", "Launch failed") else state
+        state_map = {
+            "Idle": self.t("idle"),
+            "Monitoring": self.t("monitoring_status"),
+            "Launching": self.t("launching"),
+            "Connected": self.t("rust_running"),
+            "Launch failed": self.t("launch_failed"),
+        }
+        display_state = state_map.get(state, self.t(state))
         self.session_status_var.set(display_state)
         self._pulse_status(self.session_status_label, COLORS["accent"] if state != "Idle" else COLORS["text"])
         if target:
@@ -771,8 +780,7 @@ class MainWindow(ctk.CTk):
         import random
         from tkinter import messagebox
         code = f"{random.randint(1000, 9999)}"
-        # We will implement the actual Supabase DB link later.
-        messagebox.showinfo("Telegram Bot", f"Open Telegram and find @RustAutoConnectBot\n\nSend this code to the bot: {code}\n\n(Note: Bot is currently being deployed to the cloud, this is a placeholder).", parent=self)
+        messagebox.showinfo(self.t("tg_bot_title"), self.t("tg_bot_msg", code=code), parent=self)
 
     def _dispatch_ui(self, callback, *args, **kwargs):
         dispatcher = getattr(self, "dispatch_ui", None)
@@ -862,6 +870,11 @@ class MainWindow(ctk.CTk):
         self.tray_checkbox.configure(text=self.t("tray_lbl"))
         self.swarm_checkbox.configure(text=self.t("swarm_lbl"))
         self.auto_update_settings.configure(text=self.t("check_rust_updates"))
+        self.auto_arm_checkbox.configure(text=self.t("auto_arm_lbl"))
+        self.tg_status_lbl.configure(text=self.t("tg_status_unlinked"))
+        self.tg_link_btn.configure(text=self.t("tg_link_btn"))
+        if hasattr(self, "connect_btn"):
+            self.connect_btn.configure(text=self.t("connect"))
         
         if hasattr(self, 'tray_tooltip'):
             self.tray_tooltip.text = self.t("tooltip_tray")
@@ -1062,8 +1075,8 @@ class MainWindow(ctk.CTk):
         import tkinter.messagebox as messagebox
         is_currently_armed = (self.history_store.get_armed_server() == ip_port)
         if not is_currently_armed:
-            msg = self.t("arm_warning_msg", default="Warning! The bot will relentlessly try to reconnect to this server upon any disconnection.\n\nDo you want to proceed?")
-            if not messagebox.askyesno(self.t("arm_warning_title", default="Arm Server?"), msg, parent=self):
+            msg = self.t("arm_warning_msg")
+            if not messagebox.askyesno(self.t("arm_warning_title"), msg, parent=self):
                 return
                 
         self.history_store.set_armed_server(ip_port)
@@ -1304,3 +1317,6 @@ class MainWindow(ctk.CTk):
             self.destroy()
         except Exception:
             pass
+
+
+
