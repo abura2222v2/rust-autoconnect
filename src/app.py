@@ -86,6 +86,7 @@ class AppController(MainWindow):
         
         # Init Swarm Service
         from .services.swarm_service import swarm_service
+        self.swarm_service = swarm_service
 
     def _run_async_loop(self):
         import asyncio
@@ -465,10 +466,14 @@ class AppController(MainWindow):
         self._last_swarm_presence_count = count
         
     def _load_hardware(self):
-        hw_cpu = self.hardware_service.get_cpu_info()
-        hw_ram = self.hardware_service.get_ram_info()
-        hw_disk = self.hardware_service.get_disk_info()
-        self.dispatch_ui(self.hardware_label.configure, text=f"CPU: {hw_cpu}\nRAM: {hw_ram}\nDisk: {hw_disk}")
+        try:
+            hw_cpu = self.hardware_service.get_cpu_info()
+            hw_ram = self.hardware_service.get_ram_info()
+            hw_disk = self.hardware_service.get_disk_info()
+            self.dispatch_ui(self.hardware_label.configure, text=f"CPU: {hw_cpu}\nRAM: {hw_ram}\nDisk: {hw_disk}")
+        except Exception as e:
+            from .core.logger import app_logger
+            app_logger.warning(f"Failed to load hardware info: {type(e).__name__}")
 
     def run_benchmark(self):
         if not hasattr(self, 'bench_btn'):
@@ -909,15 +914,20 @@ class AppController(MainWindow):
             self.log_bench(self.t("patch_demo_failed", err=e))
 
     def _submit_benchmark_run_bg(self, run: dict) -> None:
-        from .services.leaderboard_service import leaderboard_service
-        success = leaderboard_service.submit_run(run)
-        if success:
-            if history_store.mark_benchmark_run_synced(run["id"]):
-                self.log_bench(self.t("result_submitted"))
+        try:
+            from .services.leaderboard_service import leaderboard_service
+            success = leaderboard_service.submit_run(run)
+            if success:
+                if history_store.mark_benchmark_run_synced(run["id"]):
+                    self.log_bench(self.t("result_submitted"))
+                else:
+                    self.log_bench(self.t("result_submitted_mark_failed"))
             else:
-                self.log_bench(self.t("result_submitted_mark_failed"))
-        else:
-            self.log_bench(self.t("leaderboard_unavailable_pending"))
+                self.log_bench(self.t("leaderboard_unavailable_pending"))
+        except Exception as e:
+            from .core.logger import app_logger
+            self.log_bench(self.t("bench_result_not_saved", err=type(e).__name__))
+            app_logger.error(f"Failed to submit benchmark run: {type(e).__name__}")
 
     async def _retry_pending_benchmark_runs(self) -> None:
         """Retry retained benchmark uploads without exposing a user-facing history."""
@@ -1085,15 +1095,20 @@ class AppController(MainWindow):
         except socket.gaierror:
             pass
 
-        server_name = host
-        is_alive, name, max_players, _ = self.a2s_client.check_server_alive(real_ip, port)
-        if is_alive and name:
-            server_name = name
+        try:
+            server_name = host
+            import asyncio
+            is_alive, name, max_players, _ = asyncio.run(self.a2s_client.check_server_alive(real_ip, port))
+            if is_alive and name:
+                server_name = name
 
-        target_str = f"{real_ip}:{port}"
-        self.dispatch_ui(self.history_store.add_to_history, target_str, server_name)
-        self.dispatch_ui(self.refresh_history_ui)
-        self.log_safe(self.t("save_ip"))
+            target_str = f"{real_ip}:{port}"
+            self.dispatch_ui(self.history_store.add_to_history, target_str, server_name)
+            self.dispatch_ui(self.refresh_history_ui)
+            self.log_safe(self.t("save_ip"))
+        except Exception as e:
+            from .core.logger import app_logger
+            app_logger.warning(f"Failed to save server: {type(e).__name__}")
 
     def save_favorite_dialog(self):
         target = self.get_target_ip()

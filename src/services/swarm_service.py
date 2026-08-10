@@ -192,7 +192,7 @@ class SwarmService:
                         "ref": str(ref)
                     }))
                     ref += 1
-                except websocket.WebSocketException:
+                except Exception:
                     break
                         
         threading.Thread(target=heartbeat_loop, args=(ws,), daemon=True).start()
