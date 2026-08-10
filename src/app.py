@@ -59,9 +59,13 @@ class AppController(MainWindow):
         self._active_session: Optional[ConnectionSession] = None
         self._last_smart_phase: Optional[ConnectionPhase] = None
         self.log_watcher: Optional[LogWatcher] = None
+        self.bm_worker = None
         self.a2s_client = a2s_client
         self.process_monitor = process_monitor
         self.server_intelligence = server_intelligence_service
+        from .services.server_intelligence_service import ServerIntelligenceWorker, BattleMetricsAPIClient
+        self.ServerIntelligenceWorker = ServerIntelligenceWorker
+        self.BattleMetricsAPIClient = BattleMetricsAPIClient
         self._ui_queue_after_id = self.after(50, self._drain_ui_queue)
 
         from .services.hardware_service import hardware_service
@@ -235,6 +239,11 @@ class AppController(MainWindow):
             log_watcher.stop()
             self.log_watcher = None
             
+        bm_worker = self.__dict__.get('bm_worker')
+        if bm_worker:
+            bm_worker.stop()
+            self.bm_worker = None
+            
         self.swarm_service.leave_room()
 
         def _update_ui():
@@ -299,6 +308,27 @@ class AppController(MainWindow):
             self.swarm_service.join_room(canonical_target)
             self.dispatch_ui(self.history_store.add_to_history, target, host, operation=("poll", operation_id))
             self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
+
+            # Start BattleMetrics Worker
+            bm_token = self.history_store.get_battlemetrics_api_key()
+            self.bm_worker = self.ServerIntelligenceWorker(
+                endpoint=canonical_target,
+                api_token=bm_token if bm_token else None
+            )
+            self.bm_worker.start()
+            
+            # Optionally use BattleMetrics wipe time if it overrides
+            bm_status = self.bm_worker.poll_now()
+            if bm_status and bm_status.get("rust_wipe_time"):
+                try:
+                    # ISO 8601 string: 2026-08-01T14:00:00Z
+                    wipe_str = bm_status["rust_wipe_time"].replace("Z", "+00:00")
+                    bm_wipe_time = datetime.fromisoformat(wipe_str).astimezone(timezone.utc)
+                    session.wipe_at = bm_wipe_time
+                    session.wipe_source = "BattleMetrics"
+                    self.log_safe(f"BattleMetrics wipe schedule updated: {bm_status['rust_wipe_time']}", "#55C95D")
+                except Exception:
+                    pass
 
             self.log_safe(self.t("start_poll", ip=real_ip, port=port))
 

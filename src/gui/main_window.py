@@ -472,10 +472,20 @@ class MainWindow(ctk.CTk):
             border_color=COLORS["muted"],
         )
         self.auto_update_settings.grid(row=3, column=0, columnspan=2, padx=20, pady=12, sticky="w")
+        
+        self.bm_key_label = ctk.CTkLabel(self.settings_panel, text=self.t("bm_api_key_lbl"), font=ctk.CTkFont(weight="bold"))
+        self.bm_key_label.grid(row=4, column=0, padx=20, pady=(12, 4), sticky="w")
+        self.bm_key_entry = ctk.CTkEntry(self.settings_panel, placeholder_text=self.t("bm_api_key_placeholder"), width=250)
+        self.bm_key_entry.grid(row=5, column=0, padx=20, pady=0, sticky="w")
+        self.bm_key_entry.insert(0, self.history_store.get_battlemetrics_api_key())
+        
+        self.bm_link = ctk.CTkLabel(self.settings_panel, text=self.t("bm_get_key_link"), font=ctk.CTkFont(size=11, underline=True), text_color=COLORS["accent"], cursor="hand2")
+        self.bm_link.grid(row=6, column=0, padx=20, pady=(4, 12), sticky="w")
+        self.bm_link.bind("<Button-1>", lambda e: os.startfile("https://www.battlemetrics.com/developers"))
 
         # Save User Config Button
         self.save_cfg_btn = ctk.CTkButton(self.settings_panel, text=self.t("save_cfg_btn"), command=self.save_user_config, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"])
-        self.save_cfg_btn.grid(row=4, column=0, columnspan=2, padx=20, pady=(16, 20), sticky="w")
+        self.save_cfg_btn.grid(row=7, column=0, padx=20, pady=20, sticky="w")
 
         # Start by showing Home
         self.refresh_history_ui()
@@ -740,6 +750,8 @@ class MainWindow(ctk.CTk):
     # --- SETTINGS LOGIC ---
     def _on_tray_change(self):
         self.history_store.set_minimize_to_tray(self.tray_var.get())
+        self.history_store.set_swarm_enabled(self.swarm_var.get())
+        self.history_store.set_battlemetrics_api_key(self.bm_key_entry.get().strip())
 
     def save_user_config(self):
         pass
@@ -832,6 +844,9 @@ class MainWindow(ctk.CTk):
         self.tray_checkbox.configure(text=self.t("tray_lbl"))
         self.swarm_checkbox.configure(text=self.t("swarm_lbl"))
         self.auto_update_settings.configure(text=self.t("check_rust_updates"))
+        self.bm_key_label.configure(text=self.t("bm_api_key_lbl"))
+        self.bm_key_entry.configure(placeholder_text=self.t("bm_api_key_placeholder"))
+        self.bm_link.configure(text=self.t("bm_get_key_link"))
         if hasattr(self, 'save_cfg_btn'):
             self.save_cfg_btn.configure(text=self.t("save_cfg_btn"))
         

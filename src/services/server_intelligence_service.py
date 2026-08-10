@@ -93,4 +93,126 @@ class ServerIntelligenceService:
         self._request("/server-intelligence/availability", payload)
 
 
+class BattleMetricsAPIClient:
+    """Client for fetching server metrics and schedule from BattleMetrics API."""
+
+    def __init__(self, api_token: Optional[str] = None) -> None:
+        self.api_token = api_token
+
+    def get_server_info(self, endpoint: str, port: Optional[int] = None, timeout: float = 5.0) -> Optional[dict]:
+        """Query BattleMetrics for server info by endpoint or IP:port.
+
+        Args:
+            endpoint: Server IP or 'IP:port' string.
+            port: Optional port if not included in endpoint.
+            timeout: Request timeout in seconds.
+
+        Returns:
+            Dict containing players, maxPlayers, status, rust_wipe_time, etc., or None on failure.
+        """
+        if ":" not in endpoint and port is not None:
+            search_query = f"{endpoint}:{port}"
+        else:
+            search_query = endpoint
+
+        url = f"https://api.battlemetrics.com/servers?filter[search]={search_query}&game=rust"
+
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "RustAutoConnect/1.0",
+        }
+        if self.api_token:
+            headers["Authorization"] = f"Bearer {self.api_token}"
+
+        request = urllib.request.Request(url, headers=headers, method="GET")
+
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                raw_data = response.read().decode("utf-8")
+                payload = json.loads(raw_data)
+                if not isinstance(payload, dict) or "data" not in payload:
+                    return None
+                data_list = payload.get("data")
+                if not isinstance(data_list, list) or len(data_list) == 0:
+                    return None
+
+                attributes = data_list[0].get("attributes", {})
+                if not isinstance(attributes, dict):
+                    return None
+
+                details = attributes.get("details", {})
+                rust_wipe_time = details.get("rust_wipe_time") if isinstance(details, dict) else None
+
+                return {
+                    "players": attributes.get("players"),
+                    "maxPlayers": attributes.get("maxPlayers"),
+                    "status": attributes.get("status"),
+                    "rust_wipe_time": rust_wipe_time,
+                    "details": details if isinstance(details, dict) else {},
+                    "attributes": attributes,
+                }
+        except urllib.error.HTTPError as error:
+            app_logger.warning(f"BattleMetrics API HTTP error {error.code}: {error.reason}")
+            return None
+        except urllib.error.URLError as error:
+            app_logger.warning(f"BattleMetrics API URL error: {error.reason}")
+            return None
+        except (TimeoutError, OSError) as error:
+            app_logger.warning(f"BattleMetrics API timeout/OS error: {error}")
+            return None
+        except Exception as error:
+            app_logger.warning(f"BattleMetrics API error: {error}")
+            return None
+
+
+class ServerIntelligenceWorker(threading.Thread):
+    """Worker thread polling BattleMetrics API every 60 seconds for server status."""
+
+    def __init__(
+        self,
+        endpoint: str,
+        api_token: Optional[str] = None,
+        api_client: Optional[BattleMetricsAPIClient] = None,
+        poll_interval: float = 60.0,
+    ) -> None:
+        super().__init__(daemon=True)
+        self.endpoint = endpoint
+        self.api_client = api_client or BattleMetricsAPIClient(api_token=api_token)
+        self.poll_interval = poll_interval
+        self._latest_status: dict = {}
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+
+    @property
+    def latest_status(self) -> dict:
+        """Thread-safe access to the latest server status."""
+        with self._lock:
+            return dict(self._latest_status)
+
+    @latest_status.setter
+    def latest_status(self, value: dict) -> None:
+        with self._lock:
+            self._latest_status = dict(value) if value else {}
+
+    def stop(self) -> None:
+        """Signal the worker thread to stop."""
+        self._stop_event.set()
+
+    def poll_now(self) -> Optional[dict]:
+        """Perform an immediate poll and return updated status."""
+        status = self.api_client.get_server_info(self.endpoint)
+        if status is not None:
+            with self._lock:
+                self._latest_status = status
+        return self.latest_status
+
+    def run(self) -> None:
+        """Main thread loop polling the API at poll_interval seconds."""
+        while not self._stop_event.is_set():
+            self.poll_now()
+            if self._stop_event.wait(self.poll_interval):
+                break
+
+
 server_intelligence_service = ServerIntelligenceService()
+

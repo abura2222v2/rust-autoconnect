@@ -17,8 +17,9 @@ DEFAULT_DATA: Dict[str, Any] = {
     "minimize_to_tray": False, "rust_path": "", "swarm_enabled": False,
     "leaderboard_enabled": True, "username": "", "client_id": "",
     "installation_id": "", "armed_server": "", "benchmark_runs": [],
-    "home_splitter_width": 270, "bench_splitter_width": 270,
+    "home_splitter_width": 270, "bench_splitter_width": 270, "battlemetrics_api_key": "",
 }
+
 
 
 class HistoryStore:
@@ -336,6 +337,13 @@ class HistoryStore:
     def get_armed_server(self) -> str:
         with self._lock:
             return self.data["armed_server"]
+
+    def get_battlemetrics_api_key(self) -> str:
+        with self._lock:
+            return self.data.get("battlemetrics_api_key", "")
+            
+    def set_battlemetrics_api_key(self, key: str):
+        self._set_value("battlemetrics_api_key", key)
 
     def set_armed_server(self, ip_port: str):
         with self._lock:
