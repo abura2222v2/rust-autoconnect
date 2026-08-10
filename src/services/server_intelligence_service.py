@@ -50,10 +50,10 @@ class ServerIntelligenceService:
             data=body,
             method="POST" if body is not None else "GET",
             headers={
-                "accept": "application/json",
-                "content-type": "application/json",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
                 "apikey": self.public_key,
-                "authorization": f"Bearer {self.public_key}",
+                "Authorization": f"Bearer {self.public_key}",
             },
         )
         try:
