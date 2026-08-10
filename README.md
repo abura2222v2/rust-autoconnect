@@ -1,33 +1,60 @@
-# Rust AutoConnect & Hardware Benchmark
+# AutoConnect for Rust
 
-Rust AutoConnect is a desktop helper for monitoring a chosen Rust server, reconnecting after an application-observed disconnect, and running an optional local hardware benchmark.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Platform](https://img.shields.io/badge/platform-windows-lightgray.svg)]()
+
+AutoConnect is a robust, log-based server connection manager for the game Rust. Designed with strict adherence to Easy Anti-Cheat (EAC) guidelines, it provides automated server queuing, crash recovery, and wipe scheduling without injecting into the game's memory space.
 
 ## Features
 
-- **Hardware Benchmark:** Measures menu and map-load time. Public ranking data is anonymous configuration statistics; no disk serial numbers are uploaded.
-- **Smart A2S Polling:** Uses a low-load schedule normally, accelerates in the configured wipe window or after a server-down/Swarm hint, and confirms locally before launching Steam.
-- **Rust Update Check:** Reports when a Rust update is available; it never installs an update automatically.
-- **Safe Auto-Reconnect:** Reads the local Rust log and watches the Windows process only for a server explicitly armed by the player.
-- **Swarm Hints:** Optional Supabase Realtime hints can wake a local confirmation probe. A peer report never launches Rust on its own.
+- **Safe Log-Based Monitoring**: Operates entirely by parsing standard Rust output logs. Zero memory injection ensures complete safety from anti-cheat systems.
+- **Smart Auto-Arming**: Automatically detects when you successfully connect to a server and "arms" the connection. If your game crashes or you are disconnected unexpectedly, AutoConnect will instantly restart Rust and place you back in the queue.
+- **Wipe Schedule Intelligence**: Integrates with BattleMetrics and community leaderboards to predict and track server wipes in real-time.
+- **Swarm Peer-to-Peer Network**: A decentralized queue-tracking mechanism using Supabase Realtime. When a peer successfully connects to a server, they instantly notify all other queued users, enabling rapid mass-reconnects during wipe day.
+- **Performance Benchmarking**: Automated testing framework that measures game loading times (Time-to-Menu and Map Load) by playing standardized `.dem` files.
+- **Telegram Integration**: Receive queue updates and wipe notifications directly to your phone via the integrated Telegram bot framework.
 
-## Usage
+## Architecture
 
-**Auto-Connect:**
+The application is built on a modern asynchronous Python stack (`asyncio`) to guarantee minimal memory footprint and zero interface stuttering, even during intense background polling.
 
-Select a server from history or enter `IP:PORT`, then click **Connect**. For a planned wipe, open **Server details** by double-clicking a history entry and enter the next wipe in UTC. The timer changes only the checking frequency; it is not a guarantee that the server will wipe at that time.
+- **GUI**: CustomTkinter
+- **Networking**: `asyncio` UDP A2S Client for non-blocking server queries
+- **Data Persistence**: JSON-based local history store
+- **Realtime Infrastructure**: Supabase Edge Functions & WebSockets
 
-**Hardware Benchmark:**
+## Installation & Setup
 
-Click **Run Benchmark**. It launches Rust, measures loading, then restores the original configuration. View results in **Ranking**.
+1. **Prerequisites**: Python 3.10 or higher.
+2. **Clone the repository**:
+   ```bash
+   git clone https://github.com/your-org/autoconnect-rust.git
+   cd autoconnect-rust
+   ```
+3. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **Environment Variables**:
+   Copy `.env.example` to `.env` (or set them in your system environment) and configure your Supabase Publishable Key and WebSockets URL for Swarm functionality. *Do not use Service Role keys.*
+5. **Run**:
+   ```bash
+   python main.py
+   ```
 
-## Safety and configuration
+## Building the Executable
 
-Normal connection uses public A2S server queries, Windows process detection, the local Rust log, and Steam's `+connect` command. It does **not** read or write Rust memory, inject code, intercept packets, emulate input, use RCON, or bypass EAC.
+To compile AutoConnect into a standalone Windows executable (`.exe`):
 
-Benchmark is separate and explicitly confirmed because it temporarily modifies Rust configuration/demo files. It is not used by auto-connect or auto-reconnect.
+```bash
+pyinstaller --noconfirm --onedir --windowed --add-data "assets;assets" --icon "assets/icon.ico" "main.py"
+```
 
-`assets/public-config.json` may contain only public values: the project URL, `SUPABASE_PUBLISHABLE_KEY`, and a public benchmark URL. Never put a personal `sbp_` token, `sb_secret`, service-role key, or shared `SWARM_SECRET` in source code, `.env.local`, Git, or an executable. Elevated Supabase credentials belong only in a server environment.
+## Contributing
 
-## Shared server intelligence
+Contributions are welcome. Please ensure that all modifications strictly adhere to the log-parsing philosophy. Any pull requests introducing memory manipulation or injection techniques will be rejected immediately to maintain EAC compliance.
 
-`SERVER_INTELLIGENCE_URL` is optional.  When configured, clients read a shared cache for the selected endpoint and may opt in to report that their own A2S probe found it available. The report contains only `endpoint`; it does not upload a Rust log, Steam ID, account data, or a client identifier. Provider credentials and rate-limit secrets stay only in the Edge Function. See [deployment notes](docs/SERVER_INTELLIGENCE.md).
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
