@@ -8,8 +8,6 @@ AutoConnect is a robust, log-based server connection manager for the game Rust. 
 
 ## Features
 
-![App Interface](assets/screenshots/main.jpg)
-
 - **Safe Log-Based Monitoring**: Operates entirely by parsing standard Rust output logs. Zero memory injection ensures complete safety from anti-cheat systems.
 - **Smart Auto-Arming**: Automatically detects when you successfully connect to a server and "arms" the connection. If your game crashes or you are disconnected unexpectedly, AutoConnect will instantly restart Rust and place you back in the queue.
 - **Wipe Schedule Intelligence**: Integrates with BattleMetrics and community leaderboards to predict and track server wipes in real-time.
