@@ -1,4 +1,6 @@
 {
+  "disconnected_reason": "Disconnected: {reason}",
+  "error_reason": "Error: {err}",
   "title": "Rust AutoConnect",
   "history": "Server History",
   "placeholder": "IP:PORT or Domain:PORT",
@@ -231,5 +233,14 @@
   "ranking_unavailable_fmt": "Ranking unavailable: {err}",
   "no_bench_results_yet": "No benchmark results yet.",
   "leaderboard_preview_ready": "Leaderboard preview is ready.",
-  "anon_install_fmt": "Anonymous installation: {time:.1f}s | {count} runs"
+  "anon_install_fmt": "Anonymous installation: {time:.1f}s | {count} runs",
+  "auto_armed_server": "[*] Auto-Armed server: {ip}",
+  "arm_warning_title": "Arm Server?",
+  "arm_warning_msg": "Warning! The app will relentlessly try to reconnect to this server upon any disconnection.\n\nDo you want to proceed?",
+  "auto_arm_lbl": "Auto-Arm server on manual connect",
+  "tg_status_unlinked": "Telegram: Not Linked",
+  "tg_link_btn": "Link Telegram Bot",
+  "tg_bot_title": "Telegram Bot",
+  "tg_bot_msg": "Open Telegram and find @RustAutoConnectBot\n\nSend this code to the bot: {code}\n\n(Note: Bot is currently being deployed to the cloud, this is a placeholder).",
+  "wipe_schedule_fmt": "[*] Wipe schedule: {source}."
 }

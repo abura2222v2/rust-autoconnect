@@ -1,6 +1,4 @@
 {
-  "disconnected_reason": "Отключен: {reason}",
-  "error_reason": "Ошибка: {err}",
   "title": "Rust AutoConnect",
   "history": "История серверов",
   "placeholder": "IP:PORT или Домен:PORT",
