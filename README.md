@@ -29,8 +29,8 @@ The application is built on a modern asynchronous Python stack (`asyncio`) to gu
 1. **Prerequisites**: Python 3.10 or higher.
 2. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-org/autoconnect-rust.git
-   cd autoconnect-rust
+   git clone https://github.com/abura2222v2/rust-autoconnect.git
+   cd rust-autoconnect
    ```
 3. **Install dependencies**:
    ```bash
