@@ -179,7 +179,7 @@ class AppController(MainWindow):
             session = self._active_session
             if self.is_polling and (not session or not session.launched_by_app) and ("Client connected" in event or "Spawning" in event):
                 self.log_safe(self.t("manual_conn_detected"), "#98A2B3")
-                self.stop_polling_safe()
+                self.stop_polling_safe(explicit=False)
 
         self.global_log_watcher = LogWatcher(
             on_disconnect=handle_disconnect,
@@ -256,8 +256,8 @@ class AppController(MainWindow):
             
         self.dispatch_ui(_update_ui)
 
-    def stop_polling_safe(self):
-        self.stop_polling()
+    def stop_polling_safe(self, explicit: bool = True):
+        self.stop_polling(explicit)
 
     def run_logic(self, target: str, operation_id: Optional[int] = None):
         """
@@ -961,7 +961,7 @@ class AppController(MainWindow):
                 self.log_safe(self.t("server_conn_time", sec=conn_time))
                 if getattr(self, 'is_polling', False):
                     threading.Thread(target=self.swarm_service.broadcast_stop_spam, args=(target_str,), daemon=True).start()
-                    self.stop_polling_safe()
+                    self.stop_polling_safe(explicit=False)
 
         watcher = None
         def handle_disconnect(reason):
