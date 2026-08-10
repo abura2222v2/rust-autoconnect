@@ -221,6 +221,12 @@ class AppController(MainWindow):
         if self.is_polling:
             self.stop_polling()
             return
+            
+        target_str = target_str.strip()
+        if target_str and ":" not in target_str:
+            target_str = f"{target_str}:28015"
+            if hasattr(self, 'ip_var'):
+                self.ip_var.set(target_str)
 
         if not _is_valid_endpoint(target_str):
             self.log_safe(self.t("security_err_invalid_addr"))
