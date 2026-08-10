@@ -95,10 +95,14 @@ class LeaderboardWindow(ctk.CTkToplevel):
             try:
                 if self.parent.winfo_exists():
                     self.parent.dispatch_ui(callback, *args)
-            except tk.TclError:
+                    return
+            except Exception:
                 pass
-        # Standalone windows are used only by local UI tests and do not own the
-        # controller queue needed for safe worker-thread callbacks.
+        try:
+            if self.winfo_exists():
+                self.after(0, callback, *args)
+        except Exception:
+            pass
 
     def _render_data(self, data, is_new_search, generation=None, error=None):
         if generation is None:

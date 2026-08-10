@@ -9,6 +9,10 @@ class ToolTip(object):
         self.text = text
         self.widget.bind("<Enter>", self.enter)
         self.widget.bind("<Leave>", self.leave)
+        try:
+            self.widget.bind("<Destroy>", self.leave, add="+")
+        except Exception:
+            pass
         self.id = None
         self.tw = None
 
@@ -36,9 +40,9 @@ class ToolTip(object):
         if self.tw:
             return
         try:
-            if not self.widget.winfo_exists():
+            if not self.widget.winfo_exists() or not self.widget.winfo_viewable():
                 return
-        except tk.TclError:
+        except (tk.TclError, AttributeError):
             return
         x = y = 0
         x += self.widget.winfo_rootx() + 25

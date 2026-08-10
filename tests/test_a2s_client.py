@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -42,7 +43,7 @@ def test_status_exposes_capacity_without_breaking_legacy_tuple():
         max_players = 100
 
     with patch("a2s.info", return_value=Info()):
-        status = client.get_server_status("127.0.0.1", 28015)
+        status = asyncio.run(client.get_server_status("127.0.0.1", 28015))
         assert status.alive and status.has_join_capacity
         assert status.map_name == "Procedural Map"
         assert client.check_server_alive("127.0.0.1", 28015) == (True, "Rust Test", 100, 28015)

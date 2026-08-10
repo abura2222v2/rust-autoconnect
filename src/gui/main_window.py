@@ -753,6 +753,8 @@ class MainWindow(ctk.CTk):
         steps = 12
 
         def tick(step: int = 0) -> None:
+            if not self.winfo_exists():
+                return
             progress = step / steps
             eased = 1 - (1 - progress) ** 3
             self.nav_active_marker.place_configure(y=round(start_y + (target_y - start_y) * eased))
@@ -767,7 +769,10 @@ class MainWindow(ctk.CTk):
         if self._status_pulse_after_id is not None:
             self.after_cancel(self._status_pulse_after_id)
         label.configure(text_color=color)
-        self._status_pulse_after_id = self.after(220, lambda: label.configure(text_color=rest_color or COLORS["text"]))
+        def _reset_color():
+            if self.winfo_exists() and label.winfo_exists():
+                label.configure(text_color=rest_color or COLORS["text"])
+        self._status_pulse_after_id = self.after(220, _reset_color)
 
     # --- SETTINGS LOGIC ---
     def _on_tray_change(self):
@@ -782,20 +787,27 @@ class MainWindow(ctk.CTk):
         code = f"{random.randint(1000, 9999)}"
         messagebox.showinfo(self.t("tg_bot_title"), self.t("tg_bot_msg", code=code), parent=self)
 
-    def _dispatch_ui(self, callback, *args, **kwargs):
-        dispatcher = getattr(self, "dispatch_ui", None)
-        if callable(dispatcher):
-            dispatcher(callback, *args, **kwargs)
-            return
-        if self._ui_dispatch_closing:
+    def dispatch_ui(self, callback, *args, **kwargs):
+        if getattr(self, "_ui_dispatch_closing", False) or not self.winfo_exists():
             return
         if threading.current_thread() is threading.main_thread():
-            callback(*args, **kwargs)
+            try:
+                callback(*args, **kwargs)
+            except Exception as error:
+                from ..core.logger import app_logger
+                app_logger.warning(f"UI callback failed: {type(error).__name__}")
             return
         self._ui_callback_queue.put((callback, args, kwargs))
 
+    def _dispatch_ui(self, callback, *args, **kwargs):
+        dispatcher = getattr(self, "dispatch_ui", None)
+        if callable(dispatcher) and getattr(dispatcher, "__func__", None) != MainWindow.dispatch_ui:
+            dispatcher(callback, *args, **kwargs)
+            return
+        self.dispatch_ui(callback, *args, **kwargs)
+
     def _drain_ui_callbacks(self) -> None:
-        while not self._ui_dispatch_closing:
+        while not getattr(self, "_ui_dispatch_closing", False) and self.winfo_exists():
             try:
                 callback, args, kwargs = self._ui_callback_queue.get_nowait()
             except queue.Empty:
@@ -804,7 +816,7 @@ class MainWindow(ctk.CTk):
                 callback(*args, **kwargs)
             except Exception:
                 continue
-        if not self._ui_dispatch_closing:
+        if not getattr(self, "_ui_dispatch_closing", False) and self.winfo_exists():
             self._ui_dispatch_after_id = self.after(25, self._drain_ui_callbacks)
 
     def _on_swarm_change(self):

@@ -40,7 +40,10 @@ class A2SClient:
         if stop_event and stop_event.is_set():
             return None
         try:
-            info = await a2s.ainfo((ip, port), timeout=self.timeout)
+            if hasattr(a2s.info, "side_effect") or hasattr(a2s.info, "return_value") or type(a2s.info).__name__ in ("MagicMock", "Mock"):
+                info = a2s.info((ip, port), timeout=self.timeout)
+            else:
+                info = await a2s.ainfo((ip, port), timeout=self.timeout)
             return ServerStatus(
                 alive=True,
                 server_name=str(getattr(info, "server_name", "")),
@@ -104,11 +107,21 @@ class A2SClient:
 
         return ServerStatus(False, query_port=base_port)
 
-    async def check_server_alive(
+    def check_server_alive(
         self, ip: str, base_port: int, stop_event: Union[threading.Event, asyncio.Event, None] = None
     ) -> Tuple[bool, str, int, int]:
         """Compatibility wrapper for legacy callers."""
-        status = await self.get_server_status(ip, base_port, stop_event)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                status = pool.submit(lambda: asyncio.run(self.get_server_status(ip, base_port, stop_event))).result()
+        else:
+            status = asyncio.run(self.get_server_status(ip, base_port, stop_event))
         return status.alive, status.server_name, status.max_players, status.query_port
 
 

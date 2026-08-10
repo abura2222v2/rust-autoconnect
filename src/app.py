@@ -76,10 +76,10 @@ class AppController(MainWindow):
         self.async_thread.start()
 
         # Start background status and update monitoring loops
-        asyncio.run_coroutine_threadsafe(self.check_rust_status_loop(), self.async_loop)
-        asyncio.run_coroutine_threadsafe(self.check_rust_update_loop(), self.async_loop)
-        asyncio.run_coroutine_threadsafe(self.check_application_version(), self.async_loop)
-        asyncio.run_coroutine_threadsafe(self._retry_pending_benchmark_runs(), self.async_loop)
+        threading.Thread(target=self.check_rust_status_loop, daemon=True, name="rust-status-check").start()
+        threading.Thread(target=self.check_rust_update_loop, daemon=True, name="rust-update-check").start()
+        threading.Thread(target=self.check_application_version, daemon=True, name="app-version-check").start()
+        threading.Thread(target=self._retry_pending_benchmark_runs, daemon=True, name="retry-pending-bm").start()
         
         # Keep load_hardware synchronous as it calls blocking wmi/psutil
         threading.Thread(target=self._load_hardware, daemon=True).start()
@@ -281,12 +281,11 @@ class AppController(MainWindow):
     def stop_polling_safe(self, explicit: bool = True):
         self.stop_polling(explicit)
 
-    async def run_logic(self, target: str, operation_id: Optional[int] = None):
+    def run_logic(self, target: str, operation_id: Optional[int] = None):
         """
         BUG-01 Fix: Wrap reconnect polling logic in try...finally block
         to guarantee self.is_reconnecting = False is ALWAYS executed.
         """
-        import asyncio
         if operation_id is None:
             operation_id = self._poll_operation
         session = self._active_session
@@ -306,8 +305,7 @@ class AppController(MainWindow):
             real_ip = host
             try:
                 self.log_safe(self.t("dns_resolve", host=host))
-                # gethostbyname is blocking, run in executor
-                real_ip = await asyncio.to_thread(socket.gethostbyname, host)
+                real_ip = socket.gethostbyname(host)
                 if real_ip != host:
                     self.log_safe(self.t("dns_ok", ip=real_ip))
             except socket.gaierror:
@@ -317,11 +315,9 @@ class AppController(MainWindow):
 
             canonical_target = f"{real_ip}:{port}"
             session.canonical_endpoint = canonical_target
-            remote_schedule = await asyncio.to_thread(self.server_intelligence.get_schedule, canonical_target)
+            remote_schedule = self.server_intelligence.get_schedule(canonical_target)
             schedule = {"wipe_at": remote_schedule.wipe_at, "wipe_source": remote_schedule.source}
             if not schedule["wipe_at"]:
-                # Legacy local schedules remain a fallback for existing users;
-                # the UI no longer asks new users to set one manually.
                 schedule = self.history_store.get_server_wipe_schedule(target)
             if not schedule["wipe_at"] and canonical_target != target:
                 schedule = self.history_store.get_server_wipe_schedule(canonical_target)
@@ -330,8 +326,7 @@ class AppController(MainWindow):
                 session.wipe_source = schedule["wipe_source"]
                 self.log_safe(f"Wipe schedule: {schedule['wipe_source'] or 'shared cache'}.", "#98A2B3")
             
-            # Swarm might block slightly but it's okay for now, or to_thread it
-            await asyncio.to_thread(self.swarm_service.join_room, canonical_target)
+            self.swarm_service.join_room(canonical_target)
             
             self.dispatch_ui(self.history_store.add_to_history, target, host, operation=("poll", operation_id))
             self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
@@ -341,62 +336,50 @@ class AppController(MainWindow):
             if not self._is_current_poll_operation(operation_id):
                 return
 
-            # The global watcher owns the log tail.  Do not construct a
-            # competing per-poll reader.
             server_name = host
             while self._is_current_poll_operation(operation_id):
-                    phase = session.select_phase()
-                    if phase != self._last_smart_phase:
-                        labels = {
-                            ConnectionPhase.SCHEDULED: self.t("smart_phase_scheduled"),
-                            ConnectionPhase.WATCH: self.t("smart_phase_watch"),
-                            ConnectionPhase.TURBO: self.t("smart_phase_turbo"),
-                        }
-                        if phase in labels:
-                            self.log_safe(labels[phase], "#F97316" if phase != ConnectionPhase.SCHEDULED else "#98A2B3")
-                        self._last_smart_phase = phase
+                phase = session.select_phase()
+                if phase != self._last_smart_phase:
+                    labels = {
+                        ConnectionPhase.SCHEDULED: self.t("smart_phase_scheduled"),
+                        ConnectionPhase.WATCH: self.t("smart_phase_watch"),
+                        ConnectionPhase.TURBO: self.t("smart_phase_turbo"),
+                    }
+                    if phase in labels:
+                        self.log_safe(labels[phase], "#F97316" if phase != ConnectionPhase.SCHEDULED else "#98A2B3")
+                    self._last_smart_phase = phase
 
-                    status = await self.a2s_client.get_server_status(real_ip, port, self._poll_stop_event)
-                    if status.server_name:
-                        server_name = status.server_name
-                    ready = status.alive and status.max_players > 0 and status.has_join_capacity
-                    if ready:
-                        # A second short local probe is faster than waiting for the
-                        # old full polling interval and filters partial startup.
-                        for _ in range(int(PollingPolicy().confirmation_gap_seconds * 10)):
-                            if self._poll_stop_event.is_set():
-                                break
-                            await asyncio.sleep(0.1)
-                            
-                        if self._poll_stop_event.is_set():
-                            break
-                            
-                        confirmation = await self.a2s_client.get_server_status(real_ip, port, self._poll_stop_event)
-                        if confirmation.alive and confirmation.max_players > 0 and confirmation.has_join_capacity:
-                            session.consume_hint()
-                            session.phase = ConnectionPhase.LAUNCH_REQUESTED
-                            self.log_safe(self.t("stable"))
-                            self.dispatch_ui(self.history_store.add_to_history, target, server_name, operation=("poll", operation_id))
-                            self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
-                            self.launch_game(target)
-                            break
-                    else:
-                        session.observe_server_down()
-                        if not getattr(self, '_ui_logged_err', False):
-                            self.log_safe(self.t("poll_err", sec=round(session.interval_seconds(), 1)))
-                            self._ui_logged_err = True
+                is_alive, name, max_players, _ = self.a2s_client.check_server_alive(real_ip, port, self._poll_stop_event)
+                if name:
+                    server_name = name
+                ready = is_alive and max_players > 0
+                if ready:
+                    if self._poll_stop_event.wait(PollingPolicy().confirmation_gap_seconds):
+                        break
+                        
+                    is_alive_2, name_2, max_players_2, _ = self.a2s_client.check_server_alive(real_ip, port, self._poll_stop_event)
+                    if is_alive_2 and max_players_2 > 0:
+                        session.consume_hint()
+                        session.phase = ConnectionPhase.LAUNCH_REQUESTED
+                        self.log_safe(self.t("stable"))
+                        self.dispatch_ui(self.history_store.add_to_history, target, server_name, operation=("poll", operation_id))
+                        self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
+                        self.launch_game(target)
+                        break
+                else:
+                    session.observe_server_down()
+                    if not getattr(self, '_ui_logged_err', False):
+                        self.log_safe(self.t("poll_err", sec=round(session.interval_seconds(), 1)))
+                        self._ui_logged_err = True
 
-                    current_interval = session.interval_seconds()
-                    deadline = time.monotonic() + current_interval
-                    while self._is_current_poll_operation(operation_id) and time.monotonic() < deadline:
-                        if self._poll_stop_event.is_set():
-                            break
-                        if self._poll_wake_event.is_set():
-                            self._poll_wake_event.clear()
-                            break
-                        await asyncio.sleep(0.1)
-        except asyncio.CancelledError:
-            pass
+                current_interval = session.interval_seconds()
+                deadline = time.monotonic() + current_interval
+                while self._is_current_poll_operation(operation_id) and time.monotonic() < deadline:
+                    if self._poll_stop_event.wait(0.1):
+                        break
+                    if self._poll_wake_event.is_set():
+                        self._poll_wake_event.clear()
+                        break
         finally:
             if self._is_current_poll_operation(operation_id):
                 self.is_reconnecting = False
@@ -1041,8 +1024,12 @@ class AppController(MainWindow):
         self._poll_stop_event.clear()
         self._poll_wake_event.clear()
         operation_id = self._next_poll_operation()
-        import asyncio
-        self.poll_task = asyncio.run_coroutine_threadsafe(self.run_logic(target, operation_id), self.async_loop)
+        threading.Thread(
+            target=self.run_logic,
+            args=(target, operation_id),
+            daemon=True,
+            name="forced-server-poll",
+        ).start()
 
     def launch_game(self, target: str):
         if not _is_valid_endpoint(target):
