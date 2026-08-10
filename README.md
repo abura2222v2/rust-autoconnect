@@ -1,19 +1,33 @@
 # Rust AutoConnect & Hardware Benchmark
 
-An advanced, multi-threaded server auto-connector for Rust, and a global hardware benchmarking utility. 
+Rust AutoConnect is a desktop helper for monitoring a chosen Rust server, reconnecting after an application-observed disconnect, and running an optional local hardware benchmark.
 
 ## Features
 
-- **Hardware Benchmark:** Test how fast your CPU and the storage containing Rust load the game. The benchmark tracks time-to-menu and map-load time. Public results are anonymous configuration statistics; no disk serial numbers are uploaded.
-- **A2S Polling:** Rapidly queries the server to instantly detect when it goes online.
-- **Auto-Update Detection:** Automatically detects when a Rust game update is required and forces Steam to update.
-- **Log Watcher:** Reads Rust client logs to instantly reconnect if disconnected.
-- **P2P Swarm:** Connects with other users via Supabase to instantly share server awake status.
+- **Hardware Benchmark:** Measures menu and map-load time. Public ranking data is anonymous configuration statistics; no disk serial numbers are uploaded.
+- **Smart A2S Polling:** Uses a low-load schedule normally, accelerates in the configured wipe window or after a server-down/Swarm hint, and confirms locally before launching Steam.
+- **Rust Update Check:** Reports when a Rust update is available; it never installs an update automatically.
+- **Safe Auto-Reconnect:** Reads the local Rust log and watches the Windows process only for a server explicitly armed by the player.
+- **Swarm Hints:** Optional Supabase Realtime hints can wake a local confirmation probe. A peer report never launches Rust on its own.
 
 ## Usage
 
 **Auto-Connect:**
-Run the application, select a server from your history or enter a new one (`IP:PORT`), and click Start. The app will handle the rest.
+
+Select a server from history or enter `IP:PORT`, then click **Connect**. For a planned wipe, open **Server details** by double-clicking a history entry and enter the next wipe in UTC. The timer changes only the checking frequency; it is not a guarantee that the server will wipe at that time.
 
 **Hardware Benchmark:**
-Click the **Запустить Тест** (Run Benchmark) button. The app will automatically launch Rust, time the loading sequence, and close the game when finished. View global rankings by clicking the **Мировой Топ** (World Top) button!
+
+Click **Run Benchmark**. It launches Rust, measures loading, then restores the original configuration. View results in **Ranking**.
+
+## Safety and configuration
+
+Normal connection uses public A2S server queries, Windows process detection, the local Rust log, and Steam's `+connect` command. It does **not** read or write Rust memory, inject code, intercept packets, emulate input, use RCON, or bypass EAC.
+
+Benchmark is separate and explicitly confirmed because it temporarily modifies Rust configuration/demo files. It is not used by auto-connect or auto-reconnect.
+
+`assets/public-config.json` may contain only public values: the project URL, `SUPABASE_PUBLISHABLE_KEY`, and a public benchmark URL. Never put a personal `sbp_` token, `sb_secret`, service-role key, or shared `SWARM_SECRET` in source code, `.env.local`, Git, or an executable. Elevated Supabase credentials belong only in a server environment.
+
+## Shared server intelligence
+
+`SERVER_INTELLIGENCE_URL` is optional.  When configured, clients read a shared cache for the selected endpoint and may opt in to report that their own A2S probe found it available. The report contains only `endpoint`; it does not upload a Rust log, Steam ID, account data, or a client identifier. Provider credentials and rate-limit secrets stay only in the Edge Function. See [deployment notes](docs/SERVER_INTELLIGENCE.md).

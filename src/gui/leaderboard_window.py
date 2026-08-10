@@ -18,7 +18,8 @@ class LeaderboardWindow(ctk.CTkToplevel):
         self.current_data = []
         self._load_generation = 0
 
-        self.title("Global Benchmark")
+        title_text = self.parent.t("global_benchmark_title") if hasattr(self.parent, "t") else "Global Benchmark"
+        self.title(title_text)
         self.geometry("930x640")
         self.minsize(760, 480)
         self.configure(fg_color=COLORS["canvas"])
@@ -28,26 +29,32 @@ class LeaderboardWindow(ctk.CTkToplevel):
         search_frame = ctk.CTkFrame(self, fg_color=COLORS["surface"], corner_radius=0)
         search_frame.grid(row=0, column=0, sticky="ew", padx=14, pady=14)
         search_frame.grid_columnconfigure(0, weight=1)
-        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Search CPU or storage", fg_color=COLORS["surface_alt"])
+        placeholder = self.parent.t("search_cpu_storage_placeholder") if hasattr(self.parent, "t") else "Search CPU or storage"
+        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text=placeholder, fg_color=COLORS["surface_alt"])
         self.search_entry.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=10)
-        self.sort_var = ctk.StringVar(value="Fastest")
-        self.sort_menu = ctk.CTkOptionMenu(search_frame, values=["Fastest", "Slowest"], variable=self.sort_var, width=105)
+        sort_fast = self.parent.t("sort_fastest") if hasattr(self.parent, "t") else "Fastest"
+        sort_slow = self.parent.t("sort_slowest") if hasattr(self.parent, "t") else "Slowest"
+        self.sort_var = ctk.StringVar(value=sort_fast)
+        self.sort_menu = ctk.CTkOptionMenu(search_frame, values=[sort_fast, sort_slow], variable=self.sort_var, width=105)
         self.sort_menu.grid(row=0, column=1, padx=4, pady=10)
-        self.search_btn = ctk.CTkButton(search_frame, text="Search", width=90, command=self._on_search)
+        search_txt = self.parent.t("search_btn") if hasattr(self.parent, "t") else "Search"
+        self.search_btn = ctk.CTkButton(search_frame, text=search_txt, width=90, command=self._on_search)
         self.search_btn.grid(row=0, column=2, padx=(4, 12), pady=10)
 
         self.scroll = ctk.CTkScrollableFrame(self, fg_color=COLORS["surface"], corner_radius=0)
         self.scroll.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 8))
         self.bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.bottom_frame.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 14))
-        self.load_more_btn = ctk.CTkButton(self.bottom_frame, text="Load More", command=self._load_more)
+        load_more_txt = self.parent.t("load_more_btn") if hasattr(self.parent, "t") else "Load More"
+        self.load_more_btn = ctk.CTkButton(self.bottom_frame, text=load_more_txt, command=self._load_more)
         self.load_more_btn.pack()
 
         self.grab_set()
         if hasattr(parent, "dispatch_ui"):
             self._load_data(is_new_search=True)
         else:
-            ctk.CTkLabel(self.scroll, text="Leaderboard preview is ready.").pack(pady=18)
+            ready_txt = self.parent.t("leaderboard_preview_ready") if hasattr(self.parent, "t") else "Leaderboard preview is ready."
+            ctk.CTkLabel(self.scroll, text=ready_txt).pack(pady=18)
 
     def _on_search(self):
         self._load_data(is_new_search=True)
@@ -62,12 +69,14 @@ class LeaderboardWindow(ctk.CTkToplevel):
             self.current_data.clear()
             for widget in self.scroll.winfo_children():
                 widget.destroy()
-            ctk.CTkLabel(self.scroll, text="Loading anonymous configuration statistics...").pack(pady=18)
+            loading_txt = self.parent.t("loading_anon_stats") if hasattr(self.parent, "t") else "Loading anonymous configuration statistics..."
+            ctk.CTkLabel(self.scroll, text=loading_txt).pack(pady=18)
         self.search_btn.configure(state="disabled")
         self.load_more_btn.configure(state="disabled")
         generation = self._load_generation
         query = self.search_entry.get().strip()
-        sort_order = "asc" if self.sort_var.get() == "Fastest" else "desc"
+        sort_fast = self.parent.t("sort_fastest") if hasattr(self.parent, "t") else "Fastest"
+        sort_order = "asc" if self.sort_var.get() == sort_fast else "desc"
         threading.Thread(
             target=self._fetch_bg,
             args=(query, sort_order, is_new_search, generation),
@@ -83,7 +92,11 @@ class LeaderboardWindow(ctk.CTkToplevel):
 
     def _dispatch(self, callback, *args):
         if hasattr(self.parent, "dispatch_ui"):
-            self.parent.dispatch_ui(callback, *args)
+            try:
+                if self.parent.winfo_exists():
+                    self.parent.dispatch_ui(callback, *args)
+            except tk.TclError:
+                pass
         # Standalone windows are used only by local UI tests and do not own the
         # controller queue needed for safe worker-thread callbacks.
 
@@ -101,7 +114,9 @@ class LeaderboardWindow(ctk.CTkToplevel):
             for widget in self.scroll.winfo_children():
                 widget.destroy()
         if not data and is_new_search:
-            message = "No public results yet." if not error else "Leaderboard is unavailable or not configured."
+            no_pub = self.parent.t("no_public_results") if hasattr(self.parent, "t") else "No public results yet."
+            unavail = self.parent.t("leaderboard_unavailable_or_not_conf") if hasattr(self.parent, "t") else "Leaderboard is unavailable or not configured."
+            message = no_pub if not error else unavail
             ctk.CTkLabel(self.scroll, text=message, text_color=COLORS["muted"]).pack(pady=24)
             self.load_more_btn.configure(state="disabled")
             return
@@ -144,7 +159,8 @@ class LeaderboardWindow(ctk.CTkToplevel):
             ctk.CTkLabel(frame, text=f"{cpu} | {storage}", width=420, anchor="w").pack(side="left", padx=3)
             ctk.CTkLabel(frame, text=str(row.get("installation_count", 0)), width=75).pack(side="left", padx=3)
             ctk.CTkLabel(frame, text=str(row.get("run_count", 0)), width=60).pack(side="left", padx=3)
-            ctk.CTkButton(frame, text="Details", width=64, height=26, command=lambda item=row: self._load_detail(item)).pack(side="right", padx=8)
+            details_txt = self.parent.t("details") if hasattr(self.parent, "t") else "Details"
+            ctk.CTkButton(frame, text=details_txt, width=64, height=26, command=lambda item=row: self._load_detail(item)).pack(side="right", padx=8)
 
     def _load_detail(self, row):
         key = str(row.get("configuration_key", ""))
@@ -162,7 +178,8 @@ class LeaderboardWindow(ctk.CTkToplevel):
         if not detail or not self.winfo_exists():
             return
         popup = ctk.CTkToplevel(self)
-        popup.title("Configuration details")
+        detail_title = self.parent.t("config_details_title") if hasattr(self.parent, "t") else "Configuration details"
+        popup.title(detail_title)
         popup.geometry("540x440")
         popup.configure(fg_color=COLORS["canvas"])
         summary = detail.get("summary", {})
@@ -178,8 +195,11 @@ class LeaderboardWindow(ctk.CTkToplevel):
         scroll = ctk.CTkScrollableFrame(popup, fg_color=COLORS["surface"])
         scroll.pack(fill="both", expand=True, padx=18, pady=(0, 18))
         for item in detail.get("installations", []):
+            med_t = float(item.get('median_total_time', 0.0))
+            rc = item.get('run_count', 0)
+            inst_text = self.parent.t("anon_install_fmt", time=med_t, count=rc) if hasattr(self.parent, "t") else f"Anonymous installation: {med_t:.1f}s | {rc} runs"
             ctk.CTkLabel(
                 scroll,
-                text=f"Anonymous installation: {float(item.get('median_total_time', 0.0)):.1f}s | {item.get('run_count', 0)} runs",
+                text=inst_text,
                 anchor="w",
             ).pack(fill="x", padx=10, pady=6)

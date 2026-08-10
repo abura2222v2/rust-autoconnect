@@ -1,22 +1,21 @@
 import threading
 import json
-import os
 import websocket
-import hmac
-import hashlib
 from typing import Callable, Optional
-from ..core.config import config
+from ..core.public_config import get_public_config
 
 class SwarmService:
     def __init__(self):
-        self.supabase_ws_url = os.environ.get('SUPABASE_WS_URL', "wss://eznuyydoanefceqmqxqi.supabase.co/realtime/v1/websocket")
-        self.supabase_key = os.environ.get('SUPABASE_KEY', "")
+        public_config = get_public_config()
+        self.supabase_ws_url = public_config["SUPABASE_WS_URL"]
+        self.supabase_key = public_config["SUPABASE_PUBLISHABLE_KEY"]
         
         self.ws: Optional[websocket.WebSocketApp] = None
         self.ws_thread: Optional[threading.Thread] = None
         
-        self.on_swarm_event: Optional[Callable[[str], None]] = None
+        self.on_swarm_event: Optional[Callable[[str, str], None]] = None
         self.on_presence_update: Optional[Callable[[int], None]] = None
+        self.on_status: Optional[Callable[[str], None]] = None
         
         self.is_connected = False
         self.is_enabled = False
@@ -28,65 +27,83 @@ class SwarmService:
         self.current_ip_port: Optional[str] = None
         self.presence_keys = set()
         
-        secret = os.environ.get('SWARM_SECRET', '')
-        if isinstance(secret, str):
-            secret = secret.encode('utf-8')
-        self._secret = secret
-        
         import uuid
         self.client_id = str(uuid.uuid4())
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.supabase_key and self._secret)
-        
-    def _sign(self, text: str) -> str:
-        secret = os.environ.get('SWARM_SECRET', self._secret)
-        if isinstance(secret, str):
-            secret = secret.encode('utf-8')
-        return hmac.new(secret, text.encode('utf-8'), hashlib.sha256).hexdigest()
-        
-    def test_connection(self) -> bool:
-        """Ping Supabase REST endpoint to verify connection."""
-        import urllib.request
-        try:
-            # We ping the benchmarks table to test connection since we know it exists
-            test_url = "https://eznuyydoanefceqmqxqi.supabase.co/rest/v1/benchmarks?limit=1"
-            req = urllib.request.Request(test_url, headers={"apikey": self.supabase_key, "Authorization": f"Bearer {self.supabase_key}"})
-            with urllib.request.urlopen(req, timeout=2.0) as res:
-                return res.getcode() == 200
-        except Exception as e:
-            from ..core.logger import app_logger
-            app_logger.error(f"Swarm connection test failed: {type(e).__name__}")
+        return bool(self.supabase_key and self._is_public_supabase_key(self.supabase_key))
+
+    @staticmethod
+    def _is_public_supabase_key(value: str) -> bool:
+        """Reject known elevated keys, including legacy JWT service-role keys."""
+        if value.startswith(("sbp_", "sb_secret_")):
             return False
+        if value.startswith("eyJ"):
+            try:
+                import base64
+                payload = value.split(".")[1]
+                payload += "=" * (-len(payload) % 4)
+                role = json.loads(base64.urlsafe_b64decode(payload).decode("utf-8")).get("role")
+                return role not in {"service_role", "supabase_admin"}
+            except (IndexError, ValueError, UnicodeDecodeError):
+                return False
+            except Exception as e:
+                import binascii
+                if isinstance(e, binascii.Error):
+                    return False
+                raise
+        return value.startswith("sb_publishable_")
+
+    @property
+    def configuration_status(self) -> str:
+        if self.supabase_key and not self._is_public_supabase_key(self.supabase_key):
+            return "invalid_key"
+        if not self.supabase_key:
+            return "not_configured"
+        return "configured"
 
     def start(self):
-        if not self.is_enabled or not self.is_configured:
-            if self.is_enabled and not self.is_configured:
-                from ..core.logger import app_logger
-                app_logger.warning("Swarm is enabled but credentials are not configured.")
-            return
-        if self.ws_thread and self.ws_thread.is_alive():
-            return
+        with self._reconnect_lock:
+            if not self.is_enabled:
+                self._notify_status("disabled")
+                return
+            if not self.is_configured:
+                self._notify_status(self.configuration_status)
+                if self.is_enabled:
+                    from ..core.logger import app_logger
+                    app_logger.warning("Swarm is enabled but credentials are not configured.")
+                return
+            if self.ws_thread and self.ws_thread.is_alive():
+                return
+                
+            self._notify_status("connecting")
+            url = f"{self.supabase_ws_url}?apikey={self.supabase_key}&vsn=1.0.0"
             
-        url = f"{self.supabase_ws_url}?apikey={self.supabase_key}&vsn=1.0.0"
-        
-        self.ws = websocket.WebSocketApp(
-            url,
-            on_open=self._on_open,
-            on_message=self._on_message,
-            on_error=self._on_error,
-            on_close=self._on_close
-        )
-        self.ws_thread = threading.Thread(target=self.ws.run_forever, daemon=True)
-        self._stop_event.clear()
-        self.ws_thread.start()
+            ws = websocket.WebSocketApp(
+                url,
+                on_open=self._on_open,
+                on_message=self._on_message,
+                on_error=self._on_error,
+                on_close=self._on_close
+            )
+            self.ws = ws
+            self.ws_thread = threading.Thread(target=ws.run_forever, daemon=True, name="swarm-websocket")
+            self._stop_event.clear()
+            self.ws_thread.start()
         
     def stop(self):
-        self.is_enabled = False
-        self._stop_event.set()
-        if self.ws:
-            self.ws.close()
+        with self._reconnect_lock:
+            self.is_enabled = False
+            self._stop_event.set()
+            self._reconnect_pending = False
+            ws = self.ws
+            self.ws = None
+            self.ws_thread = None
+            self.is_connected = False
+        if ws:
+            ws.close()
+        self._notify_status("disabled")
             
     def join_room(self, ip_port: str):
         if not self.is_enabled:
@@ -132,7 +149,7 @@ class SwarmService:
         try:
             self.ws.send(json.dumps(payload))
             
-            # Send track event for Presence
+            # Presence contains only a random installation-local client id.
             track_msg = {
                 "topic": room_name,
                 "event": "presence",
@@ -147,9 +164,12 @@ class SwarmService:
         except Exception as e:
             from ..core.logger import app_logger
             app_logger.error(f"Failed to join room: {type(e).__name__}")
-            
+
     def _on_open(self, ws):
+        if ws is not self.ws or self._stop_event.is_set():
+            return
         self.is_connected = True
+        self._notify_status("connected")
         with self._reconnect_lock:
             self._reconnect_pending = False
         
@@ -181,21 +201,22 @@ class SwarmService:
             self._send_join(self.current_room)
         
     def _on_message(self, ws, message):
+        if ws is not self.ws or self._stop_event.is_set():
+            return
         try:
             data = json.loads(message)
             event = data.get("event")
             
-            # Handle Broadcast
+            # Availability reports are advisory.  AppController always performs
+            # a fresh local A2S confirmation before launching Rust.
             if event == "broadcast":
                 payload = data.get("payload", {})
-                if payload.get("event") == "server_connected":
-                    raw_ip = payload.get("payload", {}).get("ip_port")
-                    if raw_ip and self.on_swarm_event and "|" in raw_ip:
-                        ip_port, sig = raw_ip.rsplit("|", 1)
-                        if hmac.compare_digest(self._sign(ip_port), sig):
-                            if ip_port == self.current_ip_port:
-                                self.on_swarm_event(ip_port)
-                                
+                inner_event = payload.get("event")
+                ip_port = payload.get("payload", {}).get("ip_port")
+                if ip_port and self.on_swarm_event and ip_port == self.current_ip_port:
+                    if inner_event in ("server_connected", "swarm_stop_spam", "swarm_connection_failed"):
+                        self.on_swarm_event(inner_event, ip_port)
+
             # Handle Presence
             elif event == "presence_state":
                 state = data.get("payload", {})
@@ -215,11 +236,20 @@ class SwarmService:
             app_logger.error(f"Swarm message error: {type(e).__name__}")
             
     def _on_error(self, ws, error):
+        if ws is not self.ws or self._stop_event.is_set():
+            return
         from ..core.logger import app_logger
         app_logger.warning(f"Swarm WebSocket error: {type(error).__name__}")
+        self._notify_status("error")
         
     def _on_close(self, ws, status_code, msg):
+        if ws is not self.ws:
+            return
+        self.ws = None
+        self.ws_thread = None
         self.is_connected = False
+        if self.is_enabled:
+            self._notify_status("disconnected")
         if self.is_enabled and not self._stop_event.is_set():
             import time
             with self._reconnect_lock:
@@ -230,29 +260,60 @@ class SwarmService:
                 if self._stop_event.wait(5):
                     return
                 if self.is_enabled and not self.is_connected:
+                    with self._reconnect_lock:
+                        self._reconnect_pending = False
                     self.start()
             threading.Thread(target=reconnect, daemon=True).start()
+
+    def _notify_status(self, status: str) -> None:
+        if self.on_status:
+            self.on_status(status)
         
     def broadcast_success(self, ip_port: str):
+        """Broadcast an advisory availability hint to the current Swarm room.
+
+        The event is intentionally unauthenticated and non-authoritative: a
+        receiver only wakes a bounded local A2S confirmation probe.
+        """
         if not self.is_enabled or not self.is_connected or not self.ws or not self.current_room:
             return
-            
-        sig = self._sign(ip_port)
-        payload = {
-            "topic": self.current_room,
-            "event": "broadcast",
-            "payload": {
-                "type": "broadcast",
-                "event": "server_connected",
-                "payload": {"ip_port": f"{ip_port}|{sig}"}
-            },
-            "ref": "broadcast"
-        }
-        
         try:
-            self.ws.send(json.dumps(payload))
-        except Exception as e:
+            self.ws.send(json.dumps({
+                "topic": self.current_room,
+                "event": "broadcast",
+                "payload": {"type": "broadcast", "event": "server_connected", "payload": {"ip_port": ip_port}},
+                "ref": "hint",
+            }))
+        except websocket.WebSocketException as error:
             from ..core.logger import app_logger
-            app_logger.error(f"Failed to broadcast: {type(e).__name__}")
+            app_logger.warning(f"Failed to report swarm hint: {type(error).__name__}")
+
+    def broadcast_stop_spam(self, ip_port: str):
+        if not self.is_enabled or not self.is_connected or not self.ws or not self.current_room:
+            return
+        try:
+            self.ws.send(json.dumps({
+                "topic": self.current_room,
+                "event": "broadcast",
+                "payload": {"type": "broadcast", "event": "swarm_stop_spam", "payload": {"ip_port": ip_port}},
+                "ref": "stop_spam",
+            }))
+        except websocket.WebSocketException as error:
+            from ..core.logger import app_logger
+            app_logger.warning(f"Failed to report swarm stop_spam: {type(error).__name__}")
+            
+    def broadcast_connection_failed(self, ip_port: str):
+        if not self.is_enabled or not self.is_connected or not self.ws or not self.current_room:
+            return
+        try:
+            self.ws.send(json.dumps({
+                "topic": self.current_room,
+                "event": "broadcast",
+                "payload": {"type": "broadcast", "event": "swarm_connection_failed", "payload": {"ip_port": ip_port}},
+                "ref": "fail",
+            }))
+        except websocket.WebSocketException as error:
+            from ..core.logger import app_logger
+            app_logger.warning(f"Failed to report swarm connection_failed: {type(error).__name__}")
 
 swarm_service = SwarmService()

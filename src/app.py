@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import queue
+from datetime import datetime, timezone
 import customtkinter as ctk
 from typing import Callable, Optional
 
@@ -14,11 +15,24 @@ from .core.i18n import i18n
 from .core.history_store import history_store
 from .core.a2s_client import a2s_client
 from .core.benchmark_model import BENCHMARK_VERSION, build_run
+from .core.smart_monitor import ConnectionPhase, ConnectionSession, PollingPolicy
 from .services.log_watcher import LogWatcher
 from .services.process_monitor import process_monitor
+from .services.server_intelligence_service import server_intelligence_service
 from .services import steam_service
-from .gui.main_window import MainWindow
+from .gui.main_window import COLORS, MainWindow
 from .core.logger import app_logger
+
+
+def _is_valid_endpoint(value: str) -> bool:
+    """Accept a bounded hostname-or-IP endpoint without interpreting it as a URL."""
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9.-]{1,253}:\d{1,5}", value):
+        return False
+    try:
+        return 1 <= int(value.rsplit(":", 1)[1]) <= 65535
+    except ValueError:
+        return False
+
 
 class AppController(MainWindow):
     """
@@ -31,18 +45,23 @@ class AppController(MainWindow):
         self._state_lock = threading.Lock()
         self._operation_lock = threading.Lock()
         self._poll_stop_event = threading.Event()
+        self._poll_wake_event = threading.Event()
         self._shutdown_event = threading.Event()
         self._benchmark_stop_event = threading.Event()
         self._ui_queue: queue.Queue[tuple[Optional[tuple[str, int]], Callable, tuple, dict]] = queue.Queue()
         self._poll_operation = 0
         self._benchmark_operation = 0
+        self._pending_benchmark_restore = None
         self._global_watcher_after_id = None
         self._is_polling = False
         self._is_reconnecting = False
         self.poll_thread = None
+        self._active_session: Optional[ConnectionSession] = None
+        self._last_smart_phase: Optional[ConnectionPhase] = None
         self.log_watcher: Optional[LogWatcher] = None
         self.a2s_client = a2s_client
         self.process_monitor = process_monitor
+        self.server_intelligence = server_intelligence_service
         self._ui_queue_after_id = self.after(50, self._drain_ui_queue)
 
         from .services.hardware_service import hardware_service
@@ -63,8 +82,11 @@ class AppController(MainWindow):
         self.swarm_service.is_enabled = self.history_store.get_swarm_enabled()
         self.swarm_service.on_swarm_event = self._on_swarm_event
         self.swarm_service.on_presence_update = self._on_swarm_presence
+        self.swarm_service.on_status = self._on_swarm_status
         if self.swarm_service.is_enabled:
             self.swarm_service.start()
+        else:
+            self._on_swarm_status("disabled")
             
         self._start_global_log_watcher()
 
@@ -129,21 +151,36 @@ class AppController(MainWindow):
 
     def _start_global_log_watcher(self):
         def handle_disconnect(reason):
-            armed = self.history_store.get_armed_server()
-            # If we are already polling, the normal logic handles it. 
-            # But if not polling, we trigger the armed reconnect.
-            if armed and not self.is_polling and not self.is_reconnecting:
-                self.log_safe(f"[⚡] Сработал авто-реконнект для вооруженного сервера: {armed}!")
-                self.start_process_force(armed)
-            
-            # Restart the watcher after a delay so it keeps listening for future disconnects
+            if getattr(self, 'is_polling', False) and getattr(self, 'log_watcher', None) is not None:
+                # Local log watcher handles disconnects during active polling
+                pass
+            else:
+                armed = self.history_store.get_armed_server()
+                session = self._active_session
+                if (
+                    armed
+                    and session
+                    and session.launched_by_app
+                    and armed in {session.requested_endpoint, session.canonical_endpoint}
+                    and not self.is_reconnecting
+                ):
+                    self.log_safe(self.t("auto_reconnect_monitoring", target=armed), "#F97316")
+                    self.start_process_force(armed)
+            # A generic disconnect from a manual Rust session is not ours to
+            # recover.  Restart the watcher but do not touch the game.
             if not getattr(self, '_is_shutting_down', False):
                 self.dispatch_ui(self._schedule_global_watcher_restart)
+
+        def handle_event(event):
+            session = self._active_session
+            if self.is_polling and (not session or not session.launched_by_app) and ("Client connected" in event or "Spawning" in event):
+                self.log_safe(self.t("manual_conn_detected"), "#98A2B3")
+                self.stop_polling_safe()
 
         self.global_log_watcher = LogWatcher(
             on_disconnect=handle_disconnect,
             on_error=lambda e: None,
-            on_event=None,
+            on_event=handle_event,
             seek_end=True
         )
         self.global_log_watcher.start()
@@ -161,48 +198,57 @@ class AppController(MainWindow):
             self.stop_polling()
             return
 
-        if not re.match(r'^[a-zA-Z0-9.-]+:\d+$', target_str):
-            self.log_safe("[!] Security Error: Invalid address format. Must be IP:PORT.")
-            self.stop_polling()
+        if not _is_valid_endpoint(target_str):
+            self.log_safe(self.t("security_err_invalid_addr"))
             return
 
         self.ip_entry.configure(state="disabled")
         self.connect_btn.configure(text=self.t("stop"), fg_color="#C74E4E", hover_color="#9E3E3E", text_color="#F2F4F7")
         self.set_connection_state("Monitoring", target_str)
         self._poll_stop_event.clear()
+        self._poll_wake_event.clear()
         self.is_polling = True
         self.is_reconnecting = False
         operation_id = self._next_poll_operation()
+        self._active_session = ConnectionSession(requested_endpoint=target_str)
+        self._last_smart_phase = None
         
         # Reset UI log spam flags
         self._ui_logged_ans = False
         self._ui_logged_wait = False
         self._ui_logged_err = False
         
-        self.swarm_service.join_room(target_str)
-
         self.poll_thread = threading.Thread(target=self.run_logic, args=(target_str, operation_id), daemon=True, name="server-poll")
         self.poll_thread.start()
 
-    def stop_polling(self):
+    def stop_polling(self, explicit: bool = True):
         self.is_polling = False
+        self.is_reconnecting = False
         self._next_poll_operation()
         self._poll_stop_event.set()
-        if self.log_watcher:
-            self.log_watcher.stop()
+        self._poll_wake_event.set()
+        if explicit and self.__dict__.get('_active_session'):
+            self._active_session.cancel()
+            self._active_session = None
+        log_watcher = self.__dict__.get('log_watcher')
+        if log_watcher:
+            log_watcher.stop()
             self.log_watcher = None
             
         self.swarm_service.leave_room()
 
-        self.connect_btn.configure(
-            text=self.t("start"), fg_color="#E67E22", hover_color="#C96B18", text_color="#101214"
-        )
-        self.ip_entry.configure(state="normal")
-        self.set_connection_state("Idle")
-        self.log(self.t("poll_stop"))
+        def _update_ui():
+            self.connect_btn.configure(
+                text="CONNECT", fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"]
+            )
+            self.ip_entry.configure(state="normal")
+            self.set_connection_state("Idle")
+            self.log(self.t("poll_stop"))
+            
+        self.dispatch_ui(_update_ui)
 
     def stop_polling_safe(self):
-        self.dispatch_ui(self.stop_polling)
+        self.stop_polling()
 
     def run_logic(self, target: str, operation_id: Optional[int] = None):
         """
@@ -211,6 +257,10 @@ class AppController(MainWindow):
         """
         if operation_id is None:
             operation_id = self._poll_operation
+        session = self._active_session
+        if session is None or session.requested_endpoint != target:
+            session = ConnectionSession(requested_endpoint=target)
+            self._active_session = session
         try:
             try:
                 host, port_str = target.split(":", 1)
@@ -230,14 +280,24 @@ class AppController(MainWindow):
             except socket.gaierror:
                 self.log_safe(self.t("dns_err", host=host))
 
-            state = "WAITING_ONLINE"
             self.log_safe(self.t("ping_test", ip=real_ip, port=port))
 
-            is_alive, name, max_players, _ = self.a2s_client.check_server_alive(real_ip, port, self._poll_stop_event)
-            server_name = name if name else host
-
-            target_str = f"{real_ip}:{port}"
-            self.dispatch_ui(self.history_store.add_to_history, target_str, server_name, operation=("poll", operation_id))
+            canonical_target = f"{real_ip}:{port}"
+            session.canonical_endpoint = canonical_target
+            remote_schedule = self.server_intelligence.get_schedule(canonical_target)
+            schedule = {"wipe_at": remote_schedule.wipe_at, "wipe_source": remote_schedule.source}
+            if not schedule["wipe_at"]:
+                # Legacy local schedules remain a fallback for existing users;
+                # the UI no longer asks new users to set one manually.
+                schedule = self.history_store.get_server_wipe_schedule(target)
+            if not schedule["wipe_at"] and canonical_target != target:
+                schedule = self.history_store.get_server_wipe_schedule(canonical_target)
+            if schedule["wipe_at"]:
+                session.wipe_at = datetime.fromtimestamp(schedule["wipe_at"], timezone.utc)
+                session.wipe_source = schedule["wipe_source"]
+                self.log_safe(f"Wipe schedule: {schedule['wipe_source'] or 'shared cache'}.", "#98A2B3")
+            self.swarm_service.join_room(canonical_target)
+            self.dispatch_ui(self.history_store.add_to_history, target, host, operation=("poll", operation_id))
             self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
 
             self.log_safe(self.t("start_poll", ip=real_ip, port=port))
@@ -245,74 +305,62 @@ class AppController(MainWindow):
             if not self._is_current_poll_operation(operation_id):
                 return
 
-            def check_manual_join(event):
-                if not self._is_current_poll_operation(operation_id):
-                    return
-                if "Client connected" in event or "Spawning" in event:
-                    self.log_safe("[!] Обнаружено ручное подключение к серверу! Авто-коннект остановлен.")
-                    self.stop_polling_safe()
-                    
-            from .services.log_watcher import LogWatcher
-            manual_join_watcher = LogWatcher(
-                on_disconnect=lambda r: None,
-                on_error=lambda e: None,
-                on_event=check_manual_join,
-                seek_end=True
-            )
-            manual_join_watcher.start()
+            # The global watcher owns the log tail.  Do not construct a
+            # competing per-poll reader.
+            server_name = host
+            while self._is_current_poll_operation(operation_id):
+                    phase = session.select_phase()
+                    if phase != self._last_smart_phase:
+                        labels = {
+                            ConnectionPhase.SCHEDULED: self.t("smart_phase_scheduled"),
+                            ConnectionPhase.WATCH: self.t("smart_phase_watch"),
+                            ConnectionPhase.TURBO: self.t("smart_phase_turbo"),
+                        }
+                        if phase in labels:
+                            self.log_safe(labels[phase], "#F97316" if phase != ConnectionPhase.SCHEDULED else "#98A2B3")
+                        self._last_smart_phase = phase
 
-            try:
-                success_count = 0
-                while self._is_current_poll_operation(operation_id):
-                    is_alive, name, max_players, _ = self.a2s_client.check_server_alive(real_ip, port, self._poll_stop_event)
-                    if name:
-                        server_name = name
-
-                    if state == "WAITING_ONLINE":
-                        if is_alive:
-                            if max_players > 0:
-                                success_count += 1
-                                from .core.logger import app_logger
-                                app_logger.info(self.t("poll_ans", name=server_name))
-                                # Only log to UI once
-                                if not getattr(self, '_ui_logged_ans', False):
-                                    self.log_safe(self.t("poll_ans", name=server_name))
-                                    self._ui_logged_ans = True
-                            else:
-                                success_count = 0
-                                from .core.logger import app_logger
-                                app_logger.info(self.t("wait_ready"))
-                                if not getattr(self, '_ui_logged_wait', False):
-                                    self.log_safe(self.t("wait_ready"))
-                                    self._ui_logged_wait = True
-                        else:
-                            success_count = 0
-                            from .core.logger import app_logger
-                            app_logger.info(self.t("poll_err", sec=config.POLL_INTERVAL))
-                            if not getattr(self, '_ui_logged_err', False):
-                                self.log_safe(self.t("poll_err", sec=config.POLL_INTERVAL))
-                                self._ui_logged_err = True
-
-                        if success_count >= 2:
+                    status = self.a2s_client.get_server_status(real_ip, port, self._poll_stop_event)
+                    if status.server_name:
+                        server_name = status.server_name
+                    ready = status.alive and status.max_players > 0 and status.has_join_capacity
+                    if ready:
+                        # A second short local probe is faster than waiting for the
+                        # old full polling interval and filters partial startup.
+                        if self._poll_stop_event.wait(PollingPolicy().confirmation_gap_seconds):
+                            break
+                        confirmation = self.a2s_client.get_server_status(real_ip, port, self._poll_stop_event)
+                        if confirmation.alive and confirmation.max_players > 0 and confirmation.has_join_capacity:
+                            session.consume_hint()
+                            session.phase = ConnectionPhase.LAUNCH_REQUESTED
                             self.log_safe(self.t("stable"))
-                            target_str = f"{real_ip}:{port}"
-                            self.dispatch_ui(self.history_store.add_to_history, target_str, server_name, operation=("poll", operation_id))
+                            self.dispatch_ui(self.history_store.add_to_history, target, server_name, operation=("poll", operation_id))
                             self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
-
-                            self.launch_game(target_str)
+                            self.launch_game(target)
                             break
+                    else:
+                        session.observe_server_down()
+                        if not getattr(self, '_ui_logged_err', False):
+                            self.log_safe(self.t("poll_err", sec=round(session.interval_seconds(), 1)))
+                            self._ui_logged_err = True
 
-                    current_interval = config.POLL_INTERVAL
-                    for _ in range(int(current_interval * 10)):
-                        if not self._is_current_poll_operation(operation_id):
-                            break
+                    current_interval = session.interval_seconds()
+                    deadline = time.monotonic() + current_interval
+                    while self._is_current_poll_operation(operation_id) and time.monotonic() < deadline:
                         if self._poll_stop_event.wait(0.1):
                             break
-            finally:
-                manual_join_watcher.stop()
-
+                        if self._poll_wake_event.is_set():
+                            self._poll_wake_event.clear()
+                            break
         finally:
-            self.is_reconnecting = False
+            if self._is_current_poll_operation(operation_id):
+                self.is_reconnecting = False
+                if getattr(self, '_active_session', None) and self._active_session.phase not in (
+                    ConnectionPhase.LAUNCH_REQUESTED, 
+                    ConnectionPhase.AWAITING_LOG_CONFIRMATION, 
+                    ConnectionPhase.CONNECTED
+                ):
+                    self.stop_polling_safe()
 
     def _on_run_test_click(self):
         if getattr(self, 'is_benchmarking', False):
@@ -322,28 +370,55 @@ class AppController(MainWindow):
             return
         self.run_benchmark()
 
-    def log_safe(self, msg: str):
-        self.dispatch_ui(self.log, msg)
+    def log_safe(self, msg: str, color: Optional[str] = None):
+        self.dispatch_ui(self.log, msg, color=color)
 
-    def _on_swarm_event(self, ip_port: str):
+    def _on_swarm_event(self, event_name: str, ip_port: str):
         if not getattr(self, 'is_polling', False):
             return
             
-        self.dispatch_ui(self._handle_swarm_event_ui, ip_port)
+        self.dispatch_ui(self._handle_swarm_event_ui, event_name, ip_port)
 
-    def _handle_swarm_event_ui(self, ip_port: str):
+    def _on_swarm_status(self, status: str) -> None:
+        messages = {
+            "disabled": (self.t("swarm_disabled"), "#DE5148"),
+            "not_configured": (self.t("swarm_not_configured"), "#DE5148"),
+            "invalid_key": (self.t("swarm_invalid_key"), "#DE5148"),
+            "connecting": (self.t("swarm_connecting"), "#DE5148"),
+            "connected": (self.t("swarm_connected"), "#55C95D"),
+            "disconnected": (self.t("swarm_disconnected"), "#DE5148"),
+            "error": (self.t("swarm_error"), "#DE5148"),
+        }
+        message, color = messages.get(status, (self.t("swarm_unavailable"), "#DE5148"))
+        self.log_safe(message, color)
+
+    def _handle_swarm_event_ui(self, event_name: str, ip_port: str):
         if not self.is_polling:
             return
-        target = self.get_target_ip()
+        target = self.swarm_service.current_ip_port
         if target == ip_port:
-            self.log_safe("[🚀] Swarm Connect: Другой игрок зашел на сервер! Моментальное подключение...")
-            self.is_polling = False # Stop a2s polling loop
-            self.launch_game(target)
-            self.start_log_monitor(target)
+            if event_name == "server_connected":
+                session = self._active_session
+                if session:
+                    session.request_turbo()
+                    self._poll_wake_event.set()
+                self.log_safe(self.t("swarm_hint_received"), "#F97316")
+            elif event_name == "swarm_stop_spam":
+                session = self._active_session
+                if not session or not session.launched_by_app:
+                    self.log_safe(self.t("swarm_member_connected"), "#98A2B3")
+                    self.stop_polling_safe()
+            elif event_name == "swarm_connection_failed":
+                self.log_safe(self.t("swarm_member_failed"), "#98A2B3")
             
     def _on_swarm_presence(self, count: int):
-        if count > 0:
-            self.dispatch_ui(self.log, f"[🔥] Swarm: {count} чел. ждут этот сервер вместе с вами", "#2ECC71")
+        now = time.monotonic()
+        previous_count = getattr(self, "_last_swarm_presence_count", None)
+        last_log_at = getattr(self, "_last_swarm_presence_log_at", 0.0)
+        if count > 0 and (count != previous_count or now - last_log_at >= 60.0):
+            self.dispatch_ui(self.log, self.t("swarm_presence_msg", count=count), "#2ECC71")
+            self._last_swarm_presence_log_at = now
+        self._last_swarm_presence_count = count
         
     def _load_hardware(self):
         hw_cpu = self.hardware_service.get_cpu_info()
@@ -355,33 +430,31 @@ class AppController(MainWindow):
         if not hasattr(self, 'bench_btn'):
             return
             
-        if self.process_monitor.is_rust_running():
-            import tkinter.messagebox as messagebox
-            msg = self.t("bench_warn_running")
-            if messagebox.askyesno(self.t("close_rust_title"), msg):
-                self.process_monitor.force_kill_rust()
-                self.log_safe("[*] Closed Rust.")
-            else:
-                self.log_safe("[!] Benchmark aborted.")
-                self.bench_btn.configure(state="normal")
-                return
-        else:
-            import tkinter.messagebox as messagebox
-            msg = self.t("bench_warn_f5")
-            if not messagebox.askokcancel(self.t("bench_instr_title"), msg):
-                self.log_safe("[!] Benchmark aborted.")
-                self.bench_btn.configure(state="normal")
-                return
-                
-        from tkinter import messagebox
+        import tkinter.messagebox as messagebox
         if not messagebox.askyesno(
-            "Benchmark confirmation",
-            "The benchmark temporarily replaces Rust configuration files and will close Rust after the test to restore them. Continue?",
+            self.t("bench_confirm_title"),
+            self.t("bench_confirm_msg"),
         ):
-            self.log_safe("[!] Benchmark aborted: cleanup permission was not granted.")
+            self.log_safe(self.t("bench_aborted_permission"))
             self.bench_btn.configure(state="normal")
             return
 
+        if self.process_monitor.is_rust_running():
+            msg = self.t("bench_warn_running")
+            if messagebox.askyesno(self.t("close_rust_title"), msg):
+                self.process_monitor.force_kill_rust()
+                self.log_safe(self.t("closed_rust"))
+            else:
+                self.log_safe(self.t("bench_aborted"))
+                self.bench_btn.configure(state="normal")
+                return
+        else:
+            msg = self.t("bench_warn_f5")
+            if not messagebox.askokcancel(self.t("bench_instr_title"), msg):
+                self.log_safe(self.t("bench_aborted"))
+                self.bench_btn.configure(state="normal")
+                return
+                
         if getattr(self, 'is_benchmarking', False):
             return
             
@@ -391,21 +464,22 @@ class AppController(MainWindow):
         # Determine rust path inside run_benchmark (main thread) so filedialog is safe
         rust_path = history_store.get_rust_path()
         if not rust_path or not os.path.exists(rust_path):
-            self.log_safe("[*] Auto-detecting Rust installation path...")
+            self.log_safe(self.t("auto_detect_rust"))
             from .services import steam_service
             rust_path = steam_service.find_rust_install_path()
             if rust_path:
-                self.log_safe(f"[+] Found Rust at: {rust_path}")
+                self.log_safe(self.t("found_rust_at", path=rust_path))
                 history_store.set_rust_path(rust_path)
             else:
-                self.log_safe("[!] Could not auto-detect Rust. Please select manually...")
-                rust_path = filedialog.askdirectory(title="Select your Rust game folder (where RustClient.exe is)")
+                self.log_safe(self.t("cannot_detect_rust"))
+                rust_path = filedialog.askdirectory(title=self.t("select_rust_folder_title"))
                 if not rust_path:
-                    self.log_safe("[!] Benchmark aborted. Rust path not provided.")
-                    self.bench_btn.configure(state="normal", text=self.t("run_test"), fg_color="#3B8ED0")
+                    self.log_safe(self.t("bench_aborted_no_path"))
+                    self.bench_btn.configure(state="normal", text=self.t("run_test"), fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"])
                     return
                 history_store.set_rust_path(rust_path)
-                
+        self.log_safe(self.t("rust_path_confirmed", path=rust_path), "#55C95D")
+
         self.is_benchmarking = True
         self._benchmark_stop_event.clear()
         with self._operation_lock:
@@ -423,7 +497,7 @@ class AppController(MainWindow):
         rust_path = history_store.get_rust_path()
         if not rust_path or not os.path.exists(rust_path):
             import tkinter.messagebox as messagebox
-            messagebox.showerror("Error", "Rust path not found. Please run a benchmark or connect first to discover the path.")
+            messagebox.showerror(self.t("error_title"), self.t("rust_path_not_found_err"))
             return
             
         import shutil
@@ -435,14 +509,14 @@ class AppController(MainWindow):
         user_cfg_path = os.path.join(rust_path, f"cfg_user_backup_{timestamp}")
         
         if not os.path.exists(cfg_path):
-            messagebox.showerror("Error", "No 'cfg' folder found in Rust directory.")
+            messagebox.showerror(self.t("error_title"), self.t("no_cfg_folder_err"))
             return
             
         try:
             shutil.copytree(cfg_path, user_cfg_path)
-            messagebox.showinfo("Success", f"Your personal Rust config has been saved to:\n{user_cfg_path}")
+            messagebox.showinfo(self.t("success_title"), self.t("user_config_saved", path=user_cfg_path))
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to save user config:\n{e}")
+            messagebox.showerror(self.t("error_title"), self.t("user_config_save_failed", err=e))
 
     def run_benchmark_logic(self, rust_path, benchmark_operation):
         # Stop existing watchers to release log file locks
@@ -475,10 +549,10 @@ class AppController(MainWindow):
             return
             
         if not os.path.exists(os.path.join(rust_path, "RustClient.exe")):
-            self.log_bench("[!] Invalid Rust folder. RustClient.exe not found.")
+            self.log_bench(self.t("invalid_rust_folder"))
             history_store.set_rust_path("") # reset
             self.is_benchmarking = False
-            self.dispatch_ui(self.bench_btn.configure, state="normal", text=self.t("run_test"), fg_color="#3B8ED0", operation=("benchmark", benchmark_operation))
+            self.dispatch_ui(self.bench_btn.configure, state="normal", text=self.t("run_test"), fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"], operation=("benchmark", benchmark_operation))
             return
             
         # Assets must exist before touching the game installation.
@@ -490,11 +564,11 @@ class AppController(MainWindow):
             os.path.isdir(os.path.join(bm_source, "cfg"))
             and os.path.isfile(os.path.join(bm_source, "demos", "RustTweaker_bm.dem"))
         ):
-            self.log_bench("[!] BenchmarkFiles are incomplete. No game files were changed.")
+            self.log_bench(self.t("bench_files_incomplete"))
             self.is_benchmarking = False
-            self.dispatch_ui(self.bench_btn.configure, state="normal", text=self.t("run_test"), fg_color="#3B8ED0", operation=("benchmark", benchmark_operation))
+            self.dispatch_ui(self.bench_btn.configure, state="normal", text=self.t("run_test"), fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"], operation=("benchmark", benchmark_operation))
             return
-        self.log_bench("[*] Backing up your CFG and copying Benchmark files...")
+        self.log_bench(self.t("backup_cfg_copy_bench"))
         
         cfg_path = os.path.join(rust_path, "cfg")
         cfg_backup_path = os.path.join(rust_path, f".rust_autoconnect_cfg_backup_{int(time.time())}_{benchmark_operation}")
@@ -512,7 +586,7 @@ class AppController(MainWindow):
             if cancelled():
                 self._restore_benchmark_cfg(cfg_path, cfg_backup_path, cfg_work_path)
                 self.is_benchmarking = False
-                self.dispatch_ui(self.bench_btn.configure, state="normal", text=self.t("run_test"), fg_color="#3B8ED0", operation=("benchmark", benchmark_operation))
+                self.dispatch_ui(self.bench_btn.configure, state="normal", text=self.t("run_test"), fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"], operation=("benchmark", benchmark_operation))
                 return
                 
             shutil.copytree(os.path.join(bm_source, "cfg"), cfg_path, dirs_exist_ok=True)
@@ -526,15 +600,15 @@ class AppController(MainWindow):
             with open(keys_cfg, "a") as f:
                 f.write('\nbind f5 "demo.play RustTweaker_bm"\n')
         except Exception as e:
-            self.log_bench(f"[!] Failed to prepare benchmark files: {e}")
+            self.log_bench(self.t("prep_bench_failed", err=e))
             if os.path.exists(cfg_backup_path):
                 if not self._restore_benchmark_cfg(cfg_path, cfg_backup_path, cfg_work_path):
-                    self.log_bench("[!] Failed to restore CFG after preparation error.")
+                    self.log_bench(self.t("restore_cfg_failed_prep"))
             self.is_benchmarking = False
-            self.dispatch_ui(self.bench_btn.configure, state="normal", text=self.t("run_test"), fg_color="#3B8ED0", operation=("benchmark", benchmark_operation))
+            self.dispatch_ui(self.bench_btn.configure, state="normal", text=self.t("run_test"), fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"], operation=("benchmark", benchmark_operation))
             return
             
-        self.log_bench("[*] Starting Local Benchmark: Launching Rust Demo...")
+        self.log_bench(self.t("start_local_bench"))
         time.sleep(1.0)
         
         start_time = time.time()
@@ -600,29 +674,29 @@ class AppController(MainWindow):
                         new_pids = self.process_monitor.get_rust_pids() - rust_pids_before_start
                         if len(new_pids) == 1:
                             benchmark_pid = new_pids.pop()
-                        self.log_bench("[*] Rust game process detected. Waiting for map load...")
+                        self.log_bench(self.t("rust_detected_wait_map"))
                         has_started = True
                         
                     if menu_reached and not menu_msg_shown:
-                        self.log_bench(f"[!] GAME READY! (Menu loaded in {round(time_to_menu, 1)}s)")
+                        self.log_bench(self.t("game_ready_menu", sec=round(time_to_menu, 1)))
                         self.log_bench(self.t("f5_prompt_log"))
                         menu_msg_shown = True
                     
                     elapsed = int(time.time() - start_time)
                     if elapsed > 0 and elapsed % 5 == 0 and elapsed != getattr(self, '_last_wait_log', 0):
-                        self.log_bench(f"[*] Waiting... ({elapsed}s elapsed)")
+                        self.log_bench(self.t("waiting_elapsed", sec=elapsed))
                         self._last_wait_log = elapsed
                         
                 if has_started and not is_running:
-                    self.log_bench("[!] Rust process closed. Benchmark stopped.")
+                    self.log_bench(self.t("rust_closed_bench_stopped"))
                     self.is_benchmarking = False
                     break
                 if protocol_mismatch and detected_client_protocol:
-                    self.log_bench(f"[!] Protocol mismatch detected. Patching demo to protocol {detected_client_protocol}...")
+                    self.log_bench(self.t("protocol_mismatch_patching", proto=detected_client_protocol))
                     self.is_benchmarking = False
                     break
                 if time.time() - start_time > 600:
-                    self.log_bench("[!] Timeout: Demo took too long to load.")
+                    self.log_bench(self.t("bench_timeout"))
                     self.is_benchmarking = False
                     break
         finally:
@@ -631,35 +705,36 @@ class AppController(MainWindow):
             can_restore = True
             restore_deferred = False
             if benchmark_pid is not None and benchmark_pid in self.process_monitor.get_rust_pids():
-                self.log_bench("[*] Closing the Rust process started by this benchmark...")
+                self.log_bench(self.t("closing_rust_for_bench"))
                 self.process_monitor.force_kill_pid(benchmark_pid)
                 while benchmark_pid in self.process_monitor.get_rust_pids() and not self._shutdown_event.is_set():
                     self._benchmark_stop_event.wait(0.2)
             elif self.process_monitor.is_rust_running():
-                self.log_bench("[!] Rust process ownership is unclear. Configuration restore is pending until Rust closes.")
+                self.log_bench(self.t("rust_ownership_unclear"))
                 can_restore = False
                 restore_deferred = True
+                self._pending_benchmark_restore = (cfg_path, cfg_backup_path, cfg_work_path, benchmark_operation)
                 threading.Thread(
                     target=self._restore_benchmark_cfg_after_rust_exit,
                     args=(cfg_path, cfg_backup_path, cfg_work_path, benchmark_operation),
-                    daemon=True,
+                    daemon=False,
                     name="benchmark-restore",
                 ).start()
                     
             try:
                 if can_restore and os.path.exists(cfg_backup_path):
-                    self.log_bench("[*] Restoring original CFG backup...")
+                    self.log_bench(self.t("restoring_cfg_backup"))
                     if not self._restore_benchmark_cfg(cfg_path, cfg_backup_path, cfg_work_path):
                         raise OSError("configuration restore did not complete")
             except (OSError, shutil.Error) as e:
-                self.log_bench(f"[!] Failed to restore CFG backup: {e}")
+                self.log_bench(self.t("restore_cfg_failed", err=e))
             
             self.is_benchmarking = False
             if restore_deferred:
                 self.dispatch_ui(
                     self.bench_btn.configure,
                     state="disabled",
-                    text="Restore pending",
+                    text=self.t("restore_pending"),
                     fg_color="#FADA5E",
                     text_color="black",
                     operation=("benchmark", benchmark_operation),
@@ -667,34 +742,34 @@ class AppController(MainWindow):
                 return
             
             if protocol_mismatch and detected_client_protocol:
-                self.log_bench("[!] Demo protocol mismatch detected. The demo was not modified automatically.")
+                self.log_bench(self.t("demo_proto_mismatch_no_mod"))
             elif spawn_reached and menu_reached:
                 demo_load_time = time.time() - demo_start_time if demo_start_time > 0.0 else 0.0
                 total_time = time_to_menu + demo_load_time
                 
                 # Validation: Prevent spoofing by requiring minimum realistic times
                 if time_to_menu < 2.0 or demo_load_time < 2.0:
-                    self.log_bench("[!] Benchmark rejected: Times are unrealistically fast. Anti-cheat triggered.")
+                    self.log_bench(self.t("bench_rejected_fast"))
                     self.is_benchmarking = False
-                    self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color="#E74C3C", text="Rejected", operation=("benchmark", benchmark_operation))
+                    self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color="#E74C3C", text=self.t("rejected"), operation=("benchmark", benchmark_operation))
                     return
                     
-                self.log_bench(f"[🏆] Time to Menu: {round(time_to_menu, 1)}s")
-                self.log_bench(f"[🏆] Map Load Time: {round(demo_load_time, 1)}s")
-                self.log_bench(f"[🏆] Total Benchmark Score: {round(total_time, 1)}s")
+                self.log_bench(self.t("score_time_to_menu", sec=round(time_to_menu, 1)))
+                self.log_bench(self.t("score_map_load", sec=round(demo_load_time, 1)))
+                self.log_bench(self.t("score_total", sec=round(total_time, 1)))
                 
-                self.log_bench("[*] Benchmark complete! Game is closed.")
+                self.log_bench(self.t("bench_complete_game_closed"))
                 
                 if total_time < 90:
-                    self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color="#50C878", text="Excellent", operation=("benchmark", benchmark_operation))
+                    self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color="#50C878", text=self.t("bench_excellent"), operation=("benchmark", benchmark_operation))
                 elif total_time < 180:
-                    self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color="#FADA5E", text="Good", text_color="black", operation=("benchmark", benchmark_operation))
+                    self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color="#FADA5E", text=self.t("bench_good"), text_color="black", operation=("benchmark", benchmark_operation))
                 else:
-                    self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color="#E74C3C", text="Slow", operation=("benchmark", benchmark_operation))
+                    self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color="#E74C3C", text=self.t("bench_slow"), operation=("benchmark", benchmark_operation))
                 
                 self._record_benchmark_result(rust_path, time_to_menu, demo_load_time, benchmark_operation)
             else:
-                self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color="#3B8ED0", text=self.t("run_test"), operation=("benchmark", benchmark_operation))
+                self.dispatch_ui(self.bench_btn.configure, state="normal", fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"], text=self.t("run_test"), operation=("benchmark", benchmark_operation))
 
     @staticmethod
     def _restore_benchmark_cfg(cfg_path: str, backup_path: str, work_path: str) -> bool:
@@ -717,20 +792,46 @@ class AppController(MainWindow):
     def _restore_benchmark_cfg_after_rust_exit(self, cfg_path: str, backup_path: str, work_path: str, benchmark_operation: int) -> None:
         while self.process_monitor.is_rust_running() and not self._shutdown_event.is_set():
             self._shutdown_event.wait(0.5)
-        if self._shutdown_event.is_set():
-            return
+            
+        with self._operation_lock:
+            pending = self.__dict__.get("_pending_benchmark_restore")
+            if pending is not None:
+                self._pending_benchmark_restore = None
+
+        # Always restore CFG even if shutting down
         if self._restore_benchmark_cfg(cfg_path, backup_path, work_path):
-            self.log_bench("[+] Rust closed. Original benchmark configuration was restored.")
-            self.dispatch_ui(
-                self.bench_btn.configure,
-                state="normal",
+            if not self._shutdown_event.is_set():
+                self.log_bench(self.t("rust_closed_restored"))
+                self.dispatch_ui(
+                    self.bench_btn.configure,
+                    state="normal",
                 text=self.t("run_test"),
                 fg_color="#E67E22",
                 text_color="#101214",
                 operation=("benchmark", benchmark_operation),
             )
         else:
-            self.log_bench("[!] Rust closed, but benchmark configuration restore failed.")
+            self.log_bench(self.t("rust_closed_restore_failed"))
+
+    def _restore_pending_benchmark_on_shutdown(self) -> None:
+        with self._operation_lock:
+            pending = self.__dict__.get("_pending_benchmark_restore")
+            if not pending:
+                return
+            self._pending_benchmark_restore = None
+        cfg_path, backup_path, work_path, _operation = pending
+        try:
+            if self.process_monitor.is_rust_running():
+                self.process_monitor.force_kill_rust()
+            restored = self._restore_benchmark_cfg(cfg_path, backup_path, work_path)
+        except (OSError, shutil.Error) as error:
+            app_logger.error(f"Could not restore pending benchmark configuration during shutdown: {type(error).__name__}")
+            return
+        if restored:
+            self._pending_benchmark_restore = None
+            app_logger.info("Restored pending benchmark configuration during shutdown.")
+        else:
+            app_logger.error("Could not restore pending benchmark configuration during shutdown.")
 
     def _record_benchmark_result(
         self, rust_path: str, time_to_menu: float, demo_load_time: float, benchmark_operation: int
@@ -744,15 +845,15 @@ class AppController(MainWindow):
                 time_to_menu, demo_load_time, BENCHMARK_VERSION,
             )
             if not history_store.add_benchmark_run(run):
-                self.log_bench("[!] Benchmark result was not queued; upload was skipped.")
+                self.log_bench(self.t("bench_result_not_queued"))
                 return
         except (OSError, ValueError) as error:
-            self.log_bench(f"[!] Local benchmark result was not saved: {type(error).__name__}")
+            self.log_bench(self.t("bench_result_not_saved", err=type(error).__name__))
             return
 
-        self.log_bench(f"[+] Result queued for {run['cpu']} + {run['storage']}.")
+        self.log_bench(self.t("result_queued_for", cpu=run['cpu'], storage=run['storage']))
         self.dispatch_ui(self.update_benchmark_summary, run, operation=("benchmark", benchmark_operation))
-        self.log_bench("[*] Sending anonymous benchmark result to the global leaderboard...")
+        self.log_bench(self.t("sending_bench_result"))
         threading.Thread(
             target=self._submit_benchmark_run_bg,
             args=(run,),
@@ -767,18 +868,18 @@ class AppController(MainWindow):
                 f.seek(8) # Skip identifier
                 f.write(new_protocol.to_bytes(4, byteorder='little'))
         except Exception as e:
-            self.log_bench(f"[!] Failed to patch demo: {e}")
+            self.log_bench(self.t("patch_demo_failed", err=e))
 
     def _submit_benchmark_run_bg(self, run: dict) -> None:
         from .services.leaderboard_service import leaderboard_service
         success = leaderboard_service.submit_run(run)
         if success:
             if history_store.mark_benchmark_run_synced(run["id"]):
-                self.log_bench("[+] Anonymous result submitted to the leaderboard.")
+                self.log_bench(self.t("result_submitted"))
             else:
-                self.log_bench("[!] Result was submitted but could not be marked as synced; it may retry later.")
+                self.log_bench(self.t("result_submitted_mark_failed"))
         else:
-            self.log_bench("[!] Leaderboard is unavailable; the local result remains pending.")
+            self.log_bench(self.t("leaderboard_unavailable_pending"))
 
     def _retry_pending_benchmark_runs(self) -> None:
         """Retry retained benchmark uploads without exposing a user-facing history."""
@@ -819,44 +920,79 @@ class AppController(MainWindow):
             from .core.logger import app_logger
             app_logger.info(f"[*] Game log: {event}")
             # Do NOT spam the UI with every game log line
+            if watcher is not self.log_watcher:
+                return
             if not getattr(self, 'is_connected', False) and ("Client connected" in event or "Spawning" in event):
                 self.is_connected = True
+                if self._active_session:
+                    self._active_session.phase = ConnectionPhase.CONNECTED
                 conn_time = round(time.time() - getattr(self, 'connection_start_time', time.time()), 1)
-                self.log_safe(f"[⏱️] Server Connection Time: {conn_time} seconds!")
+                self.dispatch_ui(self.set_connection_state, "Connected", target_str)
+                self.log_safe(self.t("server_conn_time", sec=conn_time))
+                if getattr(self, 'is_polling', False):
+                    threading.Thread(target=self.swarm_service.broadcast_stop_spam, args=(target_str,), daemon=True).start()
+                    self.stop_polling_safe()
 
-        self.log_watcher = LogWatcher(
-            on_disconnect=lambda reason: self._on_log_disconnect(target_str, reason),
+        watcher = None
+        def handle_disconnect(reason):
+            self._on_log_disconnect(target_str, watcher, reason)
+
+        watcher = LogWatcher(
+            on_disconnect=handle_disconnect,
             on_error=self._on_log_error,
             on_event=handle_event
         )
-        self.log_watcher.start()
+        self.log_watcher = watcher
+        watcher.start()
 
-    def _on_log_disconnect(self, target_str: str, reason: str):
-        if not self.is_polling:
+    def _on_log_disconnect(self, target_str: str, source_watcher, reason: str):
+        if not self.is_polling or self.log_watcher is not source_watcher:
             return
             
         self.log_safe(self.t("log_err") + f" Reason: {reason}")
         
-        current_watcher = self.log_watcher
+        if not getattr(self, 'is_connected', False):
+            threading.Thread(target=self.swarm_service.broadcast_connection_failed, args=(target_str,), daemon=True).start()
+        
+        
         time.sleep(2.0)
         
-        if not self.is_polling or self.log_watcher is not current_watcher:
+        if not self.is_polling or self.log_watcher is not source_watcher:
             return
             
+        if self._active_session:
+            self._active_session.phase = ConnectionPhase.COOLDOWN
         self.start_process_force(target_str)
 
     def start_process_force(self, target: str):
+        if not _is_valid_endpoint(target):
+            self.log_safe(self.t("auto_reconnect_skipped_invalid"), "#DE5148")
+            return
+        self.stop_polling()
         with self._state_lock:
             if self._is_reconnecting:
                 return
             self._is_reconnecting = True
             self._is_polling = True
+        self.dispatch_ui(self.ip_entry.configure, state="disabled")
+        self.dispatch_ui(
+            self.connect_btn.configure,
+            text=self.t("stop"),
+            fg_color="#C74E4E",
+            hover_color="#9E3E3E",
+            text_color="#F2F4F7",
+        )
+        self.dispatch_ui(self.set_connection_state, "Monitoring", target)
         self._poll_stop_event.clear()
+        self._poll_wake_event.clear()
         operation_id = self._next_poll_operation()
         self.poll_thread = threading.Thread(target=self.run_logic, args=(target, operation_id), daemon=True, name="forced-server-poll")
         self.poll_thread.start()
 
     def launch_game(self, target: str):
+        if not _is_valid_endpoint(target):
+            self.log_safe(self.t("launch_skipped_invalid"), "#DE5148")
+            return
         self.log_safe(self.t("launch", url=target))
         try:
             url = f"steam://run/{config.STEAM_APP_ID}//+connect {target}"
@@ -866,14 +1002,21 @@ class AppController(MainWindow):
                 import webbrowser
                 webbrowser.open(url)
             self.log_safe(self.t("launch_ok"))
-            self.dispatch_ui(self.set_connection_state, "Connected", target)
+            if self._active_session:
+                self._active_session.launched_by_app = True
+                self._active_session.phase = ConnectionPhase.AWAITING_LOG_CONFIRMATION
+                self._active_session.reset_offline_turbo()
+            self.dispatch_ui(self.set_connection_state, "Launching", target)
             self.start_log_monitor(target)
             
             if self.swarm_service.is_enabled:
-                threading.Thread(target=self.swarm_service.broadcast_success, args=(target,), daemon=True).start()
+                hint_endpoint = self._active_session.canonical_endpoint if self._active_session else target
+                threading.Thread(target=self.swarm_service.broadcast_success, args=(hint_endpoint,), daemon=True).start()
+                threading.Thread(target=self.server_intelligence.report_available, args=(hint_endpoint,), daemon=True).start()
         except Exception as e:
             self.dispatch_ui(self.set_connection_state, "Launch failed")
             self.log_safe(self.t("launch_err", err=str(e)))
+            self.stop_polling_safe()
 
     def save_only(self):
         target = self.get_target_ip()
@@ -912,13 +1055,13 @@ class AppController(MainWindow):
         if not target:
             return
 
-        dialog = ctk.CTkInputDialog(text="Enter a name for this favorite server:", title="Save Favorite")
+        dialog = ctk.CTkInputDialog(text=self.t("save_favorite_prompt"), title=self.t("save_favorite_title"))
         name = dialog.get_input()
         if name:
             self.history_store.toggle_favorite(target, name)
             self.update_favorites_combobox()
             self.set_address(f"{name} ({target})")
-            self.log_safe(f"[*] Saved to favorites: {name}")
+            self.log_safe(self.t("saved_to_favorites", name=name))
 
     def select_history(self, ip_port: str):
         if self.is_polling:
@@ -933,21 +1076,33 @@ class AppController(MainWindow):
             if is_running:
                 if last_status is not True:
                     self.dispatch_ui(self.set_rust_status, True)
+                    self.log_safe(self.t("rust_process_running"), "#55C95D")
                     last_status = True
                 self.is_rust_was_running = True
             else:
                 if last_status is not False:
                     self.dispatch_ui(self.set_rust_status, False)
+                    self.log_safe(self.t("rust_process_not_running"), "#DE5148")
                     last_status = False
                 if getattr(self, 'is_rust_was_running', False):
                     self.is_rust_was_running = False
-                    with self._operation_lock:
-                        operation_id = self._poll_operation
-                    self.dispatch_ui(self.stop_polling, operation=("poll", operation_id))
+                    self.dispatch_ui(self._handle_unexpected_rust_exit)
             
             # Use event wait instead of raw sleep for graceful shutdown
             if getattr(self, '_shutdown_event', threading.Event()).wait(2.0):
                 break
+
+    def _handle_unexpected_rust_exit(self) -> None:
+        session = self._active_session
+        armed = self.history_store.get_armed_server()
+        if not session or not session.launched_by_app:
+            return
+        if armed not in {session.requested_endpoint, session.canonical_endpoint}:
+            return
+        self.log_safe(self.t("rust_closed_unexpectedly"), "#F97316")
+        session.offline_turbo_used = False
+        session.observe_server_down()
+        self.start_process_force(session.requested_endpoint)
 
     def check_rust_update_loop(self):
         while True:
@@ -970,7 +1125,7 @@ class AppController(MainWindow):
                 local_buildid = steam_service.get_local_buildid()
 
                 if local_buildid and latest_buildid and str(local_buildid) != str(latest_buildid):
-                    self.log_safe("[*] Rust game update is available.")
+                    self.log_safe(self.t("rust_game_update_avail"))
             except Exception:
                 pass
 
@@ -993,6 +1148,7 @@ class AppController(MainWindow):
         """
         BUG-04 Fix: Graceful shutdown stopping log watcher and polling loops.
         """
+        self._restore_pending_benchmark_on_shutdown()
         self.is_polling = False
         self._is_shutting_down = True
         self._shutdown_event.set()
@@ -1013,5 +1169,12 @@ class AppController(MainWindow):
         if hasattr(self, 'global_log_watcher') and self.global_log_watcher:
             self.global_log_watcher.stop()
             self.global_log_watcher = None
+
+        swarm_service = self.__dict__.get("swarm_service")
+        if swarm_service is not None:
+            swarm_service.on_swarm_event = None
+            swarm_service.on_presence_update = None
+            swarm_service.on_status = None
+            swarm_service.stop()
             
         super().shutdown()

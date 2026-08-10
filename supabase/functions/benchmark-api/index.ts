@@ -1,7 +1,12 @@
 // Deploy this Edge Function only after reviewing the paired migration and secrets.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = { "content-type": "application/json", "access-control-allow-origin": "*" };
+const corsHeaders = { 
+  "content-type": "application/json", 
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "POST, GET, OPTIONS",
+  "access-control-allow-headers": "apikey, Authorization, Content-Type"
+};
 const maxPhaseSeconds = 600;
 
 function json(body: unknown, status = 200): Response {
@@ -20,6 +25,16 @@ function timing(value: unknown): number | null {
     : null;
 }
 
+function serverSecretKey(): string | null {
+  try {
+    const keys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}");
+    if (typeof keys.default === "string" && keys.default) return keys.default;
+  } catch {
+    // Older projects expose the legacy variable below.
+  }
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+}
+
 async function deriveConfigurationKey(cpu: string, storage: string, benchmarkVersion: string): Promise<string> {
   const normalized = JSON.stringify({
     benchmark_version: benchmarkVersion.trim().replace(/\s+/g, " ").toLowerCase(),
@@ -33,10 +48,14 @@ async function deriveConfigurationKey(cpu: string, storage: string, benchmarkVer
 Deno.serve(async (request) => {
   const url = new URL(request.url);
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceRoleKey = serverSecretKey();
   const installSalt = Deno.env.get("BENCHMARK_INSTALLATION_SALT");
   if (!supabaseUrl || !serviceRoleKey || !installSalt) return json({ error: "service unavailable" }, 503);
   const db = createClient(supabaseUrl, serviceRoleKey);
+
+  if (request.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   if (request.method === "POST" && url.pathname.endsWith("/benchmark/submit")) {
     const body = await request.json().catch(() => null);
@@ -58,12 +77,12 @@ Deno.serve(async (request) => {
 
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${installSalt}:${installationId}`));
     const installationHash = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
-    const since = new Date(Date.now() - 60_000).toISOString();
-    const { count, error: rateError } = await db
-      .from("benchmark_runs_v2")
-      .select("id", { count: "exact", head: true })
-      .eq("installation_hash", installationHash)
-      .gte("received_at", since);
+    const windowMinute = new Date();
+    windowMinute.setSeconds(0, 0); // round to minute
+    const { data: count, error: rateError } = await db.rpc(
+      "increment_benchmark_rate_limit",
+      { p_installation_hash: installationHash, p_window_started_at: windowMinute.toISOString() }
+    );
     if (rateError) return json({ error: "service unavailable" }, 503);
     if ((count ?? 0) >= 5) return json({ error: "rate limited" }, 429);
 
@@ -77,6 +96,7 @@ Deno.serve(async (request) => {
       benchmark_version: benchmarkVersion,
       time_to_menu: timeToMenu,
       demo_load_time: demoLoadTime,
+      received_at: new Date().toISOString(),
     }, { onConflict: "id" });
     return error ? json({ error: "service unavailable" }, 503) : json({ accepted: true }, 202);
   }
@@ -85,7 +105,7 @@ Deno.serve(async (request) => {
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 30, 1), 100);
     const offset = Math.max(Number(url.searchParams.get("offset")) || 0, 0);
     const ascending = url.searchParams.get("sort") !== "desc";
-    const query = url.searchParams.get("q")?.slice(0, 100);
+    const query = url.searchParams.get("q")?.slice(0, 100).replace(/[,%.*()]/g, '');
     let requestBuilder = db.from("benchmark_configuration_summary_v2").select("*").order("median_total_time", { ascending }).range(offset, offset + limit - 1);
     if (query) requestBuilder = requestBuilder.or(`cpu.ilike.%${query}%,storage.ilike.%${query}%`);
     const { data, error } = await requestBuilder;
@@ -95,20 +115,9 @@ Deno.serve(async (request) => {
   const match = url.pathname.match(/\/benchmark\/configurations\/([a-f0-9]{64})$/i);
   if (request.method === "GET" && match) {
     const key = match[1];
-    const { data: summary, error: summaryError } = await db.from("benchmark_configuration_summary_v2").select("*").eq("configuration_key", key).maybeSingle();
-    if (summaryError || !summary) return json({ error: "not found" }, 404);
-    const { data: installations, error: detailError } = await db
-      .from("benchmark_runs_v2")
-      .select("installation_hash,total_time")
-      .eq("configuration_key", key);
-    if (detailError) return json({ error: "service unavailable" }, 503);
-    const grouped = new Map<string, number[]>();
-    for (const run of installations ?? []) grouped.set(run.installation_hash, [...(grouped.get(run.installation_hash) ?? []), Number(run.total_time)]);
-    const items = [...grouped.values()].map((times) => ({
-      median_total_time: times.sort((a, b) => a - b)[Math.floor(times.length / 2)],
-      run_count: times.length,
-    }));
-    return json({ summary, installations: items });
+    const { data, error } = await db.rpc("calculate_benchmark_medians", { target_configuration_key: key });
+    if (error || !data) return json({ error: "not found" }, 404);
+    return json(data);
   }
 
   return json({ error: "not found" }, 404);

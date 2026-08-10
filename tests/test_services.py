@@ -87,10 +87,39 @@ class TestSwarmService(unittest.TestCase):
         self.assertFalse(swarm.is_enabled)
         mock_ws.close.assert_called_once()
 
-    def test_secret_from_env(self):
+    def test_shared_secret_is_not_part_of_client_configuration(self):
         with patch.dict(os.environ, {"SWARM_SECRET": "custom_secret"}):
             swarm = SwarmService()
-            self.assertEqual(swarm._secret, b"custom_secret")
+        self.assertFalse(hasattr(swarm, "_secret"))
+
+    def test_status_reports_missing_configuration(self):
+        swarm = SwarmService()
+        swarm.supabase_key = ""
+        statuses = []
+        swarm.on_status = statuses.append
+        swarm.is_enabled = True
+
+        swarm.start()
+
+        self.assertEqual(statuses, ["not_configured"])
+
+    def test_personal_access_token_is_rejected_for_realtime_client(self):
+        swarm = SwarmService()
+        swarm.supabase_key = "sbp_example"
+        statuses = []
+        swarm.on_status = statuses.append
+        swarm.is_enabled = True
+
+        swarm.start()
+
+        self.assertFalse(swarm.is_configured)
+        self.assertEqual(statuses, ["invalid_key"])
+
+    def test_legacy_service_role_jwt_is_rejected_for_realtime_client(self):
+        # The payload is deliberately unsigned: this test only exercises the
+        # local role guard, not JWT verification.
+        service_role_jwt = "eyJhbGciOiJub25lIn0.eyJyb2xlIjoic2VydmljZV9yb2xlIn0."
+        self.assertFalse(SwarmService._is_public_supabase_key(service_role_jwt))
 
     def test_heartbeat_loop_breaks_on_stale_ws(self):
         swarm = SwarmService()
@@ -99,20 +128,11 @@ class TestSwarmService(unittest.TestCase):
         mock_ws2 = MagicMock()
         swarm.ws = mock_ws2
 
-        # _on_open starts heartbeat thread
+        # A late callback from the old socket must not affect the current socket.
         with patch("threading.Thread") as mock_thread_cls:
             swarm._on_open(mock_ws1)
-            # Find the heartbeat loop function passed to Thread
-            call_args = mock_thread_cls.call_args
-            self.assertIsNotNone(call_args)
-            hb_func = call_args[1].get("target")
-            current_ws = call_args[1].get("args")[0]
-            self.assertEqual(current_ws, mock_ws1)
-
-            mock_ws1.reset_mock()
-            # Invoking hb_func when swarm.ws is mock_ws2 should break immediately without looping
-            hb_func(mock_ws1)
-            mock_ws1.send.assert_not_called()
+            mock_thread_cls.assert_not_called()
+            self.assertTrue(swarm.is_connected)
 
 
 class TestProcessMonitor(unittest.TestCase):

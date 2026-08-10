@@ -83,6 +83,7 @@ class LogWatcher:
                             except FileNotFoundError:
                                 break
                             if current_size < last_size:
+                                self.seek_end = True
                                 break
                             last_size = current_size
                             new_data = file.read(4096)
@@ -93,9 +94,11 @@ class LogWatcher:
                             lines = buffer.split("\n")
                             buffer = lines.pop()
                             for line in lines:
+                                if self._stop_event.is_set() or not self.is_monitoring:
+                                    return
                                 if self.on_event:
                                     self.on_event(line)
-                                if any(keyword in line for keyword in config.DISCONNECT_KEYWORDS):
+                                if any(keyword in line for keyword in config.DISCONNECT_KEYWORDS) or (" " not in line.strip() and "|0x" in line and line.rstrip().endswith("|-1")):
                                     self.is_monitoring = False
                                     self.on_disconnect(line.strip())
                                     return

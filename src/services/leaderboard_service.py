@@ -8,13 +8,13 @@ aggregation.
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Optional
 
 from ..core.logger import app_logger
+from ..core.public_config import get_public_config
 
 
 class LeaderboardService:
@@ -23,7 +23,7 @@ class LeaderboardService:
 
     @property
     def api_url(self) -> str:
-        return os.environ.get("BENCHMARK_API_URL", "").rstrip("/")
+        return get_public_config()["BENCHMARK_API_URL"].rstrip("/")
 
     @property
     def is_configured(self) -> bool:
@@ -32,11 +32,26 @@ class LeaderboardService:
     def _request(self, request: urllib.request.Request, timeout: float = 5.0) -> tuple[int, bytes]:
         if not self.is_configured:
             raise RuntimeError("Leaderboard API is not configured")
+            
+        public_key = get_public_config().get("SUPABASE_PUBLISHABLE_KEY", "")
+        if public_key:
+            if not request.has_header("apikey"):
+                request.add_header("apikey", public_key)
+            if not request.has_header("Authorization"):
+                request.add_header("Authorization", f"Bearer {public_key}")
+                
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.getcode(), response.read()
 
     def _set_error(self, error: Exception) -> None:
-        self.last_error = type(error).__name__
+        if isinstance(error, urllib.error.HTTPError):
+            try:
+                body = error.read().decode("utf-8")
+                self.last_error = json.loads(body).get("error", f"HTTP {error.code}")
+            except Exception:
+                self.last_error = f"HTTP {error.code}"
+        else:
+            self.last_error = type(error).__name__
         app_logger.warning(f"Leaderboard request failed: {self.last_error}")
 
     def submit_run(self, run: dict[str, Any]) -> bool:
@@ -46,7 +61,7 @@ class LeaderboardService:
             return False
         allowed = {
             "id", "installation_id", "configuration_key", "cpu", "storage", "storage_bus",
-            "benchmark_version", "time_to_menu", "demo_load_time", "total_time", "created_at",
+            "benchmark_version", "time_to_menu", "demo_load_time",
         }
         payload = {key: value for key, value in run.items() if key in allowed}
         try:

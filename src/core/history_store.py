@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+import re
 import shutil
 import threading
 import time
@@ -12,10 +13,11 @@ from .logger import app_logger
 
 
 DEFAULT_DATA: Dict[str, Any] = {
-    "lang": "RU", "history": [], "favorites": [], "auto_update": True,
-    "minimize_to_tray": False, "rust_path": "", "swarm_enabled": True,
+    "lang": "EN", "history": [], "favorites": [], "auto_update": True,
+    "minimize_to_tray": False, "rust_path": "", "swarm_enabled": False,
     "leaderboard_enabled": True, "username": "", "client_id": "",
     "installation_id": "", "armed_server": "", "benchmark_runs": [],
+    "home_splitter_width": 270, "bench_splitter_width": 270,
 }
 
 
@@ -58,31 +60,35 @@ class HistoryStore:
             try:
                 with data_file.open("r", encoding="utf-8") as file:
                     self.data = self._normalize(json.load(file))
-            except (OSError, json.JSONDecodeError, ValueError) as error:
-                app_logger.warning(f"Settings recovery started: {type(error).__name__}")
+            except OSError as error:
+                app_logger.warning(f"Unable to read settings file: {error}")
+            except (json.JSONDecodeError, ValueError) as error:
+                app_logger.warning(f"Settings corruption detected: {type(error).__name__}")
                 self._backup_corrupted_file(data_file)
                 self.data = copy.deepcopy(DEFAULT_DATA)
-
+                self.save()
     def save(self) -> bool:
-        """Atomically persist the current validated state. Caller holds ``_lock``."""
-        config.appdata_dir.mkdir(parents=True, exist_ok=True)
-        data_file = config.data_file
-        tmp_file = data_file.with_suffix(".tmp")
-        self.data = self._normalize(self.data)
-        try:
-            with tmp_file.open("w", encoding="utf-8") as file:
-                json.dump(self.data, file, ensure_ascii=False, indent=2)
-                file.flush()
-                os.fsync(file.fileno())
-            os.replace(tmp_file, data_file)
-            return True
-        except OSError as error:
-            app_logger.error(f"Unable to save settings: {error}")
+        """Atomically persist the current validated state."""
+        with self._lock:
+            config.appdata_dir.mkdir(parents=True, exist_ok=True)
+            data_file = config.data_file
+            tmp_file = data_file.with_suffix(".tmp")
+            data_copy = self._normalize(self.data)
             try:
-                tmp_file.unlink(missing_ok=True)
-            except OSError:
-                pass
-            return False
+                with tmp_file.open("w", encoding="utf-8") as file:
+                    json.dump(data_copy, file, ensure_ascii=False, indent=2)
+                    file.flush()
+                    os.fsync(file.fileno())
+                os.replace(tmp_file, data_file)
+                self.data = data_copy
+                return True
+            except OSError as error:
+                app_logger.error(f"Unable to save settings: {error}")
+                try:
+                    tmp_file.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return False
 
     def add_to_history(self, ip_port: str, name: str):
         with self._lock:
@@ -136,6 +142,30 @@ class HistoryStore:
                     return self.save()
         return False
 
+    def get_server_wipe_schedule(self, ip_port: str) -> Dict[str, Any]:
+        """Return the optional user-confirmed wipe schedule for one server."""
+        with self._lock:
+            item = next((entry for entry in self.data["history"] if entry.get("ip") == ip_port), {})
+            wipe_at = item.get("wipe_at")
+            if not isinstance(wipe_at, int) or wipe_at <= 0:
+                wipe_at = None
+            source = item.get("wipe_source") if isinstance(item.get("wipe_source"), str) else ""
+            return {"wipe_at": wipe_at, "wipe_source": source}
+
+    def set_server_wipe_schedule(self, ip_port: str, wipe_at: int | None, source: str = "manual") -> bool:
+        """Persist a manual UTC schedule. ``None`` clears it."""
+        with self._lock:
+            for item in self.data["history"]:
+                if item.get("ip") == ip_port:
+                    if wipe_at is None:
+                        item.pop("wipe_at", None)
+                        item.pop("wipe_source", None)
+                    else:
+                        item["wipe_at"] = max(1, int(wipe_at))
+                        item["wipe_source"] = str(source).strip()[:32] or "manual"
+                    return self.save()
+        return False
+
     def export_server_library(self) -> Dict[str, Any]:
         with self._lock:
             return {
@@ -163,22 +193,56 @@ class HistoryStore:
                     continue
                 ip = server.get("ip")
                 name = server.get("name")
-                if not isinstance(ip, str) or not isinstance(name, str) or not ip.strip():
+                if not isinstance(ip, str) or not isinstance(name, str):
                     continue
+                ip = ip.strip()
+                if len(ip) > 255 or not re.fullmatch(r"[A-Za-z0-9.-]{1,253}:\d{1,5}", ip):
+                    continue
+                port = int(ip.rsplit(":", 1)[1])
+                if not 1 <= port <= 65535:
+                    continue
+                try:
+                    added_at = int(server.get("added_at", time.time()))
+                except (TypeError, ValueError, OverflowError):
+                    added_at = int(time.time())
+                normalized = {
+                    "ip": ip,
+                    "name": name.strip()[:160] or "Rust Server",
+                    "added_at": added_at,
+                    "tags": [str(tag).strip()[:32] for tag in server.get("tags", [])[:8] if str(tag).strip()]
+                    if isinstance(server.get("tags", []), list) else [],
+                    "note": str(server.get("note", "")).strip()[:512],
+                }
                 if ip in current:
-                    current[ip] = {**current[ip], **copy.deepcopy(server), "ip": ip, "name": name[:160]}
+                    current[ip] = {**current[ip], **normalized}
                     updated += 1
                 else:
-                    current[ip] = {**copy.deepcopy(server), "ip": ip, "name": name[:160], "added_at": int(server.get("added_at", time.time()))}
+                    current[ip] = normalized
                     added += 1
-            ordered = sorted(current.values(), key=lambda item: item.get("added_at", 0), reverse=True)
+            def sort_time(item: Dict[str, Any]) -> int:
+                try:
+                    return int(item.get("added_at", 0))
+                except (TypeError, ValueError, OverflowError):
+                    return 0
+
+            ordered = sorted(current.values(), key=sort_time, reverse=True)
             self.data["history"] = ordered[:20]
-            known_ips = {item.get("ip") for item in self.data["history"]}
-            self.data["favorites"] = [
-                {"ip": item["ip"], "name": str(item.get("name", "Rust Server"))[:160]}
-                for item in favorites
-                if isinstance(item, dict) and item.get("ip") in known_ips
-            ]
+            
+            merged_favorites = {
+                item.get("ip"): {"ip": item.get("ip"), "name": str(item.get("name", "Rust Server"))[:160]}
+                for item in self.data["favorites"]
+                if isinstance(item, dict) and isinstance(item.get("ip"), str)
+            }
+            for item in favorites[:100]:
+                if isinstance(item, dict) and isinstance(item.get("ip"), str):
+                    merged_favorites[item["ip"]] = {
+                        "ip": item["ip"],
+                        "name": str(item.get("name", "Rust Server"))[:160],
+                    }
+            self.data["favorites"] = list(merged_favorites.values())
+            imported_armed = payload.get("armed_server")
+            if not self.data.get("armed_server") and imported_armed in current:
+                self.data["armed_server"] = imported_armed
             self.save()
         return added, updated
 
@@ -277,6 +341,20 @@ class HistoryStore:
         with self._lock:
             self.data["armed_server"] = "" if self.data["armed_server"] == ip_port else ip_port
             self.save()
+
+    def get_home_splitter_width(self) -> int:
+        with self._lock:
+            return self.data.get("home_splitter_width", 270)
+            
+    def set_home_splitter_width(self, width: int):
+        self._set_value("home_splitter_width", width)
+        
+    def get_bench_splitter_width(self) -> int:
+        with self._lock:
+            return self.data.get("bench_splitter_width", 270)
+            
+    def set_bench_splitter_width(self, width: int):
+        self._set_value("bench_splitter_width", width)
 
 
 history_store = HistoryStore()

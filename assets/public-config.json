@@ -1,0 +1,6 @@
+{
+  "SUPABASE_WS_URL": "wss://eznuyydoanefceqmqxqi.supabase.co/realtime/v1/websocket",
+  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_kw_2cX5tQrtOL6lmjWqxrQ_k76LJd3b",
+  "BENCHMARK_API_URL": "",
+  "SERVER_INTELLIGENCE_URL": "https://eznuyydoanefceqmqxqi.supabase.co/functions/v1"
+}

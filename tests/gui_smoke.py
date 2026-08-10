@@ -83,7 +83,7 @@ def main() -> int:
         window.show_bench_frame()
         capture(window, OUTPUT_DIR / "benchmark.png")
 
-        window.show_benchmark_view("Online ranking")
+        window.show_benchmark_view("Ranking")
         capture(window, OUTPUT_DIR / "benchmark_online_ranking.png")
         window.show_benchmark_view("Run log")
 

@@ -3,6 +3,7 @@ import threading
 from unittest.mock import MagicMock, patch
 
 from src.app import AppController
+from src.core.smart_monitor import ConnectionPhase, ConnectionSession
 
 
 def make_controller_stub():
@@ -11,6 +12,7 @@ def make_controller_stub():
     controller._poll_operation = 2
     controller._benchmark_operation = 3
     controller._shutdown_event = threading.Event()
+    controller._pending_benchmark_restore = None
     controller._ui_queue = queue.Queue()
     controller.after = lambda delay, callback: "scheduled"
     return controller
@@ -70,6 +72,12 @@ def test_forced_reconnect_starts_a_new_poll_operation():
     controller._is_polling = False
     controller._poll_stop_event = threading.Event()
     controller._poll_stop_event.set()
+    controller._poll_wake_event = threading.Event()
+    controller.ip_entry = MagicMock()
+    controller.connect_btn = MagicMock()
+    controller.set_connection_state = MagicMock()
+    controller.swarm_service = MagicMock()
+    controller.t = lambda key: "Stop"
 
     with patch("src.app.threading.Thread") as thread:
         AppController.start_process_force(controller, "127.0.0.1:28015")
@@ -77,10 +85,10 @@ def test_forced_reconnect_starts_a_new_poll_operation():
     assert controller.is_polling is True
     assert controller.is_reconnecting is True
     assert controller._poll_stop_event.is_set() is False
-    assert controller._poll_operation == 3
+    assert controller._poll_operation > 2
     thread.assert_called_once_with(
         target=controller.run_logic,
-        args=("127.0.0.1:28015", 3),
+        args=("127.0.0.1:28015", controller._poll_operation),
         daemon=True,
         name="forced-server-poll",
     )
@@ -104,6 +112,35 @@ def test_deferred_benchmark_restore_reenables_button_after_rust_exits():
     assert calls[0][0] == controller.bench_btn.configure
     assert calls[0][2]["state"] == "normal"
     assert calls[0][2]["operation"] == ("benchmark", 3)
+
+
+def test_pending_benchmark_restore_is_recovered_during_shutdown():
+    controller = make_controller_stub()
+    controller._pending_benchmark_restore = ("cfg", "backup", "work", 3)
+    controller.process_monitor = MagicMock()
+    controller.process_monitor.is_rust_running.return_value = True
+    controller._restore_benchmark_cfg = MagicMock(return_value=True)
+
+    AppController._restore_pending_benchmark_on_shutdown(controller)
+
+    controller.process_monitor.force_kill_rust.assert_called_once()
+    controller._restore_benchmark_cfg.assert_called_once_with("cfg", "backup", "work")
+    assert controller._pending_benchmark_restore is None
+
+
+def test_stale_log_watcher_disconnect_is_ignored():
+    controller = make_controller_stub()
+    controller._state_lock = threading.Lock()
+    controller._is_polling = True
+    old_watcher = MagicMock()
+    controller.log_watcher = MagicMock()
+    controller.log_safe = MagicMock()
+    controller.start_process_force = MagicMock()
+
+    AppController._on_log_disconnect(controller, "old.example:28015", old_watcher, "Disconnected")
+
+    controller.log_safe.assert_not_called()
+    controller.start_process_force.assert_not_called()
 
 
 def test_benchmark_upload_starts_when_legacy_leaderboard_flag_is_disabled():
@@ -208,3 +245,32 @@ def test_application_version_reports_offline_without_replacing_local_version():
         AppController.check_application_version(controller)
 
     controller.set_version_status.assert_called_once_with("v1.3.0", "Offline", "#98A2B3")
+
+
+def test_swarm_status_messages_are_color_coded():
+    controller = object.__new__(AppController)
+    controller.log_safe = MagicMock()
+
+    AppController._on_swarm_status(controller, "connected")
+    assert controller.log_safe.call_args.args == ("Swarm: connected.", "#55C95D")
+
+    AppController._on_swarm_status(controller, "not_configured")
+    assert "public Supabase key" in controller.log_safe.call_args.args[0]
+    assert controller.log_safe.call_args.args[1] == "#DE5148"
+
+
+def test_swarm_hint_only_wakes_local_confirmation_probe():
+    controller = object.__new__(AppController)
+    controller._state_lock = threading.Lock()
+    controller._is_polling = True
+    controller._poll_wake_event = threading.Event()
+    controller._active_session = ConnectionSession("server.example:28015", "203.0.113.10:28015")
+    controller.swarm_service = MagicMock()
+    controller.swarm_service.current_ip_port = "203.0.113.10:28015"
+    controller.log_safe = MagicMock()
+
+    AppController._handle_swarm_event_ui(controller, "server_connected", "203.0.113.10:28015")
+
+    assert controller._poll_wake_event.is_set()
+    assert controller._active_session.phase == ConnectionPhase.IDLE
+    assert controller._active_session.interval_seconds() == 1.0

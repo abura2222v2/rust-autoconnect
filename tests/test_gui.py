@@ -96,6 +96,7 @@ def test_bug_09_inline_edit_unbind(temp_env):
 
     if app._search_timer:
         app.after_cancel(app._search_timer)
+    app.update()
     app.destroy()
 
 def test_bug_01_reconnect_finally_cleanup(temp_env):
@@ -103,7 +104,8 @@ def test_bug_01_reconnect_finally_cleanup(temp_env):
     app.withdraw()
 
     app.is_reconnecting = True
-    app.run_logic("invalid_target_no_colon")
+    app._poll_operation = 1
+    app.run_logic("invalid_target_no_colon", 1)
     assert app.is_reconnecting is False
 
     app.shutdown()
@@ -119,7 +121,16 @@ def test_bug_04_graceful_shutdown():
     app._ui_queue_after_id = None
     app.log_watcher = None
     app.global_log_watcher = None
+    app._ui_dispatch_closing = False
+    app._ui_dispatch_after_id = None
+    app._search_timer = None
+    app._session_state_after_id = None
+    app._nav_marker_after_id = None
+    app._status_pulse_after_id = None
+    app._operation_lock = threading.Lock()
     app._next_poll_operation = MagicMock()
+    app.after_cancel = MagicMock()
+    app.destroy = MagicMock()
 
     with patch("src.app.MainWindow.shutdown") as window_shutdown:
         AppController.shutdown(app)
@@ -211,14 +222,14 @@ def test_splitters_clamp_and_reset_at_constrained_widths(temp_env):
 
     app._history_width = 10_000
     app._apply_home_split(920)
-    assert 0 < app._history_width < 920
+    assert 0 < app._applied_history_width < 920
     with patch.object(app.home_content, "winfo_width", return_value=920):
         app._reset_home_split(None)
     assert app._history_width == HOME_HISTORY_DEFAULT_WIDTH
 
     app._bench_controls_width = 10_000
     app._apply_bench_split(760)
-    assert 0 < app._bench_controls_width < 760
+    assert 0 < app._applied_bench_controls_width < 760
     with patch.object(app.bench_content, "winfo_width", return_value=760):
         app._reset_bench_split(None)
     assert app._bench_controls_width == BENCH_CONTROLS_DEFAULT_WIDTH
@@ -236,10 +247,14 @@ def test_splitter_drag_does_not_change_geometry_or_install_hover_handlers(temp_e
     home_width = app.home_splitter.cget("width")
     bench_width = app.bench_splitter.cget("width")
 
-    app._set_splitter_drag_active(app.home_splitter, True)
-    app._set_splitter_drag_active(app.home_splitter, False)
-    app._set_splitter_drag_active(app.bench_splitter, True)
-    app._set_splitter_drag_active(app.bench_splitter, False)
+    class MockEvent:
+        x_root = 0
+    event = MockEvent()
+
+    app._start_home_resize(event)
+    app._finish_home_resize(event)
+    app._start_bench_resize(event)
+    app._finish_bench_resize(event)
 
     assert app.home_splitter.cget("width") == home_width
     assert app.bench_splitter.cget("width") == bench_width
@@ -285,7 +300,7 @@ def test_session_state_reflects_armed_server(temp_env):
     app.withdraw()
 
     app.toggle_armed("127.0.0.1:28015")
-    assert "armed" in app.armed_status_label.cget("text").casefold()
+    assert "armed" in app.footer_armed_label.cget("text").casefold()
     app.set_connection_state("Connected", "127.0.0.1:28015")
     assert app.session_status_var.get() == "Connected"
     assert app.last_connected_var.get() == "127.0.0.1:28015"

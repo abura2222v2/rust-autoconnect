@@ -69,6 +69,37 @@ def test_server_library_export_import_merges_records(monkeypatch, tmp_path):
 
     target = configure_store(monkeypatch, tmp_path / "target")
     target.add_to_history("127.0.0.1:28016", "Existing Server")
+    target.toggle_favorite("127.0.0.1:28016", "Existing Server")
+    target.set_armed_server("127.0.0.1:28016")
     assert target.import_server_library(payload) == (1, 0)
     assert {item["ip"] for item in target.get_history()} == {"127.0.0.1:28015", "127.0.0.1:28016"}
-    assert target.get_favorites()[0]["ip"] == "127.0.0.1:28015"
+    assert {item["ip"] for item in target.get_favorites()} == {"127.0.0.1:28015", "127.0.0.1:28016"}
+    assert target.get_armed_server() == "127.0.0.1:28016"
+
+
+def test_server_library_import_normalizes_malformed_records(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    payload = {
+        "format": "rust-autoconnect-server-library-v1",
+        "servers": [
+            {"ip": "127.0.0.1:28015", "name": "Valid", "added_at": {"bad": True}},
+            {"ip": "x" * 400 + ":28015", "name": "Too long"},
+            {"ip": "127.0.0.1:99999", "name": "Bad port"},
+        ],
+        "favorites": [],
+    }
+
+    assert store.import_server_library(payload) == (1, 0)
+    assert [item["ip"] for item in store.get_history()] == ["127.0.0.1:28015"]
+    assert isinstance(store.get_history()[0]["added_at"], int)
+
+
+def test_server_wipe_schedule_is_optional_and_persisted(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    endpoint = "127.0.0.1:28015"
+    store.add_to_history(endpoint, "Test Server")
+    assert store.get_server_wipe_schedule(endpoint) == {"wipe_at": None, "wipe_source": ""}
+    assert store.set_server_wipe_schedule(endpoint, 1_800_000_000)
+    assert store.get_server_wipe_schedule(endpoint) == {"wipe_at": 1_800_000_000, "wipe_source": "manual"}
+    assert store.set_server_wipe_schedule(endpoint, None)
+    assert store.get_server_wipe_schedule(endpoint) == {"wipe_at": None, "wipe_source": ""}

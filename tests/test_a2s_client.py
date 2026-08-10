@@ -30,3 +30,19 @@ def test_stopped_probe_does_not_call_network():
 
 def test_invalid_base_port_returns_offline():
     assert A2SClient().check_server_alive("127.0.0.1", 0) == (False, "", 0, 0)
+
+
+def test_status_exposes_capacity_without_breaking_legacy_tuple():
+    client = A2SClient(timeout=0.01, offsets=(0,))
+
+    class Info:
+        server_name = "Rust Test"
+        map_name = "Procedural Map"
+        player_count = 99
+        max_players = 100
+
+    with patch("a2s.info", return_value=Info()):
+        status = client.get_server_status("127.0.0.1", 28015)
+        assert status.alive and status.has_join_capacity
+        assert status.map_name == "Procedural Map"
+        assert client.check_server_alive("127.0.0.1", 28015) == (True, "Rust Test", 100, 28015)

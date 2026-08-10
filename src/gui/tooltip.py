@@ -27,17 +27,24 @@ class ToolTip(object):
         id = self.id
         self.id = None
         if id:
-            self.widget.after_cancel(id)
+            try:
+                self.widget.after_cancel(id)
+            except tk.TclError:
+                pass
 
     def showtip(self, event=None):
         if self.tw:
+            return
+        try:
+            if not self.widget.winfo_exists():
+                return
+        except tk.TclError:
             return
         x = y = 0
         x += self.widget.winfo_rootx() + 25
         y += self.widget.winfo_rooty() + 25
         self.tw = tk.Toplevel(self.widget)
         self.tw.wm_overrideredirect(True)
-        self.tw.wm_geometry("+%d+%d" % (x, y))
         self.tw.attributes('-topmost', True)
         
         # Adding a slightly dark theme look
@@ -45,6 +52,10 @@ class ToolTip(object):
                          background="#1e1e1e", foreground="#e0e0e0", relief='solid', borderwidth=1,
                          font=("Arial", "13", "normal"), padx=8, pady=4)
         label.pack(ipadx=1, ipady=1)
+        self.tw.update_idletasks()
+        x = min(max(0, x), max(0, self.tw.winfo_screenwidth() - self.tw.winfo_reqwidth()))
+        y = min(max(0, y), max(0, self.tw.winfo_screenheight() - self.tw.winfo_reqheight()))
+        self.tw.wm_geometry("+%d+%d" % (x, y))
 
     def hidetip(self):
         tw = self.tw
