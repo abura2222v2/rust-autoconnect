@@ -50,9 +50,7 @@ The official monthly default is the first Thursday at 19:00 London time. Server 
    ```bash
    pip install -r requirements.txt
    ```
-4. **Environment Variables**:
-   Copy `.env.example` to `.env` (or set them in your system environment) and configure your Supabase Publishable Key and WebSockets URL for Swarm functionality. *Do not use Service Role keys.*
-5. **Run**:
+4. **Run**:
    ```bash
    python main.py
    ```
@@ -70,6 +68,20 @@ Windows code-signing certificate can establish publisher identity and reduce
 SmartScreen warnings, but it cannot safely hide code or any value embedded in
 an executable. Keep service-role keys, Telegram tokens and other secrets only
 in Supabase Edge Secrets or local developer files.
+
+## Supabase connection and privacy
+
+The downloaded application works without asking a player to create or paste a
+Supabase key. It contains only the project's **publishable** connection value,
+which is intentionally safe to distribute when Supabase Row Level Security is
+enabled. It lets the app call public Edge Function routes and optional Realtime
+Swarm; it cannot administer the database.
+
+Never put a Supabase service-role key, a personal access token, Telegram bot
+token, or Edge Function secret in GitHub, the source code, or the `.exe`.
+Those values stay in Supabase Edge Secrets. If a self-hosted fork needs its own
+backend, its maintainer creates a separate project and supplies its own public
+configuration; ordinary players do nothing.
 
 ## Contributing
 

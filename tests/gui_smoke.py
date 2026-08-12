@@ -73,6 +73,9 @@ def main() -> int:
         window._resize_home_panels(SimpleNamespace(x_root=10_000))
         window.update_idletasks()
         window.update()
+        # Regression capture while the pointer is still held: the visible sash
+        # itself must follow the panel boundary, with no DPI-scaled overlay.
+        capture(window, OUTPUT_DIR / "connect_history_dragging.png")
         window._finish_home_resize(drag_start)
         capture(window, OUTPUT_DIR / "connect_history_max.png")
         window._history_width = 0
@@ -90,6 +93,13 @@ def main() -> int:
         window._bench_controls_width = 10_000
         window._apply_bench_split(window.bench_content.winfo_width())
         capture(window, OUTPUT_DIR / "benchmark_controls_max.png")
+        bench_drag_start = SimpleNamespace(x_root=100)
+        window._start_bench_resize(bench_drag_start)
+        window._resize_bench_panels(SimpleNamespace(x_root=10_000))
+        window.update_idletasks()
+        window.update()
+        capture(window, OUTPUT_DIR / "benchmark_dragging.png")
+        window._finish_bench_resize(bench_drag_start)
         window._reset_bench_split(None)
 
         window.show_settings_frame()
