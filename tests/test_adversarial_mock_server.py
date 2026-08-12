@@ -38,13 +38,17 @@ def test_rapid_start_stop_cycles():
 
 
 def test_high_volume_queries():
-    """Send 100 queries in rapid succession."""
+    """Send 100 queries in rapid succession with the client's bounded retry."""
     server = MockA2SServer(host="127.0.0.1", port=0, challenge_enabled=False)
     port = server.start()
     try:
         successes = 0
         for _ in range(100):
-            res = send_udp("127.0.0.1", port, QUERY_PACKET, timeout=0.2)
+            res = None
+            for _ in range(3):
+                res = send_udp("127.0.0.1", port, QUERY_PACKET, timeout=0.2)
+                if res and res.startswith(b"\xFF\xFF\xFF\xFF\x49"):
+                    break
             if res and res.startswith(b"\xFF\xFF\xFF\xFF\x49"):
                 successes += 1
         assert successes == 100, f"Expected 100 responses, got {successes}"
@@ -80,17 +84,18 @@ def test_concurrent_threads_query():
         server.stop()
 
 
-def test_oversized_udp_packet_kills_server_thread():
-    """Verify that sending an oversized (>2048 bytes) UDP packet catches WinError 10040 and breaks the server loop."""
+def test_oversized_udp_packet_does_not_kill_server_thread():
+    """Malformed UDP traffic must not make the localhost E2E fixture unusable."""
     server = MockA2SServer(host="127.0.0.1", port=0)
     port = server.start()
     try:
         assert server._thread is not None and server._thread.is_alive()
-        # Send 4096-byte packet
+        # Send 4096-byte packet, then prove a valid A2S request still works.
         send_udp("127.0.0.1", port, b"A" * 4096, timeout=0.1)
-        time.sleep(0.2)  # Give thread time to process exception
-        # Thread dies because `except Exception: break` handles WinError 10040 by exiting loop
-        assert not server._thread.is_alive(), "Server thread crashed as expected due to broad except Exception: break"
+        time.sleep(0.2)
+        assert server._thread.is_alive()
+        response = send_udp("127.0.0.1", port, QUERY_PACKET, timeout=0.5)
+        assert response and response.startswith(b"\xFF\xFF\xFF\xFF\x49")
     finally:
         server.stop()
 

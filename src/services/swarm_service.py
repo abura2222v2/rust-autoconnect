@@ -275,45 +275,35 @@ class SwarmService:
         The event is intentionally unauthenticated and non-authoritative: a
         receiver only wakes a bounded local A2S confirmation probe.
         """
-        if not self.is_enabled or not self.is_connected or not self.ws or not self.current_room:
-            return
-        try:
-            self.ws.send(json.dumps({
-                "topic": self.current_room,
-                "event": "broadcast",
-                "payload": {"type": "broadcast", "event": "server_connected", "payload": {"ip_port": ip_port}},
-                "ref": "hint",
-            }))
-        except websocket.WebSocketException as error:
-            from ..core.logger import app_logger
-            app_logger.warning(f"Failed to report swarm hint: {type(error).__name__}")
+        self._broadcast("server_connected", ip_port, "hint")
 
     def broadcast_stop_spam(self, ip_port: str):
-        if not self.is_enabled or not self.is_connected or not self.ws or not self.current_room:
-            return
-        try:
-            self.ws.send(json.dumps({
-                "topic": self.current_room,
-                "event": "broadcast",
-                "payload": {"type": "broadcast", "event": "swarm_stop_spam", "payload": {"ip_port": ip_port}},
-                "ref": "stop_spam",
-            }))
-        except websocket.WebSocketException as error:
-            from ..core.logger import app_logger
-            app_logger.warning(f"Failed to report swarm stop_spam: {type(error).__name__}")
+        self._broadcast("swarm_stop_spam", ip_port, "stop_spam")
             
     def broadcast_connection_failed(self, ip_port: str):
-        if not self.is_enabled or not self.is_connected or not self.ws or not self.current_room:
-            return
+        self._broadcast("swarm_connection_failed", ip_port, "fail")
+
+    def _broadcast(self, event: str, ip_port: str, ref: str) -> None:
+        """Send only for the room that still owns this endpoint."""
+        with self._reconnect_lock:
+            if (
+                not self.is_enabled
+                or not self.is_connected
+                or not self.ws
+                or not self.current_room
+                or ip_port != self.current_ip_port
+            ):
+                return
+            ws, room = self.ws, self.current_room
         try:
-            self.ws.send(json.dumps({
-                "topic": self.current_room,
+            ws.send(json.dumps({
+                "topic": room,
                 "event": "broadcast",
-                "payload": {"type": "broadcast", "event": "swarm_connection_failed", "payload": {"ip_port": ip_port}},
-                "ref": "fail",
+                "payload": {"type": "broadcast", "event": event, "payload": {"ip_port": ip_port}},
+                "ref": ref,
             }))
         except websocket.WebSocketException as error:
             from ..core.logger import app_logger
-            app_logger.warning(f"Failed to report swarm connection_failed: {type(error).__name__}")
+            app_logger.warning(f"Failed to report swarm {event}: {type(error).__name__}")
 
 swarm_service = SwarmService()

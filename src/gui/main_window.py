@@ -58,6 +58,12 @@ def _draw_icon(kind: str, color: str, size: int = 32) -> Image.Image:
             draw.line([(size * 34 // 100, size * 52 // 100), (size * 45 // 100, size * 63 // 100), (size * 67 // 100, size * 40 // 100)], fill=color, width=stroke, joint="curve")
     elif kind == "play":
         draw.polygon([(size * 38 // 100, size * 27 // 100), (size * 72 // 100, size // 2), (size * 38 // 100, size * 73 // 100)], fill=color)
+    elif kind == "trash":
+        draw.line((size * 30 // 100, size * 30 // 100, size * 70 // 100, size * 30 // 100), fill=color, width=stroke)
+        draw.line((size * 43 // 100, size * 20 // 100, size * 57 // 100, size * 20 // 100), fill=color, width=stroke)
+        draw.rectangle((size * 34 // 100, size * 35 // 100, size * 66 // 100, size * 78 // 100), outline=color, width=stroke)
+        for x in (43, 57):
+            draw.line((size * x // 100, size * 43 // 100, size * x // 100, size * 70 // 100), fill=color, width=max(1, stroke - 1))
     elif kind == "nav_connect":
         draw.line((size // 2, inset, size // 2, size * 42 // 100), fill=color, width=stroke)
         draw.line((size * 35 // 100, inset, size * 65 // 100, inset), fill=color, width=stroke)
@@ -127,6 +133,7 @@ class MainWindow(ctk.CTk):
 
         self._nav_marker_after_id = None
         self._status_pulse_after_id = None
+        self._tg_overlay = None
         self._icon_images = {
             "brand": ctk.CTkImage(light_image=_draw_icon("brand", COLORS["accent"], 48), dark_image=_draw_icon("brand", COLORS["accent"], 48), size=(38, 38)),
             "favorite": ctk.CTkImage(light_image=_draw_icon("star_filled", COLORS["accent"]), dark_image=_draw_icon("star_filled", COLORS["accent"]), size=(18, 18)),
@@ -134,6 +141,7 @@ class MainWindow(ctk.CTk):
             "armed": ctk.CTkImage(light_image=_draw_icon("shield", COLORS["accent"]), dark_image=_draw_icon("shield", COLORS["accent"]), size=(18, 18)),
             "disarmed": ctk.CTkImage(light_image=_draw_icon("shield", COLORS["muted"]), dark_image=_draw_icon("shield", COLORS["muted"]), size=(18, 18)),
             "connect": ctk.CTkImage(light_image=_draw_icon("play", COLORS["text"]), dark_image=_draw_icon("play", COLORS["text"]), size=(16, 16)),
+            "delete": ctk.CTkImage(light_image=_draw_icon("trash", COLORS["muted"]), dark_image=_draw_icon("trash", COLORS["muted"]), size=(17, 17)),
         }
         for icon_name in ("nav_connect", "nav_bench", "nav_settings"):
             self._icon_images[f"{icon_name}_muted"] = ctk.CTkImage(
@@ -217,7 +225,7 @@ class MainWindow(ctk.CTk):
         self.system_status_frame = ctk.CTkFrame(self.sidebar_footer, fg_color="transparent")
         self.system_status_frame.pack(fill="x", padx=14, pady=12)
         self.system_status_frame.grid_columnconfigure(4, weight=1)
-        self.version_label = ctk.CTkLabel(self.system_status_frame, text=self.t("version_fmt", version="v1.3.0"), font=ctk.CTkFont(size=10), text_color=COLORS["muted"])
+        self.version_label = ctk.CTkLabel(self.system_status_frame, text=self.t("version_fmt", version="v0.6.0"), font=ctk.CTkFont(size=10), text_color=COLORS["muted"])
         self.version_label.grid(row=0, column=0, sticky="w")
         self.status_separator = ctk.CTkLabel(self.system_status_frame, text="|", font=ctk.CTkFont(size=10), text_color=COLORS["border"])
         self.status_separator.grid(row=0, column=1, padx=6)
@@ -331,9 +339,6 @@ class MainWindow(ctk.CTk):
         self.home_splitter.bind("<ButtonRelease-1>", self._finish_home_resize)
         self.home_splitter.bind("<Double-Button-1>", self._reset_home_split)
         
-        self.home_split_preview = ctk.CTkFrame(self.home_content, width=SPLITTER_WIDTH, corner_radius=0, fg_color=COLORS["border"], cursor="sb_h_double_arrow")
-
-
         self.connection_panel = ctk.CTkFrame(self.home_content, corner_radius=0, fg_color=COLORS["surface"], border_width=1, border_color=COLORS["border"])
         self.connection_panel.grid(row=0, column=2, sticky="nsew")
         self.connection_panel.grid_columnconfigure(0, weight=1)
@@ -393,8 +398,6 @@ class MainWindow(ctk.CTk):
         self.bench_splitter.bind("<ButtonRelease-1>", self._finish_bench_resize)
         self.bench_splitter.bind("<Double-Button-1>", self._reset_bench_split)
         
-        self.bench_split_preview = ctk.CTkFrame(self.bench_content, width=SPLITTER_WIDTH, corner_radius=0, fg_color=COLORS["border"], cursor="sb_h_double_arrow")
-
         self.bench_results_panel = ctk.CTkFrame(self.bench_content, fg_color=COLORS["surface"], corner_radius=0, border_width=1, border_color=COLORS["border"])
         self.bench_results_panel.grid(row=0, column=2, sticky="nsew")
         self.bench_results_panel.grid_columnconfigure(0, weight=1)
@@ -463,6 +466,15 @@ class MainWindow(ctk.CTk):
         self.swarm_checkbox.grid(row=2, column=0, columnspan=2, padx=20, pady=12, sticky="w")
         self.swarm_tooltip = ToolTip(self.swarm_checkbox, self.t("tooltip_swarm"))
 
+        self.share_servers_var = ctk.BooleanVar(value=self.history_store.get_share_saved_servers())
+        self.share_servers_checkbox = ctk.CTkCheckBox(
+            self.settings_panel, text=self.t("share_saved_servers_lbl"),
+            variable=self.share_servers_var, command=self._on_share_saved_servers_change,
+            fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], border_color=COLORS["muted"],
+        )
+        self.share_servers_checkbox.grid(row=3, column=0, columnspan=2, padx=20, pady=12, sticky="w")
+        self.share_servers_tooltip = ToolTip(self.share_servers_checkbox, self.t("tooltip_share_saved_servers"))
+
         self.auto_update_settings = ctk.CTkCheckBox(
             self.settings_panel,
             text=self.t("check_rust_updates"),
@@ -472,7 +484,7 @@ class MainWindow(ctk.CTk):
             hover_color=COLORS["accent_hover"],
             border_color=COLORS["muted"],
         )
-        self.auto_update_settings.grid(row=3, column=0, columnspan=2, padx=20, pady=12, sticky="w")
+        self.auto_update_settings.grid(row=4, column=0, columnspan=2, padx=20, pady=12, sticky="w")
         
         # Auto-Arm Checkbox
         self.auto_arm_var = ctk.BooleanVar(value=self.history_store.get_auto_arm())
@@ -485,12 +497,12 @@ class MainWindow(ctk.CTk):
             hover_color=COLORS["accent_hover"],
             border_color=COLORS["muted"],
         )
-        self.auto_arm_checkbox.grid(row=4, column=0, columnspan=2, padx=20, pady=12, sticky="w")
+        self.auto_arm_checkbox.grid(row=5, column=0, columnspan=2, padx=20, pady=12, sticky="w")
 
         # Telegram Bot Linking
         self.tg_frame = ctk.CTkFrame(self.settings_panel, fg_color="transparent")
-        self.tg_frame.grid(row=5, column=0, columnspan=2, padx=20, pady=12, sticky="w")
-        code_txt = f"Code: {telegram_service.link_code}" if telegram_service.link_code else self.t("tg_status_unlinked")
+        self.tg_frame.grid(row=6, column=0, columnspan=2, padx=20, pady=12, sticky="w")
+        code_txt = self._telegram_status_text()
         self.tg_status_lbl = ctk.CTkLabel(self.tg_frame, text=code_txt, text_color=COLORS["muted"])
         self.tg_status_lbl.pack(side="left", padx=(0, 10))
         self.tg_link_btn = ctk.CTkButton(
@@ -502,6 +514,8 @@ class MainWindow(ctk.CTk):
             hover_color=COLORS["accent_hover"]
         )
         self.tg_link_btn.pack(side="left")
+        self._refresh_telegram_controls()
+        self.after(200, self._refresh_telegram_status_async)
 
         # Start by showing Home
         self.refresh_history_ui()
@@ -545,17 +559,16 @@ class MainWindow(ctk.CTk):
     def _start_home_resize(self, event) -> None:
         self._home_drag_origin_x = event.x_root
         self._home_drag_origin_width = max(1, self.history_panel.winfo_width())
-        self._pending_home_width = self._applied_history_width or self._clamp_home_split(self._history_width, self.home_content.winfo_width())
-        self.home_splitter.configure(fg_color="transparent")
-        self.home_split_preview.place(x=self._pending_home_width, y=0, relheight=1)
-        self.home_split_preview.lift()
+        self._pending_home_width = self._clamp_home_split(self._home_drag_origin_width, self.home_content.winfo_width())
+        self.home_splitter.configure(fg_color=COLORS["accent"])
 
     def _resize_home_panels(self, event) -> None:
         if self._home_drag_origin_x is None or self._home_drag_origin_width is None:
             return
         requested_width = self._home_drag_origin_width + (event.x_root - self._home_drag_origin_x)
         self._pending_home_width = self._clamp_home_split(requested_width, self.home_content.winfo_width())
-        self.home_split_preview.place(x=self._pending_home_width, y=0, relheight=1)
+        self._history_width = self._pending_home_width
+        self._apply_home_split(self.home_content.winfo_width())
 
     def _finish_home_resize(self, _event) -> None:
         if getattr(self, "_pending_home_width", None) is not None:
@@ -567,7 +580,6 @@ class MainWindow(ctk.CTk):
         self._home_drag_origin_width = None
         self._pending_home_width = None
         
-        self.home_split_preview.place_forget()
         self.home_splitter.configure(fg_color=COLORS["canvas"])
 
     def _reset_home_split(self, _event) -> None:
@@ -576,7 +588,9 @@ class MainWindow(ctk.CTk):
         self.history_store.set_home_splitter_width(self._history_width)
 
     def _fit_bench_content(self, event) -> None:
-        width = max(0, event.width - 40)
+        # event.width is already the usable content frame width. Subtracting
+        # outer padding here put the Benchmark preview line off by 40 pixels.
+        width = max(0, event.width)
         if width == self._last_bench_workspace_width:
             return
         self._last_bench_workspace_width = width
@@ -604,17 +618,16 @@ class MainWindow(ctk.CTk):
     def _start_bench_resize(self, event) -> None:
         self._bench_drag_origin_x = event.x_root
         self._bench_drag_origin_width = max(1, self.bench_controls.winfo_width())
-        self._pending_bench_width = self._applied_bench_controls_width or self._clamp_bench_split(self._bench_controls_width, self.bench_content.winfo_width())
-        self.bench_splitter.configure(fg_color="transparent")
-        self.bench_split_preview.place(x=self._pending_bench_width, y=0, relheight=1)
-        self.bench_split_preview.lift()
+        self._pending_bench_width = self._clamp_bench_split(self._bench_drag_origin_width, self.bench_content.winfo_width())
+        self.bench_splitter.configure(fg_color=COLORS["accent"])
 
     def _resize_bench_panels(self, event) -> None:
         if self._bench_drag_origin_x is None or self._bench_drag_origin_width is None:
             return
         requested_width = self._bench_drag_origin_width + (event.x_root - self._bench_drag_origin_x)
         self._pending_bench_width = self._clamp_bench_split(requested_width, self.bench_content.winfo_width())
-        self.bench_split_preview.place(x=self._pending_bench_width, y=0, relheight=1)
+        self._bench_controls_width = self._pending_bench_width
+        self._apply_bench_split(self.bench_content.winfo_width())
 
     def _finish_bench_resize(self, _event) -> None:
         if getattr(self, "_pending_bench_width", None) is not None:
@@ -626,7 +639,6 @@ class MainWindow(ctk.CTk):
         self._bench_drag_origin_width = None
         self._pending_bench_width = None
         
-        self.bench_split_preview.place_forget()
         self.bench_splitter.configure(fg_color=COLORS["canvas"])
 
     def _reset_bench_split(self, _event) -> None:
@@ -674,6 +686,23 @@ class MainWindow(ctk.CTk):
             display_target = target if len(target) <= 42 else f"{target[:20]}…{target[-18:]}"
             self.last_connected_var.set(display_target)
             self.last_connected_tooltip.text = target
+
+    def set_connection_phase(self, phase: str):
+        """Show the precise safe-connect stage without adding another panel."""
+        labels = {
+            "scheduled": self.t("smart_phase_scheduled"),
+            "watch": self.t("smart_phase_watch"),
+            "turbo": self.t("smart_phase_turbo"),
+            "launch_requested": "A2S confirmed - preparing Steam launch",
+            "awaiting_log_confirmation": "Steam launched - waiting for Rust log",
+            "connected": self.t("rust_running"),
+            "cooldown": "Reconnect cooldown",
+            "waiting_update": "Waiting for Rust update",
+        }
+        text = labels.get(phase)
+        if text:
+            self.session_status_var.set(text)
+            self._pulse_status(self.session_status_label, COLORS["accent"])
 
     def set_rust_status(self, is_running: bool) -> None:
         if is_running and self.rust_playtime_started_at is None:
@@ -781,11 +810,161 @@ class MainWindow(ctk.CTk):
     def _on_auto_arm_change(self):
         self.history_store.set_auto_arm(self.auto_arm_var.get())
 
+    def _on_share_saved_servers_change(self):
+        self.history_store.set_share_saved_servers(self.share_servers_var.get())
+
     def _on_tg_link_click(self):
-        import random
-        from tkinter import messagebox
-        code = f"{random.randint(1000, 9999)}"
-        messagebox.showinfo(self.t("tg_bot_title"), self.t("tg_bot_msg", code=code), parent=self)
+        code = telegram_service.generate_link_code(self.lang)
+        if not code:
+            self._show_telegram_link_overlay(error=True)
+            return
+        self.tg_status_lbl.configure(text=self.t("tg_status_pairing"))
+        self._show_telegram_link_overlay(code=code)
+
+    def _on_tg_unlink_click(self) -> None:
+        """Unlink in a worker so the settings page always stays responsive."""
+        self.tg_link_btn.configure(state="disabled", text=self.t("tg_status_unlinking"))
+
+        def unlink() -> None:
+            success = telegram_service.unlink()
+            self.dispatch_ui(self._finish_telegram_unlink, success)
+
+        threading.Thread(target=unlink, daemon=True, name="telegram-unlink").start()
+
+    def _finish_telegram_unlink(self, success: bool) -> None:
+        if not self.winfo_exists():
+            return
+        if not success:
+            self._refresh_telegram_controls()
+            self._show_telegram_link_overlay(error=True)
+            return
+        self.tg_status_lbl.configure(text=self._telegram_status_text())
+        self._refresh_telegram_controls()
+
+    def _refresh_telegram_controls(self) -> None:
+        if telegram_service.is_linked:
+            self.tg_link_btn.configure(
+                text=self.t("tg_unlink_btn"), command=self._on_tg_unlink_click, state="normal"
+            )
+        else:
+            self.tg_link_btn.configure(
+                text=self.t("tg_link_btn"), command=self._on_tg_link_click, state="normal"
+            )
+
+    def _telegram_status_text(self) -> str:
+        if telegram_service.display_name:
+            return self.t("tg_status_linked", name=telegram_service.display_name)
+        if telegram_service.is_linked:
+            return self.t("tg_status_linked", name=self.t("tg_status_user"))
+        if telegram_service.link_code:
+            return self.t("tg_status_pairing")
+        return self.t("tg_status_unlinked")
+
+    def _refresh_telegram_status_async(self) -> None:
+        def fetch_status() -> None:
+            status = telegram_service.get_link_status()
+            if status is not None:
+                self.dispatch_ui(self._apply_telegram_status, status)
+        threading.Thread(target=fetch_status, daemon=True, name="telegram-status").start()
+
+    def _apply_telegram_status(self, _status: dict) -> None:
+        if self.winfo_exists():
+            self.tg_status_lbl.configure(text=self._telegram_status_text())
+            self._refresh_telegram_controls()
+
+    def _show_telegram_link_overlay(self, code: Optional[str] = None, error: bool = False) -> None:
+        """Show Telegram pairing in the app window instead of a native dialog."""
+        self._close_telegram_link_overlay()
+        overlay = ctk.CTkFrame(self, fg_color="#101010", corner_radius=0)
+        overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        overlay.lift()
+        self._tg_overlay = overlay
+
+        card = ctk.CTkFrame(
+            overlay,
+            width=480,
+            height=310 if code else 220,
+            fg_color=COLORS["surface"],
+            border_width=1,
+            border_color=COLORS["border"],
+        )
+        card.place(relx=0.5, rely=0.5, anchor="center")
+        card.grid_propagate(False)
+        card.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            card,
+            text=self.t("tg_bot_title"),
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color=COLORS["text"],
+        ).grid(row=0, column=0, padx=28, pady=(28, 8), sticky="w")
+
+        message = self.t("tg_link_failed") if error else self.t("tg_overlay_intro")
+        ctk.CTkLabel(
+            card,
+            text=message,
+            justify="left",
+            wraplength=410,
+            font=ctk.CTkFont(size=13),
+            text_color=COLORS["muted"],
+        ).grid(row=1, column=0, padx=28, pady=(0, 14), sticky="w")
+
+        if code:
+            ctk.CTkLabel(
+                card,
+                text=self.t("tg_overlay_code_label"),
+                font=ctk.CTkFont(size=11, weight="bold"),
+                text_color=COLORS["muted"],
+            ).grid(row=2, column=0, padx=28, sticky="w")
+            code_label = ctk.CTkLabel(
+                card,
+                text=code,
+                font=ctk.CTkFont(family="Consolas", size=24, weight="bold"),
+                text_color=COLORS["accent"],
+                fg_color=COLORS["canvas"],
+                corner_radius=8,
+                height=48,
+            )
+            code_label.grid(row=3, column=0, padx=28, pady=(6, 12), sticky="ew")
+            code_label.bind("<Button-1>", lambda _event: self._copy_telegram_code(code, copy_button))
+            code_label.bind("<Enter>", lambda _event: code_label.configure(cursor="hand2"))
+            code_label.bind("<Leave>", lambda _event: code_label.configure(cursor=""))
+            copy_button = ctk.CTkButton(
+                card,
+                text=self.t("tg_copy_code"),
+                command=lambda: self._copy_telegram_code(code, copy_button),
+                width=160,
+                fg_color=COLORS["accent"],
+                hover_color=COLORS["accent_hover"],
+            )
+            copy_button.grid(row=4, column=0, padx=28, pady=(0, 10), sticky="w")
+            close_row = 5
+        else:
+            close_row = 2
+
+        ctk.CTkButton(
+            card,
+            text=self.t("tg_close"),
+            command=self._close_telegram_link_overlay,
+            width=120,
+            fg_color="transparent",
+            hover_color=COLORS["surface_alt"],
+            border_width=1,
+            border_color=COLORS["border"],
+        ).grid(row=close_row, column=0, padx=28, pady=(0, 22), sticky="e")
+        overlay.bind("<Escape>", lambda _event: self._close_telegram_link_overlay())
+
+    def _copy_telegram_code(self, code: str, button) -> None:
+        self.clipboard_clear()
+        self.clipboard_append(code)
+        self.update_idletasks()
+        button.configure(text=self.t("tg_code_copied"))
+        self.after(1400, lambda: button.winfo_exists() and button.configure(text=self.t("tg_copy_code")))
+
+    def _close_telegram_link_overlay(self) -> None:
+        if self._tg_overlay is not None and self._tg_overlay.winfo_exists():
+            self._tg_overlay.destroy()
+        self._tg_overlay = None
 
     def dispatch_ui(self, callback, *args, **kwargs):
         if getattr(self, "_ui_dispatch_closing", False):
@@ -823,20 +1002,11 @@ class MainWindow(ctk.CTk):
     def _on_swarm_change(self):
         from ..services.swarm_service import swarm_service
         is_checked = self.swarm_var.get()
-        
         if is_checked:
             if not swarm_service.is_configured:
-                import tkinter.messagebox as messagebox
                 self.history_store.set_swarm_enabled(False)
-                self.swarm_var.set(False)
                 swarm_service.is_enabled = False
                 swarm_service._notify_status(swarm_service.configuration_status)
-                detail = (
-                    self.t("swarm_invalid_key_msg")
-                    if swarm_service.configuration_status == "invalid_key"
-                    else self.t("swarm_not_configured_msg")
-                )
-                messagebox.showerror(self.t("swarm_config_title"), detail, parent=self)
                 return
             self.history_store.set_swarm_enabled(True)
             swarm_service.is_enabled = True
@@ -851,6 +1021,12 @@ class MainWindow(ctk.CTk):
         self.lang = code
         self.i18n.set_lang(code)
         self.history_store.set_lang(code)
+        threading.Thread(
+            target=telegram_service.update_locale,
+            args=(code,),
+            daemon=True,
+            name="telegram-locale",
+        ).start()
 
         self.title(self.t("title"))
         self.topbar_subtitle.configure(text=self.t("command_center"))
@@ -882,10 +1058,11 @@ class MainWindow(ctk.CTk):
         self.lang_label.configure(text=self.t("lang_lbl"))
         self.tray_checkbox.configure(text=self.t("tray_lbl"))
         self.swarm_checkbox.configure(text=self.t("swarm_lbl"))
+        self.share_servers_checkbox.configure(text=self.t("share_saved_servers_lbl"))
         self.auto_update_settings.configure(text=self.t("check_rust_updates"))
         self.auto_arm_checkbox.configure(text=self.t("auto_arm_lbl"))
-        self.tg_status_lbl.configure(text=self.t("tg_status_unlinked"))
-        self.tg_link_btn.configure(text=self.t("tg_link_btn"))
+        self.tg_status_lbl.configure(text=self._telegram_status_text())
+        self._refresh_telegram_controls()
         if hasattr(self, "connect_btn"):
             self.connect_btn.configure(text=self.t("connect"))
         
@@ -893,6 +1070,8 @@ class MainWindow(ctk.CTk):
             self.tray_tooltip.text = self.t("tooltip_tray")
         if hasattr(self, 'swarm_tooltip'):
             self.swarm_tooltip.text = self.t("tooltip_swarm")
+        if hasattr(self, 'share_servers_tooltip'):
+            self.share_servers_tooltip.text = self.t("tooltip_share_saved_servers")
 
         self.refresh_history_ui()
 
@@ -920,17 +1099,24 @@ class MainWindow(ctk.CTk):
         pass # Override in AppController
 
     def show_benchmark_view(self, view_name: str) -> None:
-        if self.bench_view_var.get() != view_name:
-            self.bench_view_var.set(view_name)
-        views = {
-            self.t("tab_run_log"): self.bench_log,
-            "Run log": self.bench_log,
-            self.t("tab_online_ranking"): self.bench_online_ranking,
-            "Online ranking": self.bench_online_ranking,
-        }
-        view = views.get(view_name, self.bench_log)
-        view.tkraise()
-        if view_name in (self.t("tab_online_ranking"), "Online ranking"):
+        """Switch benchmark panels without leaving the previous panel on top.
+
+        CTkScrollableFrame owns a canvas, so ``tkraise`` alone can leave the
+        Run log visually above it on some Windows/DPI combinations.  Mapping
+        only the selected panel is deterministic and also accepts old saved
+        labels from before the tab was renamed to Ranking.
+        """
+        ranking_names = {self.t("tab_online_ranking"), "Online ranking", "Ranking"}
+        is_ranking = view_name in ranking_names
+        selected_name = self.t("tab_online_ranking") if is_ranking else self.t("tab_run_log")
+        if self.bench_view_var.get() != selected_name:
+            self.bench_view_var.set(selected_name)
+
+        for view in (self.bench_log, self.bench_online_ranking):
+            view.grid_remove()
+        view = self.bench_online_ranking if is_ranking else self.bench_log
+        view.grid(row=0, column=0, sticky="nsew")
+        if is_ranking:
             self._load_online_benchmark_ranking()
 
     def _clear_benchmark_view(self, view) -> None:
@@ -960,14 +1146,61 @@ class MainWindow(ctk.CTk):
         if not rows:
             ctk.CTkLabel(self.bench_online_ranking, text=self.t("no_bench_results_yet"), text_color=COLORS["muted"]).pack(anchor="w", padx=12, pady=12)
             return
-        for index, row_data in enumerate(rows, start=1):
-            total = row_data.get("best_total_time") or row_data.get("total_time")
-            score = f"{total:.1f}s" if isinstance(total, (int, float)) else "-"
-            row = ctk.CTkFrame(self.bench_online_ranking, fg_color="transparent", corner_radius=0)
-            row.pack(fill="x", padx=10, pady=3)
-            ctk.CTkLabel(row, text=f"{index}. {row_data.get('cpu', 'Unknown CPU')}", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", fill="x", expand=True)
-            ctk.CTkLabel(row, text=score, text_color=COLORS["accent"], font=ctk.CTkFont(size=12, weight="bold")).pack(side="right")
-            ctk.CTkLabel(self.bench_online_ranking, text=str(row_data.get("storage", "Unknown storage")), anchor="w", font=ctk.CTkFont(size=11), text_color=COLORS["muted"]).pack(fill="x", padx=10)
+        def ranking_time(item) -> float:
+            value = item.get("median_total_time", item.get("best_total_time", item.get("total_time")))
+            return float(value) if isinstance(value, (int, float)) else float("inf")
+
+        # The API asks for ascending values, but preserve the invariant here:
+        # lower load time is always a better result and appears first.
+        ranked_rows = sorted(rows, key=lambda item: (ranking_time(item), str(item.get("cpu", "")).casefold()))
+
+        heading = ctk.CTkFrame(self.bench_online_ranking, fg_color="transparent", corner_radius=0)
+        heading.pack(fill="x", padx=14, pady=(12, 5))
+        ctk.CTkLabel(heading, text="RANKING", anchor="w", font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
+        ctk.CTkLabel(heading, text="Lower load time is better", anchor="e", text_color=COLORS["muted"], font=ctk.CTkFont(size=11)).pack(side="right")
+
+        columns = ctk.CTkFrame(self.bench_online_ranking, fg_color=COLORS["surface"], corner_radius=3)
+        columns.pack(fill="x", padx=14, pady=(0, 6))
+        columns.grid_columnconfigure(1, weight=1)
+        for column, text, anchor in ((0, "#", "center"), (1, "HARDWARE", "w"), (2, "BEST", "e"), (3, "RUNS", "e")):
+            ctk.CTkLabel(columns, text=text, anchor=anchor, text_color=COLORS["muted"], font=ctk.CTkFont(size=10, weight="bold")).grid(row=0, column=column, padx=(10 if column == 0 else 6, 10), pady=7, sticky="ew")
+
+        from textwrap import fill
+        for index, row_data in enumerate(ranked_rows, start=1):
+            total = ranking_time(row_data)
+            score = f"{total:.2f}s" if total != float("inf") else "-"
+            is_best = index == 1
+            cpu_text = fill(str(row_data.get("cpu", "Unknown CPU")), width=22, break_long_words=False, break_on_hyphens=True)
+            storage_text = fill(str(row_data.get("storage", "Unknown storage")), width=24, break_long_words=False, break_on_hyphens=True)
+            row = ctk.CTkFrame(
+                self.bench_online_ranking,
+                fg_color=COLORS["surface"] if is_best else "transparent",
+                corner_radius=4,
+                border_width=1 if is_best else 0,
+                border_color=COLORS["accent"] if is_best else COLORS["surface"],
+            )
+            row.pack(fill="x", padx=14, pady=3)
+            row.grid_columnconfigure(1, weight=1)
+            ctk.CTkLabel(row, text=str(index), width=28, text_color=COLORS["accent"] if is_best else COLORS["muted"], font=ctk.CTkFont(size=13, weight="bold")).grid(row=0, column=0, rowspan=2, padx=(10, 4), pady=8)
+            ctk.CTkLabel(
+                row,
+                text=cpu_text,
+                anchor="w",
+                justify="left",
+                wraplength=190,
+                font=ctk.CTkFont(size=12, weight="bold"),
+            ).grid(row=0, column=1, padx=6, pady=(8, 0), sticky="ew")
+            ctk.CTkLabel(
+                row,
+                text=storage_text,
+                anchor="w",
+                justify="left",
+                wraplength=190,
+                text_color=COLORS["muted"],
+                font=ctk.CTkFont(size=11),
+            ).grid(row=1, column=1, padx=6, pady=(0, 8), sticky="ew")
+            ctk.CTkLabel(row, text=score, anchor="e", text_color=COLORS["accent"], font=ctk.CTkFont(size=13, weight="bold")).grid(row=0, column=2, rowspan=2, padx=8, sticky="e")
+            ctk.CTkLabel(row, text=str(row_data.get("run_count", "-")), anchor="e", text_color=COLORS["muted"], font=ctk.CTkFont(size=11)).grid(row=0, column=3, rowspan=2, padx=(2, 12), sticky="e")
 
 
     def set_address(self, value: str) -> None:
@@ -1067,6 +1300,20 @@ class MainWindow(ctk.CTk):
             arm_btn.grid(row=0, column=2, padx=2, pady=8)
             ToolTip(arm_btn, self.t("disarm_tooltip") if is_armed else self.t("arm_tooltip"))
 
+            delete_btn = ctk.CTkButton(
+                frame,
+                text="",
+                image=self._icon_images["delete"],
+                width=30,
+                height=34,
+                corner_radius=0,
+                fg_color="transparent",
+                hover_color=COLORS["surface_alt"],
+                command=lambda i=ip, n=display_name: self.remove_from_history(i, n),
+            )
+            delete_btn.grid(row=0, column=3, padx=2, pady=8)
+            ToolTip(delete_btn, self.t("delete_server_tooltip"))
+
             go_btn = ctk.CTkButton(
                 frame,
                 text="",
@@ -1080,7 +1327,7 @@ class MainWindow(ctk.CTk):
                 border_color=COLORS["border"],
                 command=lambda i=ip: self._connect_history_server(i),
             )
-            go_btn.grid(row=0, column=3, padx=(3, 0), pady=8)
+            go_btn.grid(row=0, column=4, padx=(3, 0), pady=8)
             ToolTip(go_btn, self.t("connect_tooltip"))
             ctk.CTkFrame(self.history_scroll, height=1, corner_radius=0, fg_color="#2A2A2A").pack(fill="x", padx=8)
             
@@ -1123,6 +1370,16 @@ class MainWindow(ctk.CTk):
         dialog.grab_set()
 
         ctk.CTkLabel(dialog, text=item.get("name", ip_port), font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=20, pady=(20, 8))
+        profile = self.history_store.get_server_profile(ip_port)
+        details = [
+            f"State: {profile.get('last_state') or 'unknown'}",
+            f"Auto-connect: {'armed' if profile.get('armed') else 'off'}",
+        ]
+        if profile.get("last_checked_at"):
+            details.append(f"Last check: {time.strftime('%Y-%m-%d %H:%M', time.localtime(profile['last_checked_at']))}")
+        if profile.get("last_disconnect_reason"):
+            details.append(f"Last disconnect: {profile['last_disconnect_reason']}")
+        ctk.CTkLabel(dialog, text="\n".join(details), justify="left", anchor="w", text_color=COLORS["muted"]).pack(fill="x", padx=20, pady=(0, 6))
         tags_entry = ctk.CTkEntry(dialog, placeholder_text=self.t("tags_placeholder"), fg_color=COLORS["surface_alt"])
         tags_entry.insert(0, ", ".join(item.get("tags", [])))
         tags_entry.pack(fill="x", padx=20, pady=6)
@@ -1140,19 +1397,18 @@ class MainWindow(ctk.CTk):
 
     def export_server_library(self):
         from tkinter import filedialog, messagebox
-        import json
 
         destination = filedialog.asksaveasfilename(
             parent=self,
             title=self.t("export_lib_title"),
-            defaultextension=".json",
-            filetypes=[("JSON files", "*.json")],
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt")],
         )
         if not destination:
             return
         try:
             with open(destination, "w", encoding="utf-8") as file:
-                json.dump(self.history_store.export_server_library(), file, ensure_ascii=False, indent=2)
+                file.write(self.history_store.export_server_text())
             messagebox.showinfo(self.t("export_complete"), self.t("export_complete_msg"), parent=self)
         except OSError as error:
             messagebox.showerror(self.t("export_failed"), self.t("export_failed_msg", err=type(error).__name__), parent=self)
@@ -1161,20 +1417,41 @@ class MainWindow(ctk.CTk):
         from tkinter import filedialog, messagebox
         import json
 
-        source = filedialog.askopenfilename(parent=self, title=self.t("import_lib_title"), filetypes=[("JSON files", "*.json")])
+        source = filedialog.askopenfilename(
+            parent=self,
+            title=self.t("import_lib_title"),
+            filetypes=[("Text files", "*.txt"), ("Legacy JSON files", "*.json")],
+        )
         if not source:
             return
         try:
             with open(source, "r", encoding="utf-8") as file:
-                payload = json.load(file)
-            added, updated = self.history_store.import_server_library(payload)
+                contents = file.read()
+            if source.lower().endswith(".json"):
+                added, updated = self.history_store.import_server_library(json.loads(contents))
+                unresolved = 0
+            else:
+                added, updated, unresolved = self.history_store.import_server_text(contents)
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
             messagebox.showerror(self.t("import_failed"), self.t("import_failed_msg", err=type(error).__name__), parent=self)
             return
         self.refresh_history_ui()
-        messagebox.showinfo(self.t("import_complete"), self.t("import_complete_msg", added=added, updated=updated), parent=self)
+        messagebox.showinfo(
+            self.t("import_complete"),
+            self.t("import_complete_msg", added=added, updated=updated, unresolved=unresolved),
+            parent=self,
+        )
 
-    def remove_from_history(self, ip_port: str):
+    def remove_from_history(self, ip_port: str, display_name: str = ""):
+        import tkinter.messagebox as messagebox
+
+        name = display_name or ip_port
+        if not messagebox.askyesno(
+            self.t("delete_server_title"),
+            self.t("delete_server_msg", name=name),
+            parent=self,
+        ):
+            return
         self.history_store.remove_from_history(ip_port)
         self.refresh_history_ui()
 

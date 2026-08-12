@@ -88,11 +88,38 @@ def test_forced_reconnect_starts_a_new_poll_operation():
     assert controller.is_reconnecting is True
     assert controller._poll_stop_event.is_set() is False
     assert controller._poll_operation > 2
+    assert controller._active_session.queue_on_full is False
     thread.assert_called_once_with(
         target=controller.run_logic,
         args=("127.0.0.1:28015", controller._poll_operation),
         daemon=True,
         name="forced-server-poll",
+    )
+    thread.return_value.start.assert_called_once()
+
+
+def test_connect_starts_polling_in_a_background_thread():
+    controller = make_controller_stub()
+    controller._state_lock = threading.Lock()
+    controller._is_polling = False
+    controller._is_reconnecting = False
+    controller._poll_stop_event = threading.Event()
+    controller._poll_wake_event = threading.Event()
+    controller.ip_entry = MagicMock()
+    controller.connect_btn = MagicMock()
+    controller.set_connection_state = MagicMock()
+    controller.t = lambda key, **_kwargs: {"stop": "Stop"}.get(key, key)
+
+    with patch("src.app.threading.Thread") as thread:
+        AppController.start_process(controller, "127.0.0.1:28015")
+
+    assert controller.is_polling is True
+    assert controller._active_session.queue_on_full is True
+    thread.assert_called_once_with(
+        target=controller.run_logic,
+        args=("127.0.0.1:28015", controller._poll_operation),
+        daemon=True,
+        name="server-poll",
     )
     thread.return_value.start.assert_called_once()
 
@@ -143,6 +170,52 @@ def test_stale_log_watcher_disconnect_is_ignored():
 
     controller.log_safe.assert_not_called()
     controller.start_process_force.assert_not_called()
+
+
+def test_armed_session_disconnect_schedules_auto_reconnect():
+    controller = make_controller_stub()
+    controller._state_lock = threading.Lock()
+    controller._is_polling = False
+    controller._is_reconnecting = False
+    controller._active_session = ConnectionSession(
+        "server.example:28015", "203.0.113.10:28015", launched_by_app=True
+    )
+    watcher = MagicMock()
+    controller.log_watcher = watcher
+    controller.history_store = MagicMock()
+    controller.history_store.get_armed_server.return_value = "203.0.113.10:28015"
+    controller.swarm_service = MagicMock()
+    controller._update_server_profile = MagicMock()
+    controller.log_safe = MagicMock()
+    controller.t = lambda key, **_kwargs: key
+
+    with patch("src.app.threading.Thread") as thread:
+        AppController._on_log_disconnect(controller, "server.example:28015", watcher, "Disconnected")
+
+    names = [call.kwargs.get("name") for call in thread.call_args_list]
+    assert "auto-reconnect-cooldown" in names
+
+
+def test_disarmed_session_disconnect_never_schedules_auto_reconnect():
+    controller = make_controller_stub()
+    controller._state_lock = threading.Lock()
+    controller._is_polling = False
+    controller._is_reconnecting = False
+    controller._active_session = ConnectionSession("server.example:28015", launched_by_app=True)
+    watcher = MagicMock()
+    controller.log_watcher = watcher
+    controller.history_store = MagicMock()
+    controller.history_store.get_armed_server.return_value = "another.example:28015"
+    controller.swarm_service = MagicMock()
+    controller._update_server_profile = MagicMock()
+    controller.log_safe = MagicMock()
+    controller.t = lambda key, **_kwargs: key
+
+    with patch("src.app.threading.Thread") as thread:
+        AppController._on_log_disconnect(controller, "server.example:28015", watcher, "Disconnected")
+
+    names = [call.kwargs.get("name") for call in thread.call_args_list]
+    assert "auto-reconnect-cooldown" not in names
 
 
 def test_benchmark_upload_starts_when_legacy_leaderboard_flag_is_disabled():
@@ -235,7 +308,7 @@ def test_application_version_keeps_installed_version_and_reports_update():
     with patch("src.services.release_service.release_service.fetch_latest_version", return_value="v1.4.0"):
         AppController.check_application_version(controller)
 
-    controller.set_version_status.assert_called_once_with("v1.3.0", "Update: v1.4.0", "#F97316")
+    controller.set_version_status.assert_called_once_with("v0.6.0", "Update: v1.4.0", "#F97316")
 
 
 def test_application_version_reports_offline_without_replacing_local_version():
@@ -246,7 +319,7 @@ def test_application_version_reports_offline_without_replacing_local_version():
     with patch("src.services.release_service.release_service.fetch_latest_version", return_value=None):
         AppController.check_application_version(controller)
 
-    controller.set_version_status.assert_called_once_with("v1.3.0", "Offline", "#98A2B3")
+    controller.set_version_status.assert_called_once_with("v0.6.0", "Offline", "#98A2B3")
 
 
 def test_swarm_status_messages_are_color_coded():

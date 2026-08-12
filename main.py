@@ -32,9 +32,6 @@ def main():
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
     app = AppController()
-    from src.core.history_store import history_store
-    history_store.set_armed_server("127.0.0.1:28015")
-    app.after(1000, lambda: app.start_process("127.0.0.1:28015"))
     app.mainloop()
 
 if __name__ == "__main__":

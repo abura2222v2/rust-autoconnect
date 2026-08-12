@@ -320,11 +320,16 @@ class MockA2SServer:
                 break
 
             try:
-                data, addr = sock.recvfrom(2048)
+                data, addr = sock.recvfrom(65535)
             except socket.timeout:
                 continue
-            except Exception:
-                break
+            except OSError:
+                # A socket can be interrupted by malformed traffic on Windows.
+                # Keep the fixture alive unless ``stop`` closed it deliberately.
+                with self._lock:
+                    if not self._running:
+                        break
+                continue
 
             with self._lock:
                 self.query_count += 1

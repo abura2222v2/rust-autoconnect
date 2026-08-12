@@ -1,12 +1,14 @@
 import copy
+import ipaddress
 import json
 import os
 import re
 import shutil
+import socket
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from .config import config
 from .logger import app_logger
@@ -18,7 +20,14 @@ DEFAULT_DATA: Dict[str, Any] = {
     "leaderboard_enabled": True, "username": "", "client_id": "",
     "installation_id": "", "armed_server": "", "benchmark_runs": [],
     "home_splitter_width": 270, "bench_splitter_width": 270, "auto_arm": True,
+    "share_saved_servers": False,
 }
+
+_TEXT_ENDPOINT_RE = re.compile(r"[A-Za-z0-9.-]{1,253}(?::\d{1,5})?")
+_LIBRARY_HEADER = (
+    "# Rust AutoConnect server library\n"
+    "# One IP:PORT or domain:PORT per line. A leading * marks a favorite.\n"
+)
 
 
 
@@ -91,18 +100,47 @@ class HistoryStore:
                     pass
                 return False
 
-    def add_to_history(self, ip_port: str, name: str):
+    def add_to_history(self, ip_port: str, name: str, canonical_endpoint: str = ""):
         with self._lock:
             previous = next((item for item in self.data["history"] if item.get("ip") == ip_port), {})
             history = [item for item in self.data["history"] if item.get("ip") != ip_port]
-            history.insert(0, {**previous, "ip": ip_port, "name": name, "added_at": int(time.time())})
+            record = {**previous, "ip": ip_port, "name": name, "added_at": int(time.time())}
+            if canonical_endpoint:
+                record["canonical_endpoint"] = canonical_endpoint
+            history.insert(0, record)
             self.data["history"] = history[:20]
             self.save()
 
+    def update_server_profile(self, ip_port: str, *, state: str = "", reason: str = "", checked_at: int | None = None) -> bool:
+        """Persist concise local connection state for one saved server."""
+        with self._lock:
+            for item in self.data["history"]:
+                if item.get("ip") == ip_port:
+                    item["last_state"] = str(state).strip()[:48]
+                    item["last_checked_at"] = int(checked_at if checked_at is not None else time.time())
+                    item["last_disconnect_reason"] = str(reason).strip()[:256]
+                    return self.save()
+        return False
+
+    def get_server_profile(self, ip_port: str) -> Dict[str, Any]:
+        with self._lock:
+            item = next((entry for entry in self.data["history"] if entry.get("ip") == ip_port), {})
+            return {
+                "favorite": any(entry.get("ip") == ip_port for entry in self.data["favorites"]),
+                "armed": self.data.get("armed_server") == ip_port,
+                "last_state": item.get("last_state", ""),
+                "last_checked_at": item.get("last_checked_at", 0),
+                "last_disconnect_reason": item.get("last_disconnect_reason", ""),
+            }
+
     def remove_from_history(self, ip_port: str):
+        """Forget one server completely, including local favorite/arm state."""
         with self._lock:
             self.data["history"] = [item for item in self.data["history"] if item.get("ip") != ip_port]
-            self.save()
+            self.data["favorites"] = [item for item in self.data["favorites"] if item.get("ip") != ip_port]
+            if self.data.get("armed_server") == ip_port:
+                self.data["armed_server"] = ""
+            return self.save()
 
     def toggle_favorite(self, ip_port: str, name: str):
         with self._lock:
@@ -176,6 +214,151 @@ class HistoryStore:
                 "armed_server": self.data["armed_server"],
             }
 
+    def export_server_text(self) -> str:
+        """Return a portable, human-readable list without private metadata."""
+        with self._lock:
+            favorites = {item.get("ip") for item in self.data["favorites"] if isinstance(item, dict)}
+            lines = [_LIBRARY_HEADER.rstrip()]
+            for server in self.data["history"]:
+                endpoint = server.get("ip") if isinstance(server, dict) else ""
+                if isinstance(endpoint, str) and endpoint:
+                    lines.append(f"* {endpoint}" if endpoint in favorites else endpoint)
+            return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _split_text_endpoint(value: str) -> tuple[str, int | None] | None:
+        value = value.strip().lower()
+        if not _TEXT_ENDPOINT_RE.fullmatch(value):
+            return None
+        host, separator, port_text = value.rpartition(":")
+        if not separator:
+            return value, None
+        try:
+            port = int(port_text)
+        except ValueError:
+            return None
+        if not 1 <= port <= 65535:
+            return None
+        return host, port
+
+    @staticmethod
+    def _is_ipv4(value: str) -> bool:
+        try:
+            return isinstance(ipaddress.ip_address(value), ipaddress.IPv4Address)
+        except ValueError:
+            return False
+
+    @classmethod
+    def _parse_server_text(
+        cls, text: str, resolver: Callable[[str], str]
+    ) -> tuple[list[Dict[str, Any]], int]:
+        """Parse a text library and resolve domains once for stable dedupe."""
+        if not isinstance(text, str):
+            raise ValueError("server library must be text")
+        raw_entries: list[tuple[str, int | None, bool]] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            favorite = line.startswith("*")
+            if favorite:
+                line = line[1:].strip()
+            if line.lower().startswith("client.connect "):
+                line = line[len("client.connect "):].strip()
+            parsed = cls._split_text_endpoint(line)
+            if parsed:
+                raw_entries.append((*parsed, favorite))
+
+        entries: list[Dict[str, Any]] = []
+        unresolved = 0
+        for index, (host, explicit_port, favorite) in enumerate(raw_entries):
+            # A hostname on the preceding line may intentionally be paired
+            # with an IP:PORT, as in exported server notes shared by players.
+            port = explicit_port
+            if port is None and index + 1 < len(raw_entries):
+                next_host, next_port, _ = raw_entries[index + 1]
+                if next_port is not None and cls._is_ipv4(next_host):
+                    port = next_port
+            port = port or 28015
+            resolved_ip = host if cls._is_ipv4(host) else ""
+            if not resolved_ip:
+                try:
+                    candidate = resolver(host)
+                except (OSError, ValueError):
+                    candidate = ""
+                if cls._is_ipv4(candidate):
+                    resolved_ip = candidate
+                else:
+                    unresolved += 1
+            endpoint = f"{host}:{port}"
+            entries.append({
+                "ip": endpoint,
+                "name": host,
+                "canonical_endpoint": f"{resolved_ip}:{port}" if resolved_ip else "",
+                "favorite": favorite,
+            })
+        return entries, unresolved
+
+    def import_server_text(
+        self, text: str, resolver: Callable[[str], str] = socket.gethostbyname
+    ) -> tuple[int, int, int]:
+        """Merge a portable text library; return added, updated, unresolved."""
+        entries, unresolved = self._parse_server_text(text, resolver)
+        deduped: Dict[str, Dict[str, Any]] = {}
+        for entry in entries:
+            identity = entry["canonical_endpoint"] or entry["ip"]
+            previous = deduped.get(identity)
+            # Prefer a hostname as the saved address: it survives server IP
+            # changes, while canonical_endpoint still recognises duplicates.
+            if previous is None or (self._is_ipv4(previous["name"]) and not self._is_ipv4(entry["name"])):
+                deduped[identity] = entry
+            if previous is not None:
+                deduped[identity]["favorite"] = bool(previous["favorite"] or entry["favorite"])
+
+        added = 0
+        updated = 0
+        with self._lock:
+            current = {item.get("ip"): item for item in self.data["history"] if isinstance(item, dict)}
+            canonical_index = {
+                item.get("canonical_endpoint"): item
+                for item in current.values()
+                if isinstance(item.get("canonical_endpoint"), str) and item.get("canonical_endpoint")
+            }
+            favorite_ips = {item.get("ip") for item in self.data["favorites"] if isinstance(item, dict)}
+            for entry in deduped.values():
+                existing = current.get(entry["ip"]) or canonical_index.get(entry["canonical_endpoint"])
+                if existing:
+                    stored_ip = existing.get("ip", entry["ip"])
+                    existing.update({
+                        "name": entry["name"] if stored_ip == entry["ip"] else existing.get("name", entry["name"]),
+                        "canonical_endpoint": entry["canonical_endpoint"] or existing.get("canonical_endpoint", ""),
+                    })
+                    updated += 1
+                else:
+                    stored_ip = entry["ip"]
+                    current[stored_ip] = {
+                        "ip": stored_ip,
+                        "name": entry["name"],
+                        "canonical_endpoint": entry["canonical_endpoint"],
+                        "added_at": int(time.time()),
+                    }
+                    if entry["canonical_endpoint"]:
+                        canonical_index[entry["canonical_endpoint"]] = current[stored_ip]
+                    added += 1
+                if entry["favorite"]:
+                    favorite_ips.add(stored_ip)
+
+            self.data["history"] = sorted(
+                current.values(), key=lambda item: int(item.get("added_at", 0)), reverse=True
+            )[:20]
+            history_ips = {item.get("ip") for item in self.data["history"]}
+            names = {item.get("ip"): item.get("name", "Rust Server") for item in self.data["history"]}
+            self.data["favorites"] = [
+                {"ip": ip, "name": names[ip]} for ip in favorite_ips if ip in history_ips
+            ]
+            self.save()
+        return added, updated, unresolved
+
     def import_server_library(self, payload: Any) -> tuple[int, int]:
         """Merge a validated library and return added and updated record counts."""
         if not isinstance(payload, dict) or payload.get("format") != "rust-autoconnect-server-library-v1":
@@ -214,6 +397,9 @@ class HistoryStore:
                     if isinstance(server.get("tags", []), list) else [],
                     "note": str(server.get("note", "")).strip()[:512],
                 }
+                canonical_endpoint = server.get("canonical_endpoint")
+                if isinstance(canonical_endpoint, str) and re.fullmatch(r"[A-Za-z0-9.-]{1,253}:\d{1,5}", canonical_endpoint):
+                    normalized["canonical_endpoint"] = canonical_endpoint
                 if ip in current:
                     current[ip] = {**current[ip], **normalized}
                     updated += 1
@@ -330,6 +516,10 @@ class HistoryStore:
         with self._lock:
             return bool(self.data["swarm_enabled"])
     def set_swarm_enabled(self, val: bool): self._set_value("swarm_enabled", bool(val))
+    def get_share_saved_servers(self) -> bool:
+        with self._lock:
+            return bool(self.data.get("share_saved_servers", False))
+    def set_share_saved_servers(self, val: bool): self._set_value("share_saved_servers", bool(val))
     def get_leaderboard_enabled(self) -> bool:
         with self._lock:
             return bool(self.data["leaderboard_enabled"])

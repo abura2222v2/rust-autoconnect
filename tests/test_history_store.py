@@ -77,6 +77,61 @@ def test_server_library_export_import_merges_records(monkeypatch, tmp_path):
     assert target.get_armed_server() == "127.0.0.1:28016"
 
 
+def test_text_library_resolves_and_deduplicates_domain_and_ip(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    text = "# Shared servers\n* eu-trio-mon.rusticated.com\n185.248.134.142:28010\n"
+
+    added, updated, unresolved = store.import_server_text(
+        text,
+        resolver=lambda host: {"eu-trio-mon.rusticated.com": "185.248.134.142"}[host],
+    )
+
+    assert (added, updated, unresolved) == (1, 0, 0)
+    assert store.get_history() == [{
+        "ip": "eu-trio-mon.rusticated.com:28010",
+        "name": "eu-trio-mon.rusticated.com",
+        "canonical_endpoint": "185.248.134.142:28010",
+        "added_at": store.get_history()[0]["added_at"],
+    }]
+    assert store.get_favorites() == [{
+        "ip": "eu-trio-mon.rusticated.com:28010",
+        "name": "eu-trio-mon.rusticated.com",
+    }]
+
+
+def test_text_library_keeps_unresolved_domain_for_later_connection(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    added, updated, unresolved = store.import_server_text(
+        "temporary.example:28015\n",
+        resolver=lambda _host: (_ for _ in ()).throw(OSError("DNS unavailable")),
+    )
+
+    assert (added, updated, unresolved) == (1, 0, 1)
+    assert store.get_history()[0]["ip"] == "temporary.example:28015"
+    assert store.get_history()[0]["canonical_endpoint"] == ""
+
+
+def test_text_library_export_marks_favorites(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    store.add_to_history("127.0.0.1:28015", "Rust Server")
+    store.toggle_favorite("127.0.0.1:28015", "Rust Server")
+
+    assert store.export_server_text().splitlines()[-1] == "* 127.0.0.1:28015"
+
+
+def test_remove_server_forgets_favorite_and_armed_state(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    endpoint = "127.0.0.1:28015"
+    store.add_to_history(endpoint, "Test Server")
+    store.toggle_favorite(endpoint, "Test Server")
+    store.set_armed_server(endpoint)
+
+    assert store.remove_from_history(endpoint)
+    assert store.get_history() == []
+    assert store.get_favorites() == []
+    assert store.get_armed_server() == ""
+
+
 def test_server_library_import_normalizes_malformed_records(monkeypatch, tmp_path):
     store = configure_store(monkeypatch, tmp_path)
     payload = {
@@ -103,3 +158,27 @@ def test_server_wipe_schedule_is_optional_and_persisted(monkeypatch, tmp_path):
     assert store.get_server_wipe_schedule(endpoint) == {"wipe_at": 1_800_000_000, "wipe_source": "manual"}
     assert store.set_server_wipe_schedule(endpoint, None)
     assert store.get_server_wipe_schedule(endpoint) == {"wipe_at": None, "wipe_source": ""}
+
+
+def test_server_profile_tracks_local_connection_state(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    endpoint = "127.0.0.1:28015"
+    store.add_to_history(endpoint, "Test Server")
+    store.toggle_favorite(endpoint, "Test Server")
+    store.set_armed_server(endpoint)
+    assert store.update_server_profile(endpoint, state="disconnected", reason="Timed out", checked_at=123)
+    assert store.get_server_profile(endpoint) == {
+        "favorite": True,
+        "armed": True,
+        "last_state": "disconnected",
+        "last_checked_at": 123,
+        "last_disconnect_reason": "Timed out",
+    }
+
+
+def test_share_saved_servers_is_opt_in_and_persisted(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    assert store.get_share_saved_servers() is False
+    store.set_share_saved_servers(True)
+    assert store.get_share_saved_servers() is True
+    assert configure_store(monkeypatch, tmp_path).get_share_saved_servers() is True

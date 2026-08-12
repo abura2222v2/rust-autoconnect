@@ -22,13 +22,21 @@ class ConnectionPhase(str, Enum):
 
 @dataclass(frozen=True)
 class PollingPolicy:
-    idle_seconds: float = 30.0
-    watch_seconds: float = 5.0
+    # Quiet by default.  Turbo is deliberately short and only enabled by a
+    # trusted schedule, a confirmed offline transition, or a Swarm hint.
+    idle_seconds: float = 600.0
+    watch_seconds: float = 30.0
     turbo_seconds: float = 1.0
     watch_window: timedelta = timedelta(minutes=30)
     turbo_window: timedelta = timedelta(minutes=5)
     max_turbo_duration: timedelta = timedelta(minutes=5)
     confirmation_gap_seconds: float = 0.3
+    # An A2S timeout can also mean that a server uses another query port or
+    # filters queries.  Probe cautiously before falling back to quiet mode.
+    first_query_retry_seconds: float = 30.0
+    full_server_retry_seconds: float = 30.0
+    manual_fast_retry_seconds: float = 5.0
+    manual_watch_retry_seconds: float = 15.0
 
 
 @dataclass
@@ -37,12 +45,24 @@ class ConnectionSession:
     canonical_endpoint: str = ""
     wipe_at: Optional[datetime] = None
     wipe_source: str = ""
+    force_wipe_at: Optional[datetime] = None
     phase: ConnectionPhase = ConnectionPhase.IDLE
     launched_by_app: bool = False
+    # A manual Connect may intentionally enter Rust's server queue. Automatic
+    # recovery must wait for a playable slot instead of launching Rust again.
+    queue_on_full: bool = False
     down_observed: bool = False
     turbo_until: Optional[datetime] = None
     swarm_hint_pending: bool = False
     offline_turbo_used: bool = False
+    force_wipe_notified: bool = False
+    consecutive_query_failures: int = 0
+    query_was_confirmed_alive: bool = False
+    provider_online: Optional[bool] = None
+    provider_checked_at: Optional[datetime] = None
+    provider_last_requested_at: Optional[datetime] = None
+    provider_refresh_in_flight: bool = False
+    watch_until: Optional[datetime] = None
     stop_event: Event = field(default_factory=Event)
 
     def select_phase(self, now: Optional[datetime] = None, swarm_hint: bool = False) -> ConnectionPhase:
@@ -59,11 +79,24 @@ class ConnectionSession:
             self.down_observed = False
             self.swarm_hint_pending = False
             self.turbo_until = None
+        if self.watch_until is not None and now < self.watch_until:
+            self.phase = ConnectionPhase.WATCH
+            return self.phase
+        if self.force_wipe_at:
+            remaining = self.force_wipe_at - now
+            # The expected wipe is not proof that a server is ready. Turbo is
+            # limited to T-5 through T+5; early restarts use offline/Swarm.
+            if timedelta(minutes=-5) <= remaining <= timedelta(minutes=5):
+                self.phase = ConnectionPhase.TURBO
+                return self.phase
+            if timedelta(minutes=-30) <= remaining <= timedelta(minutes=30):
+                self.phase = ConnectionPhase.WATCH
+                return self.phase
         if self.wipe_at:
             remaining = self.wipe_at - now
-            if timedelta(minutes=-30) <= remaining <= PollingPolicy().turbo_window:
+            if timedelta(minutes=-5) <= remaining <= PollingPolicy().turbo_window:
                 self.phase = ConnectionPhase.TURBO
-            elif timedelta(minutes=-60) <= remaining <= PollingPolicy().watch_window:
+            elif timedelta(minutes=-30) <= remaining <= PollingPolicy().watch_window:
                 self.phase = ConnectionPhase.WATCH
             else:
                 self.phase = ConnectionPhase.SCHEDULED
@@ -75,14 +108,77 @@ class ConnectionSession:
         now = now or datetime.now(timezone.utc)
         self.swarm_hint_pending = True
         self.turbo_until = now + PollingPolicy().max_turbo_duration
+        # A restart can take longer than the short turbo window.  Continue
+        # watching at a moderate rate instead of falling back to ten minutes.
+        self.watch_until = now + timedelta(minutes=30)
 
     def observe_server_down(self, now: Optional[datetime] = None) -> None:
         """Use one bounded turbo window after a confirmed offline result."""
+        now = now or datetime.now(timezone.utc)
+        self.watch_until = now + timedelta(minutes=30)
         if self.offline_turbo_used:
             return
         self.offline_turbo_used = True
         self.down_observed = True
         self.request_turbo(now)
+
+    def apply_provider_hint(
+        self, *, online: Optional[bool], wipe_at: Optional[datetime], source: str,
+        confidence: str, checked_at: Optional[datetime], now: Optional[datetime] = None,
+    ) -> bool:
+        """Apply provider data as a hint; only explicit offline enables turbo."""
+        now = now or datetime.now(timezone.utc)
+        changed = online is not None and online != self.provider_online
+        self.provider_online = online
+        self.provider_checked_at = checked_at
+        if wipe_at is not None:
+            self.wipe_at = wipe_at
+            self.wipe_source = source
+        if online is False:
+            self.observe_server_down(now)
+        return changed
+
+    def observe_query_result(self, alive: bool, now: Optional[datetime] = None) -> bool:
+        """Record an A2S result and return whether a restart is confirmed.
+
+        A first missing A2S reply is ambiguous: the query port may differ from
+        the game port or be filtered.  Only two misses after a successful
+        reply are treated as a server restart and allowed to enable turbo.
+        """
+        if alive:
+            self.consecutive_query_failures = 0
+            self.query_was_confirmed_alive = True
+            return False
+
+        self.consecutive_query_failures += 1
+        if self.query_was_confirmed_alive and self.consecutive_query_failures >= 2:
+            self.query_was_confirmed_alive = False
+            self.observe_server_down(now)
+            return True
+        return False
+
+    def query_retry_seconds(self, now: Optional[datetime] = None) -> float:
+        """Back off unknown A2S failures without delaying initial discovery."""
+        policy = PollingPolicy()
+        if self.queue_on_full:
+            # A person waiting for a just-starting server gets a short fast
+            # probe window. Armed recovery retains the quieter backoff below.
+            if self.consecutive_query_failures <= 12:
+                return policy.manual_fast_retry_seconds
+            if self.consecutive_query_failures <= 24:
+                return policy.manual_watch_retry_seconds
+            # After the four-minute fast window, widen gradually rather than
+            # jumping straight to the quiet ten-minute schedule.
+            manual_backoff = (30.0, 60.0, 120.0, 240.0, policy.idle_seconds)
+            index = min(self.consecutive_query_failures - 25, len(manual_backoff) - 1)
+            return manual_backoff[index]
+        retries = max(0, self.consecutive_query_failures - 1)
+        discovery_delay = min(policy.idle_seconds, policy.first_query_retry_seconds * (2 ** retries))
+        return min(self.interval_seconds(now), discovery_delay)
+
+    def full_server_retry_seconds(self, now: Optional[datetime] = None) -> float:
+        """Keep checking a healthy full server for an open slot."""
+        return min(self.interval_seconds(now), PollingPolicy().full_server_retry_seconds)
 
     def reset_offline_turbo(self) -> None:
         self.offline_turbo_used = False

@@ -39,6 +39,33 @@ def test_schedule_is_read_once_then_cached():
     assert first.source == "provider"
     assert second == first
     assert request.call_count == 1
+    payload = json.loads(request.call_args.args[0].data.decode("utf-8"))
+    assert payload == {"endpoint": "example.test:28015", "active": False}
+
+
+def test_snapshot_preserves_provider_status_without_treating_empty_as_offline():
+    service = configured_service()
+    with patch("urllib.request.urlopen", return_value=FakeResponse({
+        "online": True, "players": 0, "max_players": 200,
+        "checked_at": "2026-08-12T12:00:00Z", "fresh": True,
+    })):
+        snapshot = service.observe_endpoint("example.test:28015", active=True)
+
+    assert snapshot.online is True
+    assert snapshot.players == 0
+    assert snapshot.max_players == 200
+    assert snapshot.fresh is True
+
+
+def test_share_deduplicates_and_limits_addresses():
+    service = configured_service()
+    endpoints = ["example.test:28015"] * 2 + [f"s{i}.test:28015" for i in range(30)]
+    with patch("urllib.request.urlopen", return_value=FakeResponse({"accepted": True})) as request:
+        assert service.share_saved_endpoints(endpoints)
+
+    payload = json.loads(request.call_args.args[0].data.decode("utf-8"))
+    assert payload["endpoints"][0] == "example.test:28015"
+    assert len(payload["endpoints"]) == 20
 
 
 def test_availability_report_sends_only_endpoint():

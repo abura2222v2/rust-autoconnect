@@ -67,5 +67,22 @@
   "close_rust_title": "关闭 Rust？",
   "bench_instr_title": "基准测试说明",
   "f5_pressed_log": "[*] F5 Pressed! Starting map benchmark timeline...",
-  "f5_prompt_log": "[!] Press F5 inside Rust to start the map benchmark!"
+  "f5_prompt_log": "[!] Press F5 inside Rust to start the map benchmark!",
+  "tg_status_unlinked": "Telegram：未绑定",
+  "tg_link_btn": "绑定 Telegram 机器人",
+  "tg_unlink_btn": "解除绑定 Telegram",
+  "tg_status_unlinking": "正在解除绑定...",
+  "tg_bot_title": "Telegram 机器人",
+  "tg_link_failed": "无法开始 Telegram 绑定。",
+  "tg_overlay_intro": "在 Telegram 打开 @RustAutoConnect_Bot，复制此代码并发送给机器人。使用 /notifications 选择提醒。",
+  "tg_overlay_code_label": "配对代码",
+  "tg_copy_code": "复制代码",
+  "tg_code_copied": "已复制",
+  "tg_close": "关闭",
+  "tg_status_pairing": "Telegram：等待绑定",
+  "tg_status_linked": "Telegram：{name}",
+  "tg_status_unavailable": "Telegram：服务不可用。",
+  "tg_status_user": "已连接用户",
+  "tg_log_connected": "Telegram：已连接为 {name}。",
+  "tg_log_unlinked": "Telegram：未绑定。"
 }

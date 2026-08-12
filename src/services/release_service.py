@@ -12,7 +12,8 @@ from ..core.logger import app_logger
 
 
 RELEASES_URL = "https://api.github.com/repos/abura2222v2/rust-autoconnect/releases/latest"
-LOCAL_VERSION = "v1.3.0"
+# This must match the release tag used for the distributed installer.
+LOCAL_VERSION = "v0.6.1"
 
 
 def is_newer_version(candidate: str, current: str) -> bool:

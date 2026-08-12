@@ -94,6 +94,10 @@ def main() -> int:
 
         window.show_settings_frame()
         capture(window, OUTPUT_DIR / "settings.png")
+
+        window._show_telegram_link_overlay("ABCD1234")
+        capture(window, OUTPUT_DIR / "telegram_pairing_overlay.png")
+        window._close_telegram_link_overlay()
     finally:
         window.destroy()
 

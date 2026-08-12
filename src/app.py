@@ -16,6 +16,7 @@ from .core.history_store import history_store
 from .core.a2s_client import a2s_client
 from .core.benchmark_model import BENCHMARK_VERSION, build_run
 from .core.smart_monitor import ConnectionPhase, ConnectionSession, PollingPolicy
+from .core.network_clock import NetworkClock
 from .services.log_watcher import LogWatcher
 from .services.process_monitor import process_monitor
 from .services.server_intelligence_service import server_intelligence_service
@@ -47,6 +48,13 @@ class AppController(MainWindow):
         self._operation_lock = threading.Lock()
         self._poll_stop_event = threading.Event()
         self._poll_wake_event = threading.Event()
+        self._update_ready_event = threading.Event()
+        self._update_ready_event.set()
+        self._update_check_wake_event = threading.Event()
+        self._update_required = False
+        self._update_steam_opened = False
+        self._update_status_logged = ""
+        self.network_clock = NetworkClock()
         self._shutdown_event = threading.Event()
         self._benchmark_stop_event = threading.Event()
         self._ui_queue: queue.Queue[tuple[Optional[tuple[str, int]], Callable, tuple, dict]] = queue.Queue()
@@ -69,29 +77,12 @@ class AppController(MainWindow):
         self.hardware_service = hardware_service
         
         self.log_safe(self.t("ready"))
-        # Asyncio integration
+        threading.Thread(target=self._report_telegram_status, daemon=True, name="telegram-status-log").start()
+        # Asyncio integration is owned by LogWatcher.  Polling itself runs in
+        # a dedicated thread, so it must never be submitted as a coroutine.
         import asyncio
         self.async_loop = asyncio.new_event_loop()
-        self.async_thread = threading.Thread(target=self._run_async_loop, daemon=True, name="async-loop")
-        self.async_thread.start()
-
-        # Start background status and update monitoring loops
-        threading.Thread(target=self.check_rust_status_loop, daemon=True, name="rust-status-check").start()
-        threading.Thread(target=self.check_rust_update_loop, daemon=True, name="rust-update-check").start()
-        threading.Thread(target=self.check_application_version, daemon=True, name="app-version-check").start()
-        threading.Thread(target=self._retry_pending_benchmark_runs, daemon=True, name="retry-pending-bm").start()
-        
-        # Keep load_hardware synchronous as it calls blocking wmi/psutil
-        threading.Thread(target=self._load_hardware, daemon=True).start()
-        
-        # Init Swarm Service
         from .services.swarm_service import swarm_service
-        self.swarm_service = swarm_service
-
-    def _run_async_loop(self):
-        import asyncio
-        asyncio.set_event_loop(self.async_loop)
-        self.async_loop.run_forever()
         self.swarm_service = swarm_service
         self.swarm_service.is_enabled = self.history_store.get_swarm_enabled()
         self.swarm_service.on_swarm_event = self._on_swarm_event
@@ -101,8 +92,37 @@ class AppController(MainWindow):
             self.swarm_service.start()
         else:
             self._on_swarm_status("disabled")
-            
+
+        self.async_thread = threading.Thread(target=self._run_async_loop, daemon=True, name="async-loop")
+        self.async_thread.start()
         self._start_global_log_watcher()
+
+        # Start background status and update monitoring loops
+        threading.Thread(target=self.check_rust_status_loop, daemon=True, name="rust-status-check").start()
+        threading.Thread(target=self.check_rust_update_loop, daemon=True, name="rust-update-check").start()
+        threading.Thread(target=self.check_application_version, daemon=True, name="app-version-check").start()
+        threading.Thread(target=self._retry_pending_benchmark_runs, daemon=True, name="retry-pending-bm").start()
+        threading.Thread(target=self._share_saved_servers_loop, daemon=True, name="shared-server-interest").start()
+        
+        # Keep load_hardware synchronous as it calls blocking wmi/psutil
+        threading.Thread(target=self._load_hardware, daemon=True).start()
+        
+    def _run_async_loop(self):
+        import asyncio
+        asyncio.set_event_loop(self.async_loop)
+        self.async_loop.run_forever()
+
+    def _report_telegram_status(self) -> None:
+        """Log one human-readable Telegram state per application start."""
+        status = telegram_service.get_link_status()
+        if status is None:
+            self.log_safe(self.t("tg_status_unavailable"), "#98A2B3")
+        elif status.get("linked"):
+            name = status.get("display_name") or self.t("tg_status_user")
+            self.log_safe(self.t("tg_log_connected", name=name), COLORS["success"])
+        else:
+            self.log_safe(self.t("tg_log_unlinked"), "#98A2B3")
+        self.dispatch_ui(self._apply_telegram_status, status or {})
 
     def _drain_ui_queue(self):
         """Run worker-thread UI requests only while this controller is active."""
@@ -143,6 +163,76 @@ class AppController(MainWindow):
             is_current = self._poll_operation == operation_id
         return not self._shutdown_event.is_set() and is_current and self.is_polling
 
+    def _is_current_session(self, operation_id: int, session: ConnectionSession) -> bool:
+        return (
+            self._is_current_poll_operation(operation_id)
+            and self._active_session is session
+            and not session.stop_event.is_set()
+        )
+
+    def _wait_for_rust_update(self, operation_id: int, session: ConnectionSession) -> bool:
+        """Delay only the current launch while a known Rust update is pending."""
+        if self._update_ready_event.is_set():
+            return self._is_current_session(operation_id, session)
+        session.phase = ConnectionPhase.WATCH
+        self.dispatch_ui(self.set_connection_phase, "waiting_update", operation=("poll", operation_id))
+        self.log_safe("Rust update is pending; waiting before launch.", "#F97316")
+        self._update_check_wake_event.set()
+        while self._is_current_session(operation_id, session):
+            if self._update_ready_event.wait(0.25):
+                return self._is_current_session(operation_id, session)
+        return False
+
+    def _update_server_profile(self, endpoint: str, **values) -> None:
+        """Best-effort local profile update; controller stubs have no store."""
+        store = self.__dict__.get("history_store")
+        if store is not None:
+            store.update_server_profile(endpoint, **values)
+
+    def _share_saved_servers_loop(self) -> None:
+        """Opt-in background heartbeat for the shared provider catalogue."""
+        while not self._shutdown_event.is_set():
+            if self.history_store.get_share_saved_servers():
+                endpoints = []
+                for item in self.history_store.get_history():
+                    endpoint = item.get("canonical_endpoint") or item.get("ip")
+                    if isinstance(endpoint, str) and _is_valid_endpoint(endpoint):
+                        endpoints.append(endpoint)
+                self.server_intelligence.share_saved_endpoints(endpoints)
+            self._shutdown_event.wait(600)
+
+    def _refresh_provider_hint(self, operation_id: int, session: ConnectionSession, endpoint: str) -> None:
+        """Fetch provider cache off the polling path; A2S never waits for it."""
+        if session.provider_refresh_in_flight:
+            return
+        session.provider_refresh_in_flight = True
+        session.provider_last_requested_at = self.network_clock.now()
+
+        def work() -> None:
+            try:
+                snapshot = self.server_intelligence.observe_endpoint(endpoint, active=True)
+                if not self._is_current_session(operation_id, session):
+                    return
+                wipe_at = (
+                    datetime.fromtimestamp(snapshot.wipe_at, timezone.utc)
+                    if snapshot.wipe_at else None
+                )
+                online = snapshot.online if snapshot.fresh else None
+                changed = session.apply_provider_hint(
+                    online=online, wipe_at=wipe_at, source=snapshot.source,
+                    confidence=snapshot.confidence, checked_at=snapshot.checked_at,
+                    now=self.network_clock.now(),
+                )
+                if snapshot.fresh and (changed or wipe_at is not None):
+                    self.log_safe(self.t("provider_cache_updated"), "#98A2B3")
+                if online is False and changed:
+                    self.log_safe(self.t("provider_offline_turbo"), "#F97316")
+                    self._poll_wake_event.set()
+            finally:
+                session.provider_refresh_in_flight = False
+
+        threading.Thread(target=work, daemon=True, name="provider-cache-refresh").start()
+
     @property
     def is_polling(self) -> bool:
         with self._state_lock:
@@ -165,6 +255,10 @@ class AppController(MainWindow):
 
     def _start_global_log_watcher(self):
         def handle_disconnect(reason):
+            # The per-connection watcher owns a launch initiated by this app.
+            # Avoid racing it with the always-on observer.
+            if getattr(self, "log_watcher", None) and self.log_watcher.is_monitoring:
+                return
             if getattr(self, 'is_polling', False) and getattr(self, 'log_watcher', None) is not None:
                 # Local log watcher handles disconnects during active polling
                 pass
@@ -241,16 +335,24 @@ class AppController(MainWindow):
         self.is_polling = True
         self.is_reconnecting = False
         operation_id = self._next_poll_operation()
-        self._active_session = ConnectionSession(requested_endpoint=target_str)
+        # A person who explicitly pressed Connect may want Rust to enter a
+        # server queue. Forced/armed reconnects deliberately do not do this.
+        self._active_session = ConnectionSession(requested_endpoint=target_str, queue_on_full=True)
         self._last_smart_phase = None
         
         # Reset UI log spam flags
         self._ui_logged_ans = False
         self._ui_logged_wait = False
         self._ui_logged_err = False
+        self._last_probe_outcome = ""
         
-        import asyncio
-        self.poll_task = asyncio.run_coroutine_threadsafe(self.run_logic(target_str, operation_id), self.async_loop)
+        self.poll_task = threading.Thread(
+            target=self.run_logic,
+            args=(target_str, operation_id),
+            daemon=True,
+            name="server-poll",
+        )
+        self.poll_task.start()
 
     def stop_polling(self, explicit: bool = True):
         self.is_polling = False
@@ -311,12 +413,24 @@ class AppController(MainWindow):
             except socket.gaierror:
                 self.log_safe(self.t("dns_err", host=host))
 
+            if not self._is_current_session(operation_id, session):
+                return
+
             self.log_safe(self.t("ping_test", ip=real_ip, port=port))
 
             canonical_target = f"{real_ip}:{port}"
             session.canonical_endpoint = canonical_target
-            remote_schedule = self.server_intelligence.get_schedule(canonical_target)
-            schedule = {"wipe_at": remote_schedule.wipe_at, "wipe_source": remote_schedule.source}
+            session.force_wipe_at = steam_service.relevant_force_wipe_at(self.network_clock.now())
+            local_force_wipe = session.force_wipe_at.astimezone()
+            self.log_safe(
+                f"Force Wipe: {local_force_wipe.strftime('%Y-%m-%d %H:%M %Z')} "
+                "(19:00 London).",
+                "#98A2B3",
+            )
+            # Provider cache is optional intelligence, not part of the direct
+            # connection path. Start it in parallel with the first A2S probe.
+            self._refresh_provider_hint(operation_id, session, canonical_target)
+            schedule = {"wipe_at": None, "wipe_source": ""}
             if not schedule["wipe_at"]:
                 schedule = self.history_store.get_server_wipe_schedule(target)
             if not schedule["wipe_at"] and canonical_target != target:
@@ -328,17 +442,40 @@ class AppController(MainWindow):
             
             self.swarm_service.join_room(canonical_target)
             
-            self.dispatch_ui(self.history_store.add_to_history, target, host, operation=("poll", operation_id))
+            self.dispatch_ui(
+                self.history_store.add_to_history, target, host, canonical_target,
+                operation=("poll", operation_id),
+            )
             self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
 
             self.log_safe(self.t("start_poll", ip=real_ip, port=port))
 
-            if not self._is_current_poll_operation(operation_id):
+            if not self._is_current_session(operation_id, session):
                 return
 
             server_name = host
-            while self._is_current_poll_operation(operation_id):
-                phase = session.select_phase()
+            while self._is_current_session(operation_id, session):
+                provider_requested = session.provider_last_requested_at
+                now = self.network_clock.now()
+                if (
+                    provider_requested is None
+                    or (now - provider_requested).total_seconds() >= 55
+                ):
+                    self._refresh_provider_hint(operation_id, session, canonical_target)
+                phase = session.select_phase(self.network_clock.now())
+                if (
+                    session.force_wipe_at
+                    and not session.force_wipe_notified
+                    and self.network_clock.now() >= session.force_wipe_at
+                ):
+                    session.force_wipe_notified = True
+                    self.log_safe("Force Wipe window started.", "#F97316")
+                    threading.Thread(
+                        target=telegram_service.notify,
+                        args=("wipe", target),
+                        daemon=True,
+                        name="telegram-force-wipe",
+                    ).start()
                 if phase != self._last_smart_phase:
                     labels = {
                         ConnectionPhase.SCHEDULED: self.t("smart_phase_scheduled"),
@@ -347,35 +484,82 @@ class AppController(MainWindow):
                     }
                     if phase in labels:
                         self.log_safe(labels[phase], "#F97316" if phase != ConnectionPhase.SCHEDULED else "#98A2B3")
+                    self.dispatch_ui(self.set_connection_phase, phase.value, operation=("poll", operation_id))
                     self._last_smart_phase = phase
 
-                is_alive, name, max_players, _ = self.a2s_client.check_server_alive(real_ip, port, self._poll_stop_event)
-                if name:
-                    server_name = name
-                ready = is_alive and max_players > 0
+                status = self.a2s_client.check_server_status(real_ip, port, session.stop_event)
+                if not self._is_current_session(operation_id, session):
+                    return
+                if status.server_name:
+                    server_name = status.server_name
+                ready = status.alive and status.has_join_capacity
                 if ready:
-                    if self._poll_stop_event.wait(PollingPolicy().confirmation_gap_seconds):
+                    if session.stop_event.wait(PollingPolicy().confirmation_gap_seconds):
                         break
                         
-                    is_alive_2, name_2, max_players_2, _ = self.a2s_client.check_server_alive(real_ip, port, self._poll_stop_event)
-                    if is_alive_2 and max_players_2 > 0:
+                    confirmed = self.a2s_client.check_server_status(real_ip, port, session.stop_event)
+                    if not self._is_current_session(operation_id, session):
+                        return
+                    if confirmed.alive and confirmed.has_join_capacity:
                         session.consume_hint()
                         session.phase = ConnectionPhase.LAUNCH_REQUESTED
+                        self.dispatch_ui(self.set_connection_phase, session.phase.value, operation=("poll", operation_id))
                         self.log_safe(self.t("stable"))
-                        self.dispatch_ui(self.history_store.add_to_history, target, server_name, operation=("poll", operation_id))
+                        self.dispatch_ui(
+                            self.history_store.add_to_history, target, server_name, canonical_target,
+                            operation=("poll", operation_id),
+                        )
                         self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
-                        self.launch_game(target)
+                        if self._wait_for_rust_update(operation_id, session):
+                            self.launch_game(target, session=session, operation_id=operation_id)
                         break
-                else:
-                    session.observe_server_down()
-                    if not getattr(self, '_ui_logged_err', False):
-                        self.log_safe(self.t("poll_err", sec=round(session.interval_seconds(), 1)))
-                        self._ui_logged_err = True
+                    status = confirmed
 
-                current_interval = session.interval_seconds()
+                # A full server is still a valid manual connection target:
+                # opening Steam here lets Rust handle its own queue. Do not
+                # use this path for armed recovery, which waits for capacity.
+                if status.alive and not status.has_join_capacity and session.queue_on_full:
+                    session.consume_hint()
+                    session.phase = ConnectionPhase.LAUNCH_REQUESTED
+                    self.dispatch_ui(self.set_connection_phase, session.phase.value, operation=("poll", operation_id))
+                    self.log_safe(self.t("server_full_join_queue"), "#F97316")
+                    self.dispatch_ui(
+                        self.history_store.add_to_history, target, server_name, canonical_target,
+                        operation=("poll", operation_id),
+                    )
+                    self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
+                    self._update_server_profile(target, state="queue", checked_at=int(time.time()))
+                    if self._wait_for_rust_update(operation_id, session):
+                        self.launch_game(target, session=session, operation_id=operation_id)
+                    break
+
+                if not (status.alive and status.has_join_capacity):
+                    now = self.network_clock.now()
+                    restarted = session.observe_query_result(status.alive, now)
+                    if not status.alive:
+                        profile_state = "offline"
+                        current_interval = session.query_retry_seconds(now)
+                        outcome = "restart" if restarted else "query_unavailable"
+                        if outcome != getattr(self, "_last_probe_outcome", ""):
+                            message = (
+                                self.t("server_restart_turbo") if restarted
+                                else self.t("query_unavailable_retry", sec=round(current_interval, 1))
+                            )
+                            self.log_safe(message, "#F97316")
+                            self._last_probe_outcome = outcome
+                    else:
+                        profile_state = "full"
+                        current_interval = session.full_server_retry_seconds(now)
+                        if "full" != getattr(self, "_last_probe_outcome", ""):
+                            self.log_safe(self.t("server_full_retry", sec=round(current_interval, 1)), "#F97316")
+                            self._last_probe_outcome = "full"
+                    self._update_server_profile(target, state=profile_state, checked_at=int(time.time()))
+                else:
+                    current_interval = session.interval_seconds(self.network_clock.now())
+
                 deadline = time.monotonic() + current_interval
-                while self._is_current_poll_operation(operation_id) and time.monotonic() < deadline:
-                    if self._poll_stop_event.wait(0.1):
+                while self._is_current_session(operation_id, session) and time.monotonic() < deadline:
+                    if session.stop_event.wait(0.1):
                         break
                     if self._poll_wake_event.is_set():
                         self._poll_wake_event.clear()
@@ -940,7 +1124,13 @@ class AppController(MainWindow):
     def _on_log_error(self, err: str):
         self.log_safe(f"[x] Log Error: {err}")
 
-    def start_log_monitor(self, target_str: str):
+    def start_log_monitor(
+        self,
+        target_str: str,
+        *,
+        session: Optional[ConnectionSession] = None,
+        operation_id: Optional[int] = None,
+    ):
         self.log_safe(self.t("log_mon"))
         if self.log_watcher:
             self.log_watcher.stop()
@@ -953,51 +1143,101 @@ class AppController(MainWindow):
             from .core.logger import app_logger
             app_logger.info(f"[*] Game log: {event}")
             # Do NOT spam the UI with every game log line
-            if watcher is not self.log_watcher:
+            if watcher is not self.log_watcher or (session is not None and self._active_session is not session):
                 return
             if not getattr(self, 'is_connected', False) and ("Client connected" in event or "Spawning" in event):
                 self.is_connected = True
-                if self._active_session:
-                    self._active_session.phase = ConnectionPhase.CONNECTED
+                if session:
+                    session.phase = ConnectionPhase.CONNECTED
+                    if operation_id is not None:
+                        self.dispatch_ui(self.set_connection_phase, session.phase.value, operation=("poll", operation_id))
                 conn_time = round(time.time() - getattr(self, 'connection_start_time', time.time()), 1)
                 self.dispatch_ui(self.set_connection_state, "Connected", target_str)
                 self.log_safe(self.t("server_conn_time", sec=conn_time))
+                self._update_server_profile(target_str, state="connected")
+                threading.Thread(
+                    target=telegram_service.notify,
+                    args=("connected", target_str),
+                    daemon=True,
+                    name="telegram-connected",
+                ).start()
                 if getattr(self, 'is_polling', False):
-                    threading.Thread(target=self.swarm_service.broadcast_stop_spam, args=(target_str,), daemon=True).start()
-                    self.stop_polling_safe(explicit=False)
+                    canonical = session.canonical_endpoint if session and session.canonical_endpoint else target_str
+                    threading.Thread(target=self.swarm_service.broadcast_success, args=(canonical,), daemon=True).start()
+                    threading.Thread(target=self.server_intelligence.report_available, args=(canonical,), daemon=True).start()
+                    threading.Thread(target=self.swarm_service.broadcast_stop_spam, args=(canonical,), daemon=True).start()
+                    # Stop probing but keep this watcher alive: it is the safe
+                    # local signal for a later armed auto-reconnect.
+                    self.is_polling = False
+                    self._poll_stop_event.set()
+                    self._poll_wake_event.set()
+                    self.dispatch_ui(self.connect_btn.configure, text="CONNECT", fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"])
+                    self.dispatch_ui(self.ip_entry.configure, state="normal")
+
+        import uuid
+        queue_session_id = uuid.uuid4().hex
+        queue_levels = (90, 60, 30, 5)
+        sent_queue_levels: set[int] = set()
+
+        def handle_queue(position: int):
+            eligible = [level for level in queue_levels if position <= level and level not in sent_queue_levels]
+            if eligible:
+                level = min(eligible)
+                sent_queue_levels.add(level)
+                threading.Thread(
+                    target=telegram_service.notify_queue,
+                    args=(position, target_str),
+                    kwargs={"level": level, "queue_session_id": queue_session_id},
+                    daemon=True,
+                    name="telegram-queue",
+                ).start()
 
         watcher = None
         def handle_disconnect(reason):
-            self._on_log_disconnect(target_str, watcher, reason)
+            self._on_log_disconnect(target_str, watcher, reason, session=session)
 
         watcher = LogWatcher(
             on_disconnect=handle_disconnect,
             on_error=self._on_log_error,
-            on_event=handle_event
+            on_event=handle_event,
+            on_queue_update=handle_queue,
         )
         self.log_watcher = watcher
         watcher.start(loop=self.async_loop)
 
-    def _on_log_disconnect(self, target_str: str, source_watcher, reason: str):
-        if not self.is_polling or self.log_watcher is not source_watcher:
+    def _on_log_disconnect(self, target_str: str, source_watcher, reason: str, *, session: Optional[ConnectionSession] = None):
+        if self.log_watcher is not source_watcher:
             return
-            
-        self.log_safe(self.t("log_err") + f" Reason: {reason}")
-        
-        if not getattr(self, 'is_connected', False):
-            threading.Thread(target=self.swarm_service.broadcast_connection_failed, args=(target_str,), daemon=True).start()
-        
-        
-        time.sleep(2.0)
-        
-        if not self.is_polling or self.log_watcher is not source_watcher:
-            return
-            
-        if self._active_session:
-            self._active_session.phase = ConnectionPhase.COOLDOWN
-        self.start_process_force(target_str)
 
-    def start_process_force(self, target: str):
+        session = session or self._active_session
+        if session is not self._active_session:
+            return
+        armed = self.history_store.get_armed_server()
+        is_armed_target = bool(session and session.launched_by_app and armed in {target_str, session.canonical_endpoint})
+        self._update_server_profile(target_str, state="disconnected", reason=reason)
+        self.log_safe(self.t("log_err") + f" Reason: {reason}")
+        threading.Thread(target=telegram_service.notify, args=("disconnect", target_str, {"reason": reason[:160]}), daemon=True, name="telegram-disconnect").start()
+
+        if not is_armed_target:
+            self.log_safe(self.t("auto_reconnect_skipped_disarmed"), "#98A2B3")
+            return
+
+        if not self.__dict__.get('is_connected', False):
+            canonical = session.canonical_endpoint or target_str
+            threading.Thread(target=self.swarm_service.broadcast_connection_failed, args=(canonical,), daemon=True).start()
+
+        def reconnect_after_cooldown():
+            if self._shutdown_event.wait(2.0) or self.log_watcher is not source_watcher or self._active_session is not session:
+                return
+            if self._active_session:
+                self._active_session.phase = ConnectionPhase.COOLDOWN
+            self.log_safe(self.t("auto_reconnect_monitoring", target=target_str), "#F97316")
+            telegram_service.notify("reconnect", target_str)
+            self.start_process_force(target_str, recovery_session=session)
+
+        threading.Thread(target=reconnect_after_cooldown, daemon=True, name="auto-reconnect-cooldown").start()
+
+    def start_process_force(self, target: str, *, recovery_session: Optional[ConnectionSession] = None):
         if not _is_valid_endpoint(target):
             self.log_safe(self.t("auto_reconnect_skipped_invalid"), "#DE5148")
             return
@@ -1016,9 +1256,21 @@ class AppController(MainWindow):
             text_color="#F2F4F7",
         )
         self.dispatch_ui(self.set_connection_state, "Monitoring", target)
+        self._update_server_profile(target, state="reconnecting")
         self._poll_stop_event.clear()
         self._poll_wake_event.clear()
         operation_id = self._next_poll_operation()
+        self._active_session = ConnectionSession(requested_endpoint=target)
+        if recovery_session is not None:
+            # Preserve a confirmed restart's bounded Turbo/Watch state across
+            # the new polling operation; never carry over a prior launch flag.
+            self._active_session.canonical_endpoint = recovery_session.canonical_endpoint
+            self._active_session.turbo_until = recovery_session.turbo_until
+            self._active_session.watch_until = recovery_session.watch_until
+            self._active_session.offline_turbo_used = recovery_session.offline_turbo_used
+            self._active_session.down_observed = recovery_session.down_observed
+        self._last_smart_phase = None
+        self._last_probe_outcome = ""
         threading.Thread(
             target=self.run_logic,
             args=(target, operation_id),
@@ -1026,30 +1278,31 @@ class AppController(MainWindow):
             name="forced-server-poll",
         ).start()
 
-    def launch_game(self, target: str):
+    def launch_game(self, target: str, *, session: Optional[ConnectionSession] = None, operation_id: Optional[int] = None):
         if not _is_valid_endpoint(target):
             self.log_safe(self.t("launch_skipped_invalid"), "#DE5148")
             return
+        session = session or self._active_session
+        if operation_id is not None and (session is None or not self._is_current_session(operation_id, session)):
+            return
         self.log_safe(self.t("launch", url=target))
         try:
-            url = f"steam://run/{config.STEAM_APP_ID}//+connect {target}"
+            url = steam_service.build_connect_url(target, config.STEAM_APP_ID)
             if os.name == 'nt':
                 os.startfile(url)
             else:
                 import webbrowser
                 webbrowser.open(url)
             self.log_safe(self.t("launch_ok"))
-            if self._active_session:
-                self._active_session.launched_by_app = True
-                self._active_session.phase = ConnectionPhase.AWAITING_LOG_CONFIRMATION
-                self._active_session.reset_offline_turbo()
+            if session:
+                session.launched_by_app = True
+                session.phase = ConnectionPhase.AWAITING_LOG_CONFIRMATION
+                session.reset_offline_turbo()
+                if operation_id is not None:
+                    self.dispatch_ui(self.set_connection_phase, session.phase.value, operation=("poll", operation_id))
             self.dispatch_ui(self.set_connection_state, "Launching", target)
-            self.start_log_monitor(target)
-            
-            if self.swarm_service.is_enabled:
-                hint_endpoint = self._active_session.canonical_endpoint if self._active_session else target
-                threading.Thread(target=self.swarm_service.broadcast_success, args=(hint_endpoint,), daemon=True).start()
-                threading.Thread(target=self.server_intelligence.report_available, args=(hint_endpoint,), daemon=True).start()
+            self._update_server_profile(target, state="launching")
+            self.start_log_monitor(target, session=session, operation_id=operation_id)
         except Exception as e:
             self.dispatch_ui(self.set_connection_state, "Launch failed")
             self.log_safe(self.t("launch_err", err=str(e)))
@@ -1079,8 +1332,7 @@ class AppController(MainWindow):
 
         try:
             server_name = host
-            import asyncio
-            is_alive, name, max_players, _ = asyncio.run(self.a2s_client.check_server_alive(real_ip, port))
+            is_alive, name, max_players, _ = self.a2s_client.check_server_alive(real_ip, port)
             if is_alive and name:
                 server_name = name
 
@@ -1141,7 +1393,41 @@ class AppController(MainWindow):
         self.log_safe(self.t("rust_closed_unexpectedly"), "#F97316")
         session.offline_turbo_used = False
         session.observe_server_down()
-        self.start_process_force(session.requested_endpoint)
+        self.start_process_force(session.requested_endpoint, recovery_session=session)
+
+    def _check_rust_update_once(self) -> float:
+        """Check Rust's Steam build once and return the next safe check delay."""
+        info = steam_service.fetch_latest_build_info()
+        if info.server_date:
+            was_synced = self.network_clock.is_synced
+            self.network_clock.observe_http_date(info.server_date)
+            offset = self.network_clock.system_offset_seconds
+            if offset is not None and abs(offset) > 120 and self._update_status_logged != "clock-offset":
+                self.log_safe("Windows clock differs from network time by more than two minutes.", "#F97316")
+                self._update_status_logged = "clock-offset"
+            elif not was_synced:
+                self.log_safe("Network time synchronized.", "#55C95D")
+
+        local_buildid = steam_service.get_local_buildid()
+        mismatch = bool(local_buildid and info.buildid and str(local_buildid) != str(info.buildid))
+        if mismatch:
+            self._update_required = True
+            self._update_ready_event.clear()
+            if self._update_status_logged != "pending":
+                self.log_safe(self.t("rust_game_update_avail"), "#F97316")
+                self._update_status_logged = "pending"
+            if not self.process_monitor.is_rust_running() and not self._update_steam_opened:
+                self._update_steam_opened = steam_service.open_steam_downloads()
+                if self._update_steam_opened:
+                    self.log_safe("Opened Steam Downloads; waiting for Rust to update.", "#98A2B3")
+        elif info.buildid and local_buildid:
+            if self._update_required:
+                self.log_safe("Rust update is ready.", "#55C95D")
+            self._update_required = False
+            self._update_steam_opened = False
+            self._update_status_logged = "ready"
+            self._update_ready_event.set()
+        return steam_service.force_wipe_poll_interval(self.network_clock.now())
 
     def check_rust_update_loop(self):
         while not self._shutdown_event.is_set():
@@ -1150,26 +1436,12 @@ class AppController(MainWindow):
                     break
                 continue
 
-            force_wipe = steam_service.is_force_wipe_window()
-            interval = 25.0 if force_wipe else 1800.0
-
-            rust_running = self.process_monitor.is_rust_running()
-            if not force_wipe and rust_running:
-                if self._shutdown_event.wait(interval):
+            interval = self._check_rust_update_once()
+            self._update_check_wake_event.clear()
+            deadline = time.monotonic() + interval
+            while not self._shutdown_event.is_set() and time.monotonic() < deadline:
+                if self._update_check_wake_event.wait(min(0.5, max(0.0, deadline - time.monotonic()))):
                     break
-                continue
-
-            try:
-                latest_buildid = steam_service.fetch_latest_buildid()
-                local_buildid = steam_service.get_local_buildid()
-
-                if local_buildid and latest_buildid and str(local_buildid) != str(latest_buildid):
-                    self.log_safe(self.t("rust_game_update_avail"))
-            except Exception:
-                pass
-
-            if self._shutdown_event.wait(interval):
-                break
 
     def check_application_version(self):
         from .services.release_service import LOCAL_VERSION, is_newer_version, release_service

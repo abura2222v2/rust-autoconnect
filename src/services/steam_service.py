@@ -3,9 +3,18 @@ import os
 import re
 import urllib.request
 import winreg
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Optional
+
+
+def build_connect_url(endpoint: str, app_id: int = 252490) -> str:
+    """Return the only game-launch integration used by AutoConnect."""
+    if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}:\d{1,5}", endpoint):
+        raise ValueError("invalid endpoint")
+    return f"steam://run/{app_id}//+connect {endpoint}"
 
 def get_steam_path() -> str:
     steam_path = r"C:\Program Files (x86)\Steam"
@@ -16,20 +25,57 @@ def get_steam_path() -> str:
         pass
     return steam_path
 
+FORCE_WIPE_ZONE = ZoneInfo("Europe/London")
+
+
+def next_force_wipe_at(now_utc: Optional[datetime] = None) -> datetime:
+    """Return the next official force-wipe instant in UTC.
+
+    Facepunch's default monthly schedule is the first Thursday at 19:00
+    London time.  Keeping this as an aware timestamp handles DST correctly.
+    """
+    now = (now_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    local = now.astimezone(FORCE_WIPE_ZONE)
+    first = local.replace(day=1, hour=19, minute=0, second=0, microsecond=0)
+    first += timedelta(days=(3 - first.weekday()) % 7)
+    if first.astimezone(timezone.utc) <= now:
+        next_month = (local.replace(day=28) + timedelta(days=4)).replace(day=1)
+        first = next_month.replace(hour=19, minute=0, second=0, microsecond=0)
+        first += timedelta(days=(3 - first.weekday()) % 7)
+    return first.astimezone(timezone.utc)
+
+
+def relevant_force_wipe_at(now_utc: Optional[datetime] = None) -> datetime:
+    """Return this month's wipe while its post-wipe watch window is active."""
+    now = (now_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    local = now.astimezone(FORCE_WIPE_ZONE)
+    current = local.replace(day=1, hour=19, minute=0, second=0, microsecond=0)
+    current += timedelta(days=(3 - current.weekday()) % 7)
+    current_utc = current.astimezone(timezone.utc)
+    if current_utc + timedelta(minutes=30) >= now:
+        return current_utc
+    return next_force_wipe_at(now)
+
+
+def force_wipe_poll_interval(now_utc: Optional[datetime] = None) -> float:
+    """Return the low-cost build-check cadence around force wipe."""
+    now = (now_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    upcoming = relevant_force_wipe_at(now)
+    if upcoming - timedelta(minutes=30) <= now <= upcoming + timedelta(minutes=30):
+        return 60.0
+    return 1800.0
+
+
 def is_force_wipe_window(now_utc: Optional[datetime] = None) -> bool:
-    """
-    Force wipe is first Thursday of the month, ~18:00 UTC.
-    We consider the window to be from Thursday 12:00 UTC to Friday 12:00 UTC.
-    """
-    if now_utc is None:
-        now_utc = datetime.now(timezone.utc)
-    
-    first_day = now_utc.replace(day=1)
-    days_to_thursday = (3 - first_day.weekday() + 7) % 7
-    first_thursday = first_day + timedelta(days=days_to_thursday)
-    window_start = first_thursday.replace(hour=12, minute=0, second=0, microsecond=0)
-    window_end = window_start + timedelta(days=1)
-    return window_start <= now_utc <= window_end
+    now = (now_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    upcoming = relevant_force_wipe_at(now)
+    return upcoming - timedelta(minutes=30) <= now <= upcoming + timedelta(minutes=30)
+
+
+@dataclass(frozen=True)
+class BuildInfo:
+    buildid: Optional[str]
+    server_date: Optional[str]
 
 def parse_acf_buildid(content: str) -> Optional[str]:
     """Extract buildid string from appmanifest content."""
@@ -76,15 +122,34 @@ def get_local_buildid() -> Optional[str]:
             pass
     return None
 
-def fetch_latest_buildid() -> Optional[str]:
+def fetch_latest_build_info() -> BuildInfo:
     try:
         req = urllib.request.Request("https://api.steamcmd.net/v1/info/252490", headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=5.0) as res:
             data = json.loads(res.read().decode('utf-8'))
             buildid = data['data']['252490']['depots']['branches']['public']['buildid']
-            return str(buildid)
+            return BuildInfo(str(buildid), res.headers.get("Date"))
     except Exception:
-        return None
+        return BuildInfo(None, None)
+
+
+def fetch_latest_buildid() -> Optional[str]:
+    """Compatibility wrapper for callers that only need the build id."""
+    return fetch_latest_build_info().buildid
+
+
+def open_steam_downloads() -> bool:
+    """Ask Steam to show its Downloads page without launching Rust."""
+    try:
+        url = "steam://open/downloads"
+        if os.name == "nt":
+            os.startfile(url)
+        else:
+            import webbrowser
+            webbrowser.open(url)
+        return True
+    except OSError:
+        return False
 
 def find_rust_install_path() -> Optional[str]:
     """Auto-detect Rust installation path via Steam registry and library folders."""

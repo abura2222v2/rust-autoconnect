@@ -124,5 +124,23 @@ class A2SClient:
             status = asyncio.run(self.get_server_status(ip, base_port, stop_event))
         return status.alive, status.server_name, status.max_players, status.query_port
 
+    def check_server_status(
+        self, ip: str, base_port: int, stop_event: Union[threading.Event, asyncio.Event, None] = None
+    ) -> ServerStatus:
+        """Synchronous status API for worker threads.
+
+        The legacy tuple intentionally omits player_count.  Connect uses this
+        richer API so a full server is never treated as ready.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(lambda: asyncio.run(self.get_server_status(ip, base_port, stop_event))).result()
+        return asyncio.run(self.get_server_status(ip, base_port, stop_event))
+
 
 a2s_client = A2SClient()

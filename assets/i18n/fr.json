@@ -67,5 +67,22 @@
   "close_rust_title": "Fermer Rust ?",
   "bench_instr_title": "Instructions du Benchmark",
   "f5_pressed_log": "[*] F5 Pressed! Starting map benchmark timeline...",
-  "f5_prompt_log": "[!] Press F5 inside Rust to start the map benchmark!"
+  "f5_prompt_log": "[!] Press F5 inside Rust to start the map benchmark!",
+  "tg_status_unlinked": "Telegram : non lié",
+  "tg_link_btn": "Lier le bot Telegram",
+  "tg_unlink_btn": "Délier Telegram",
+  "tg_status_unlinking": "Déliaison...",
+  "tg_bot_title": "Bot Telegram",
+  "tg_link_failed": "La liaison Telegram n’a pas pu démarrer.",
+  "tg_overlay_intro": "Ouvrez @RustAutoConnect_Bot dans Telegram, copiez ce code et envoyez-le au bot. Utilisez /notifications pour choisir les alertes.",
+  "tg_overlay_code_label": "CODE D’ASSOCIATION",
+  "tg_copy_code": "Copier le code",
+  "tg_code_copied": "Copié",
+  "tg_close": "Fermer",
+  "tg_status_pairing": "Telegram : en attente de liaison",
+  "tg_status_linked": "Telegram : {name}",
+  "tg_status_unavailable": "Telegram : service indisponible.",
+  "tg_status_user": "utilisateur connecté",
+  "tg_log_connected": "Telegram : connecté en tant que {name}.",
+  "tg_log_unlinked": "Telegram : non lié."
 }

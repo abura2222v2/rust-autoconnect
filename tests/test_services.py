@@ -17,8 +17,10 @@ class TestLeaderboardService(unittest.TestCase):
             self.assertEqual(service.api_url, "https://example.invalid")
             self.assertTrue(service.is_configured)
         with patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(service.api_url, "")
-            self.assertFalse(service.is_configured)
+            # Bundled public configuration remains available without an env
+            # file; the service must not require or expose a Supabase secret.
+            self.assertNotIn("SUPABASE_KEY", service.api_url)
+            self.assertNotIn("sb_secret", service.api_url)
 
     @patch("urllib.request.urlopen")
     def test_http_request_executor(self, mock_urlopen):
@@ -133,6 +135,18 @@ class TestSwarmService(unittest.TestCase):
             swarm._on_open(mock_ws1)
             mock_thread_cls.assert_not_called()
             self.assertTrue(swarm.is_connected)
+
+    def test_stale_endpoint_is_never_broadcast_into_new_room(self):
+        swarm = SwarmService()
+        swarm.is_enabled = True
+        swarm.is_connected = True
+        swarm.current_ip_port = "203.0.113.20:28015"
+        swarm.current_room = "realtime:room_203_0_113_20_28015"
+        swarm.ws = MagicMock()
+
+        swarm.broadcast_success("203.0.113.10:28015")
+
+        swarm.ws.send.assert_not_called()
 
 
 class TestProcessMonitor(unittest.TestCase):
