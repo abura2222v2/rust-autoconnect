@@ -64,13 +64,23 @@ def main() -> int:
         window.log("Connection accepted", color="#47A66B")
         capture(window, OUTPUT_DIR / "connect.png")
 
+        # The minimum supported window width must keep the Activity Log title
+        # and its controls in separate grid columns without overlapping.
+        window.geometry("900x646")
+        window.update_idletasks()
+        capture(window, OUTPUT_DIR / "connect_minimum_width.png")
+
         window.geometry("1280x728")
         window.update_idletasks()
         capture(window, OUTPUT_DIR / "connect_wide.png")
 
         drag_start = SimpleNamespace(x_root=100)
         window._start_home_resize(drag_start)
-        window._resize_home_panels(SimpleNamespace(x_root=10_000))
+        # A real pointer produces a burst of motion events.  The UI must
+        # coalesce that burst instead of repainting every event.
+        for x_root in range(110, 10_001, 30):
+            window._resize_home_panels(SimpleNamespace(x_root=x_root))
+        time.sleep(0.05)
         window.update_idletasks()
         window.update()
         # Regression capture while the pointer is still held: the visible sash
@@ -95,7 +105,9 @@ def main() -> int:
         capture(window, OUTPUT_DIR / "benchmark_controls_max.png")
         bench_drag_start = SimpleNamespace(x_root=100)
         window._start_bench_resize(bench_drag_start)
-        window._resize_bench_panels(SimpleNamespace(x_root=10_000))
+        for x_root in range(110, 10_001, 30):
+            window._resize_bench_panels(SimpleNamespace(x_root=x_root))
+        time.sleep(0.05)
         window.update_idletasks()
         window.update()
         capture(window, OUTPUT_DIR / "benchmark_dragging.png")

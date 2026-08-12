@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import tkinter as tk
 import queue
 import threading
 import pystray
@@ -298,14 +299,16 @@ class MainWindow(ctk.CTk):
         ctk.CTkLabel(self.status_strip, textvariable=self.playtime_var, font=ctk.CTkFont(size=12)).grid(row=0, column=8, padx=(0, 14), pady=8, sticky="w")
         self.home_content = ctk.CTkFrame(self.home_frame, corner_radius=0, fg_color="transparent")
         self.home_content.grid(row=3, column=0, padx=0, pady=(0, 0), sticky="nsew")
-        self.home_content.grid_propagate(False)
-        self.home_content.grid_columnconfigure(0, minsize=HOME_HISTORY_DEFAULT_WIDTH)
-        self.home_content.grid_columnconfigure(1, minsize=SPLITTER_WIDTH)
-        self.home_content.grid_columnconfigure(2, weight=1)
-        self.home_content.grid_rowconfigure(0, weight=1)
+        self.home_panes = tk.PanedWindow(
+            self.home_content, orient=tk.HORIZONTAL, bg=COLORS["canvas"],
+            sashwidth=SPLITTER_WIDTH, sashpad=0, sashrelief="flat",
+            sashcursor="sb_h_double_arrow", showhandle=False, opaqueresize=True, bd=0,
+        )
+        self.home_panes.pack(fill="both", expand=True)
+        self.home_panes.bind("<ButtonRelease-1>", self._finish_home_resize, add="+")
+        self.home_panes.bind("<Double-Button-1>", self._reset_home_split, add="+")
 
-        self.history_panel = ctk.CTkFrame(self.home_content, corner_radius=0, fg_color=COLORS["surface"], border_width=1, border_color=COLORS["border"])
-        self.history_panel.grid(row=0, column=0, sticky="nsew")
+        self.history_panel = ctk.CTkFrame(self.home_panes, corner_radius=0, fg_color=COLORS["surface"], border_width=1, border_color=COLORS["border"])
         self.history_panel.grid_columnconfigure(0, weight=1)
         self.history_panel.grid_rowconfigure(2, weight=1)
 
@@ -332,27 +335,20 @@ class MainWindow(ctk.CTk):
         self.history_scroll = ctk.CTkScrollableFrame(self.history_panel, fg_color="transparent")
         self.history_scroll.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=8, pady=(0, 8))
 
-        self.home_splitter = ctk.CTkFrame(self.home_content, width=SPLITTER_WIDTH, corner_radius=0, fg_color=COLORS["canvas"], cursor="sb_h_double_arrow")
-        self.home_splitter.grid(row=0, column=1, sticky="ns")
-        self.home_splitter.bind("<ButtonPress-1>", self._start_home_resize)
-        self.home_splitter.bind("<B1-Motion>", self._resize_home_panels)
-        self.home_splitter.bind("<ButtonRelease-1>", self._finish_home_resize)
-        self.home_splitter.bind("<Double-Button-1>", self._reset_home_split)
-        
-        self.connection_panel = ctk.CTkFrame(self.home_content, corner_radius=0, fg_color=COLORS["surface"], border_width=1, border_color=COLORS["border"])
-        self.connection_panel.grid(row=0, column=2, sticky="nsew")
+        self.connection_panel = ctk.CTkFrame(self.home_panes, corner_radius=0, fg_color=COLORS["surface"], border_width=1, border_color=COLORS["border"])
         self.connection_panel.grid_columnconfigure(0, weight=1)
         self.connection_panel.grid_rowconfigure(1, weight=1)
         self.log_title = ctk.CTkLabel(self.connection_panel, text=self.t("activity_log"), font=ctk.CTkFont(size=13, weight="bold"), text_color=COLORS["text"])
+        self.connection_panel.grid_columnconfigure(1, weight=0)
         self.log_title.grid(row=0, column=0, padx=16, pady=(8, 4), sticky="w")
         self.log_toolbar = ctk.CTkFrame(self.connection_panel, fg_color="transparent")
-        self.log_toolbar.grid(row=0, column=0, padx=16, pady=(5, 3), sticky="e")
+        self.log_toolbar.grid(row=0, column=1, padx=16, pady=(5, 3), sticky="e")
         self.auto_scroll_check = ctk.CTkCheckBox(self.log_toolbar, text=self.t("auto_scroll"), variable=self.auto_scroll, checkbox_width=14, checkbox_height=14, font=ctk.CTkFont(size=11), text_color=COLORS["muted"], fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"])
         self.auto_scroll_check.pack(side="left", padx=(0, 12))
         self.clear_log_btn = ctk.CTkButton(self.log_toolbar, text=self.t("clear"), command=self.clear_log, width=62, height=26, fg_color=COLORS["surface_alt"], hover_color=COLORS["border"], border_width=1, border_color=COLORS["border"])
         self.clear_log_btn.pack(side="left")
         self.log_frame = ctk.CTkFrame(self.connection_panel, fg_color=COLORS["surface_alt"], corner_radius=2)
-        self.log_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 10))
+        self.log_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=16, pady=(0, 10))
         self.log_frame.grid_columnconfigure(0, weight=1)
         self.log_frame.grid_rowconfigure(0, weight=1)
 
@@ -360,7 +356,9 @@ class MainWindow(ctk.CTk):
         self.log_textbox.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
         
         self.bottom_frame = ctk.CTkFrame(self.connection_panel, height=8, fg_color="transparent")
-        self.bottom_frame.grid(row=2, column=0, padx=16, pady=(0, 6), sticky="ew")
+        self.bottom_frame.grid(row=2, column=0, columnspan=2, padx=16, pady=(0, 6), sticky="ew")
+        self.home_panes.add(self.history_panel, minsize=HOME_HISTORY_MIN_WIDTH, width=HOME_HISTORY_DEFAULT_WIDTH)
+        self.home_panes.add(self.connection_panel, minsize=HOME_LOG_MIN_WIDTH)
 
         # ==========================================
         # 2.2 BENCHMARK FRAME
@@ -374,13 +372,15 @@ class MainWindow(ctk.CTk):
         self.bench_subtitle.grid(row=1, column=0, padx=24, pady=(0, 12), sticky="w")
         self.bench_content = ctk.CTkFrame(self.bench_frame, fg_color="transparent")
         self.bench_content.grid(row=2, column=0, padx=20, pady=(0, 0), sticky="nsew")
-        self.bench_content.grid_propagate(False)
-        self.bench_content.grid_columnconfigure(0, minsize=BENCH_CONTROLS_DEFAULT_WIDTH)
-        self.bench_content.grid_columnconfigure(1, minsize=SPLITTER_WIDTH)
-        self.bench_content.grid_columnconfigure(2, weight=1)
-        self.bench_content.grid_rowconfigure(0, weight=1)
-        self.bench_controls = ctk.CTkFrame(self.bench_content, fg_color=COLORS["surface"], corner_radius=0, border_width=1, border_color=COLORS["border"])
-        self.bench_controls.grid(row=0, column=0, sticky="nsew")
+        self.bench_panes = tk.PanedWindow(
+            self.bench_content, orient=tk.HORIZONTAL, bg=COLORS["canvas"],
+            sashwidth=SPLITTER_WIDTH, sashpad=0, sashrelief="flat",
+            sashcursor="sb_h_double_arrow", showhandle=False, opaqueresize=True, bd=0,
+        )
+        self.bench_panes.pack(fill="both", expand=True)
+        self.bench_panes.bind("<ButtonRelease-1>", self._finish_bench_resize, add="+")
+        self.bench_panes.bind("<Double-Button-1>", self._reset_bench_split, add="+")
+        self.bench_controls = ctk.CTkFrame(self.bench_panes, fg_color=COLORS["surface"], corner_radius=0, border_width=1, border_color=COLORS["border"])
         self.bench_btn = ctk.CTkButton(self.bench_controls, text=self.t("run_test"), command=self._on_run_test_click, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"], height=42, font=ctk.CTkFont(weight="bold"))
         self.bench_btn.pack(fill="x", padx=16, pady=(18, 8))
         self.bench_mode_label = ctk.CTkLabel(self.bench_controls, text=self.t("hw_benchmark"), font=ctk.CTkFont(size=12, weight="bold"), text_color=COLORS["text"])
@@ -391,15 +391,7 @@ class MainWindow(ctk.CTk):
         summary_text = self.t("local_results_none") if not local_run_count else self.t("local_results_fmt", count=local_run_count)
         self.benchmark_summary_label = ctk.CTkLabel(self.bench_controls, text=summary_text, justify="left", wraplength=260, text_color=COLORS["muted"], font=ctk.CTkFont(size=12))
         self.benchmark_summary_label.pack(fill="x", padx=16, pady=(0, 18))
-        self.bench_splitter = ctk.CTkFrame(self.bench_content, width=SPLITTER_WIDTH, corner_radius=0, fg_color=COLORS["canvas"], cursor="sb_h_double_arrow")
-        self.bench_splitter.grid(row=0, column=1, sticky="ns")
-        self.bench_splitter.bind("<ButtonPress-1>", self._start_bench_resize)
-        self.bench_splitter.bind("<B1-Motion>", self._resize_bench_panels)
-        self.bench_splitter.bind("<ButtonRelease-1>", self._finish_bench_resize)
-        self.bench_splitter.bind("<Double-Button-1>", self._reset_bench_split)
-        
-        self.bench_results_panel = ctk.CTkFrame(self.bench_content, fg_color=COLORS["surface"], corner_radius=0, border_width=1, border_color=COLORS["border"])
-        self.bench_results_panel.grid(row=0, column=2, sticky="nsew")
+        self.bench_results_panel = ctk.CTkFrame(self.bench_panes, fg_color=COLORS["surface"], corner_radius=0, border_width=1, border_color=COLORS["border"])
         self.bench_results_panel.grid_columnconfigure(0, weight=1)
         self.bench_results_panel.grid_rowconfigure(1, weight=1)
         self.bench_view_var = ctk.StringVar(value=self.t("tab_run_log"))
@@ -424,6 +416,8 @@ class MainWindow(ctk.CTk):
         for view in (self.bench_log, self.bench_online_ranking):
             view.grid(row=0, column=0, sticky="nsew")
         self.show_benchmark_view("Run log")
+        self.bench_panes.add(self.bench_controls, minsize=BENCH_CONTROLS_MIN_WIDTH, width=BENCH_CONTROLS_DEFAULT_WIDTH)
+        self.bench_panes.add(self.bench_results_panel, minsize=BENCH_LOG_MIN_WIDTH)
 
         # ==========================================
         # 2.3 SETTINGS FRAME
@@ -543,7 +537,8 @@ class MainWindow(ctk.CTk):
         if effective_width == self._applied_history_width:
             return
         self._applied_history_width = effective_width
-        self.home_content.grid_columnconfigure(0, minsize=effective_width)
+        if self.home_panes.winfo_width() > 1:
+            self.home_panes.sash_place(0, effective_width, 0)
 
     @staticmethod
     def _home_split_limits(workspace_width: int) -> tuple[int, int]:
@@ -560,27 +555,24 @@ class MainWindow(ctk.CTk):
         self._home_drag_origin_x = event.x_root
         self._home_drag_origin_width = max(1, self.history_panel.winfo_width())
         self._pending_home_width = self._clamp_home_split(self._home_drag_origin_width, self.home_content.winfo_width())
-        self.home_splitter.configure(fg_color=COLORS["accent"])
 
     def _resize_home_panels(self, event) -> None:
         if self._home_drag_origin_x is None or self._home_drag_origin_width is None:
             return
         requested_width = self._home_drag_origin_width + (event.x_root - self._home_drag_origin_x)
         self._pending_home_width = self._clamp_home_split(requested_width, self.home_content.winfo_width())
-        self._history_width = self._pending_home_width
-        self._apply_home_split(self.home_content.winfo_width())
+        self.home_panes.sash_place(0, self._pending_home_width, 0)
 
     def _finish_home_resize(self, _event) -> None:
-        if getattr(self, "_pending_home_width", None) is not None:
-            self._history_width = self._pending_home_width
-            self._apply_home_split(self.home_content.winfo_width())
+        if self.home_panes.winfo_width() > 1:
+            self._history_width = self._clamp_home_split(
+                self.home_panes.sash_coord(0)[0], self.home_content.winfo_width(),
+            )
             self.history_store.set_home_splitter_width(self._history_width)
             
         self._home_drag_origin_x = None
         self._home_drag_origin_width = None
         self._pending_home_width = None
-        
-        self.home_splitter.configure(fg_color=COLORS["canvas"])
 
     def _reset_home_split(self, _event) -> None:
         self._history_width = HOME_HISTORY_DEFAULT_WIDTH
@@ -602,7 +594,8 @@ class MainWindow(ctk.CTk):
         if effective_width == self._applied_bench_controls_width:
             return
         self._applied_bench_controls_width = effective_width
-        self.bench_content.grid_columnconfigure(0, minsize=effective_width)
+        if self.bench_panes.winfo_width() > 1:
+            self.bench_panes.sash_place(0, effective_width, 0)
 
     @staticmethod
     def _bench_split_limits(workspace_width: int) -> tuple[int, int]:
@@ -619,27 +612,24 @@ class MainWindow(ctk.CTk):
         self._bench_drag_origin_x = event.x_root
         self._bench_drag_origin_width = max(1, self.bench_controls.winfo_width())
         self._pending_bench_width = self._clamp_bench_split(self._bench_drag_origin_width, self.bench_content.winfo_width())
-        self.bench_splitter.configure(fg_color=COLORS["accent"])
 
     def _resize_bench_panels(self, event) -> None:
         if self._bench_drag_origin_x is None or self._bench_drag_origin_width is None:
             return
         requested_width = self._bench_drag_origin_width + (event.x_root - self._bench_drag_origin_x)
         self._pending_bench_width = self._clamp_bench_split(requested_width, self.bench_content.winfo_width())
-        self._bench_controls_width = self._pending_bench_width
-        self._apply_bench_split(self.bench_content.winfo_width())
+        self.bench_panes.sash_place(0, self._pending_bench_width, 0)
 
     def _finish_bench_resize(self, _event) -> None:
-        if getattr(self, "_pending_bench_width", None) is not None:
-            self._bench_controls_width = self._pending_bench_width
-            self._apply_bench_split(self.bench_content.winfo_width())
+        if self.bench_panes.winfo_width() > 1:
+            self._bench_controls_width = self._clamp_bench_split(
+                self.bench_panes.sash_coord(0)[0], self.bench_content.winfo_width(),
+            )
             self.history_store.set_bench_splitter_width(self._bench_controls_width)
             
         self._bench_drag_origin_x = None
         self._bench_drag_origin_width = None
         self._pending_bench_width = None
-        
-        self.bench_splitter.configure(fg_color=COLORS["canvas"])
 
     def _reset_bench_split(self, _event) -> None:
         self._bench_controls_width = BENCH_CONTROLS_DEFAULT_WIDTH
@@ -676,6 +666,7 @@ class MainWindow(ctk.CTk):
             "Idle": self.t("idle"),
             "Monitoring": self.t("monitoring_status"),
             "Launching": self.t("launching"),
+            "Queueing": self.t("queue_waiting"),
             "Connected": self.t("rust_running"),
             "Launch failed": self.t("launch_failed"),
         }
@@ -693,7 +684,9 @@ class MainWindow(ctk.CTk):
             "scheduled": self.t("smart_phase_scheduled"),
             "watch": self.t("smart_phase_watch"),
             "turbo": self.t("smart_phase_turbo"),
+            "waiting_for_wipe_restart": self.t("waiting_wipe_restart"),
             "launch_requested": "A2S confirmed - preparing Steam launch",
+            "queued": self.t("queue_waiting"),
             "awaiting_log_confirmation": "Steam launched - waiting for Rust log",
             "connected": self.t("rust_running"),
             "cooldown": "Reconnect cooldown",
@@ -751,12 +744,6 @@ class MainWindow(ctk.CTk):
         self._bench_drag_origin_width = None
         self._pending_home_width = None
         self._pending_bench_width = None
-        self.home_splitter.configure(fg_color=COLORS["canvas"])
-        self.bench_splitter.configure(fg_color=COLORS["canvas"])
-        if hasattr(self, "home_split_preview"):
-            self.home_split_preview.place_forget()
-        if hasattr(self, "bench_split_preview"):
-            self.bench_split_preview.place_forget()
         
     def _highlight_nav(self, active_btn):
         # Reset all

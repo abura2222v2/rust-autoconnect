@@ -308,7 +308,7 @@ def test_application_version_keeps_installed_version_and_reports_update():
     with patch("src.services.release_service.release_service.fetch_latest_version", return_value="v1.4.0"):
         AppController.check_application_version(controller)
 
-    controller.set_version_status.assert_called_once_with("v0.6.0", "Update: v1.4.0", "#F97316")
+    controller.set_version_status.assert_called_once_with("v0.6.1", "Update: v1.4.0", "#F97316")
 
 
 def test_application_version_reports_offline_without_replacing_local_version():
@@ -319,7 +319,27 @@ def test_application_version_reports_offline_without_replacing_local_version():
     with patch("src.services.release_service.release_service.fetch_latest_version", return_value=None):
         AppController.check_application_version(controller)
 
-    controller.set_version_status.assert_called_once_with("v0.6.0", "Offline", "#98A2B3")
+    controller.set_version_status.assert_called_once_with("v0.6.1", "Offline", "#98A2B3")
+
+
+def test_only_client_connected_confirms_the_current_connection():
+    session = ConnectionSession(
+        "server.example:28015", canonical_endpoint="203.0.113.10:28015",
+    )
+
+    assert not AppController._log_confirms_current_connection("Spawning local player", "server.example:28015", session)
+    assert not AppController._log_confirms_current_connection(
+        "Client connected to 203.0.113.99:28015", "server.example:28015", session,
+    )
+    assert AppController._log_confirms_current_connection(
+        "Client connected to 203.0.113.10:28015", "server.example:28015", session,
+    )
+    assert AppController._log_confirms_current_connection(
+        "Client connected", "server.example:28015", session,
+    )
+    assert not AppController._log_confirms_current_connection(
+        "[Bootstrap] DONE!", "server.example:28015", session,
+    )
 
 
 def test_swarm_status_messages_are_color_coded():

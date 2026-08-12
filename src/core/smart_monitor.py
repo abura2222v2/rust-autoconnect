@@ -14,7 +14,9 @@ class ConnectionPhase(str, Enum):
     SCHEDULED = "scheduled"
     WATCH = "watch"
     TURBO = "turbo"
+    WAITING_FOR_WIPE_RESTART = "waiting_for_wipe_restart"
     LAUNCH_REQUESTED = "launch_requested"
+    QUEUED = "queued"
     AWAITING_LOG_CONFIRMATION = "awaiting_log_confirmation"
     CONNECTED = "connected"
     COOLDOWN = "cooldown"
@@ -37,6 +39,10 @@ class PollingPolicy:
     full_server_retry_seconds: float = 30.0
     manual_fast_retry_seconds: float = 5.0
     manual_watch_retry_seconds: float = 15.0
+    # Once Steam has been launched, keep a light independent observation
+    # running until Rust confirms the selected server in Player.log.  This is
+    # not a retry to launch Steam and therefore cannot create duplicate joins.
+    launch_confirmation_probe_seconds: float = 5.0
 
 
 @dataclass
@@ -48,6 +54,11 @@ class ConnectionSession:
     force_wipe_at: Optional[datetime] = None
     phase: ConnectionPhase = ConnectionPhase.IDLE
     launched_by_app: bool = False
+    queue_requested: bool = False
+    menu_ready: bool = False
+    waiting_for_wipe_restart: bool = False
+    wipe_restart_seen: bool = False
+    wipe_wait_announced_online: bool = False
     # A manual Connect may intentionally enter Rust's server queue. Automatic
     # recovery must wait for a playable slot instead of launching Rust again.
     queue_on_full: bool = False
@@ -111,6 +122,39 @@ class ConnectionSession:
         # A restart can take longer than the short turbo window.  Continue
         # watching at a moderate rate instead of falling back to ten minutes.
         self.watch_until = now + timedelta(minutes=30)
+
+    def begin_wipe_restart_hold(self, now: Optional[datetime] = None) -> bool:
+        """Hold a new launch during the final pre-wipe window.
+
+        A live old map is not evidence that the post-wipe server is ready.
+        This affects a not-yet-launched session only; it never ejects a player
+        who is already in Rust.
+        """
+        now = now or datetime.now(timezone.utc)
+        if self.launched_by_app or self.waiting_for_wipe_restart or self.wipe_restart_seen:
+            return False
+        candidates = (self.wipe_at, self.force_wipe_at)
+        if any(
+            wipe_at is not None and timedelta(0) < wipe_at - now <= PollingPolicy().turbo_window
+            for wipe_at in candidates
+        ):
+            self.waiting_for_wipe_restart = True
+            self.phase = ConnectionPhase.WAITING_FOR_WIPE_RESTART
+            return True
+        return False
+
+    def wipe_time_has_arrived(self, now: Optional[datetime] = None) -> bool:
+        """Return whether one of the held wipe schedules has been reached."""
+        now = now or datetime.now(timezone.utc)
+        return any(wipe_at is not None and now >= wipe_at for wipe_at in (self.wipe_at, self.force_wipe_at))
+
+    def confirm_wipe_restart(self) -> bool:
+        """Release the pre-wipe hold after a trustworthy restart signal."""
+        if not self.waiting_for_wipe_restart:
+            return False
+        self.waiting_for_wipe_restart = False
+        self.wipe_restart_seen = True
+        return True
 
     def observe_server_down(self, now: Optional[datetime] = None) -> None:
         """Use one bounded turbo window after a confirmed offline result."""

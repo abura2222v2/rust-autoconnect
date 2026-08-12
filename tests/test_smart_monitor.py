@@ -82,6 +82,52 @@ def test_manual_connect_has_bounded_fast_retry_then_gradual_backoff():
     assert session.query_retry_seconds(now) == 60.0
 
 
+def test_launch_confirmation_probe_is_short_and_independent_of_wipe_phase():
+    """Rust loading must keep observing the target without launching again."""
+    policy = PollingPolicy()
+
+    assert policy.launch_confirmation_probe_seconds == 5.0
+
+
+def test_final_pre_wipe_window_holds_old_server_until_restart_signal():
+    now = datetime(2026, 8, 12, 12, tzinfo=timezone.utc)
+    session = ConnectionSession("127.0.0.1:28015", wipe_at=now + timedelta(minutes=4))
+
+    assert session.begin_wipe_restart_hold(now)
+    assert session.phase == ConnectionPhase.WAITING_FOR_WIPE_RESTART
+    assert session.confirm_wipe_restart()
+    assert session.wipe_restart_seen
+
+
+def test_pre_wipe_hold_does_not_start_too_early_or_after_steam_launch():
+    now = datetime(2026, 8, 12, 12, tzinfo=timezone.utc)
+    early = ConnectionSession("127.0.0.1:28015", wipe_at=now + timedelta(minutes=6))
+    launched = ConnectionSession("127.0.0.1:28015", wipe_at=now + timedelta(minutes=4), launched_by_app=True)
+
+    assert not early.begin_wipe_restart_hold(now)
+    assert not launched.begin_wipe_restart_hold(now)
+
+
+def test_pre_wipe_hold_releases_only_after_confirmed_server_disappearance():
+    now = datetime(2026, 8, 12, 12, tzinfo=timezone.utc)
+    session = ConnectionSession("127.0.0.1:28015", wipe_at=now + timedelta(minutes=4))
+    assert session.begin_wipe_restart_hold(now)
+
+    assert not session.observe_query_result(True, now)
+    assert not session.observe_query_result(False, now)
+    assert session.observe_query_result(False, now)
+    assert session.confirm_wipe_restart()
+    assert session.wipe_restart_seen
+
+
+def test_pre_wipe_hold_can_release_after_scheduled_time_when_server_is_offline():
+    now = datetime(2026, 8, 12, 12, tzinfo=timezone.utc)
+    session = ConnectionSession("127.0.0.1:28015", wipe_at=now + timedelta(minutes=4))
+    assert session.begin_wipe_restart_hold(now)
+    assert not session.wipe_time_has_arrived(now)
+    assert session.wipe_time_has_arrived(now + timedelta(minutes=4))
+
+
 def test_provider_online_empty_server_is_only_a_hint_not_turbo():
     now = datetime(2026, 8, 9, 12, tzinfo=timezone.utc)
     session = ConnectionSession("127.0.0.1:28015")

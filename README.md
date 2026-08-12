@@ -60,7 +60,7 @@ The official monthly default is the first Thursday at 19:00 London time. Server 
 To compile AutoConnect into a standalone Windows executable (`.exe`):
 
 ```bash
-pyinstaller --noconfirm --onedir --windowed --add-data "assets;assets" --icon "assets/icon.ico" "main.py"
+pyinstaller --noconfirm --onedir --windowed --add-data "assets;assets" "main.py"
 ```
 
 The executable intentionally contains only public runtime configuration. A

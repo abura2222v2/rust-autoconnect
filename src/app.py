@@ -226,6 +226,8 @@ class AppController(MainWindow):
                 if snapshot.fresh and (changed or wipe_at is not None):
                     self.log_safe(self.t("provider_cache_updated"), "#98A2B3")
                 if online is False and changed:
+                    if session.confirm_wipe_restart():
+                        self.log_safe(self.t("wipe_restart_detected"), "#F97316")
                     self.log_safe(self.t("provider_offline_turbo"), "#F97316")
                     self._poll_wake_event.set()
             finally:
@@ -292,7 +294,9 @@ class AppController(MainWindow):
                     self.log_safe(self.t("auto_armed_server", default=f"Auto-Armed server: {ip_port}"), "#F97316")
 
             session = self._active_session
-            if self.is_polling and (not session or not session.launched_by_app) and ("Client connected" in event or "Spawning" in event):
+            # A generic loading line is not proof of a manual connection and
+            # must never cancel an active safe-connect session.
+            if self.is_polling and (not session or not session.launched_by_app) and match:
                 self.log_safe(self.t("manual_conn_detected"), "#98A2B3")
                 self.stop_polling_safe(explicit=False)
 
@@ -439,6 +443,13 @@ class AppController(MainWindow):
                 session.wipe_at = datetime.fromtimestamp(schedule["wipe_at"], timezone.utc)
                 session.wipe_source = schedule["wipe_source"]
                 self.log_safe(f"Wipe schedule: {schedule['wipe_source'] or 'shared cache'}.", "#98A2B3")
+            if session.begin_wipe_restart_hold(self.network_clock.now()):
+                self.log_safe(self.t("waiting_wipe_restart"), "#F97316")
+                self.dispatch_ui(
+                    self.set_connection_phase,
+                    ConnectionPhase.WAITING_FOR_WIPE_RESTART.value,
+                    operation=("poll", operation_id),
+                )
             
             self.swarm_service.join_room(canonical_target)
             
@@ -462,6 +473,40 @@ class AppController(MainWindow):
                     or (now - provider_requested).total_seconds() >= 55
                 ):
                     self._refresh_provider_hint(operation_id, session, canonical_target)
+
+                if session.begin_wipe_restart_hold(now):
+                    self.log_safe(self.t("waiting_wipe_restart"), "#F97316")
+                    self.dispatch_ui(
+                        self.set_connection_phase,
+                        ConnectionPhase.WAITING_FOR_WIPE_RESTART.value,
+                        operation=("poll", operation_id),
+                    )
+
+                # Steam is opened only once below. Rust may take tens of
+                # seconds to load, while a healthy server can still restart
+                # or disappear. Keep observing A2S until this session's own
+                # Player.log watcher confirms the connection; this branch
+                # deliberately never launches Steam a second time.
+                if session.launched_by_app:
+                    status = self.a2s_client.check_server_status(real_ip, port, session.stop_event)
+                    if not self._is_current_session(operation_id, session):
+                        return
+                    outcome = "launch_online" if status.alive else "launch_offline"
+                    if outcome != getattr(self, "_last_probe_outcome", ""):
+                        self.log_safe(
+                            self.t("launch_server_online" if status.alive else "launch_server_offline"),
+                            "#48D16D" if status.alive else "#F97316",
+                        )
+                        self._last_probe_outcome = outcome
+                    self._update_server_profile(
+                        target,
+                        state="queue" if session.queue_requested else ("launching" if status.alive else "offline"),
+                        checked_at=int(time.time()),
+                    )
+                    if session.stop_event.wait(PollingPolicy().launch_confirmation_probe_seconds):
+                        break
+                    continue
+
                 phase = session.select_phase(self.network_clock.now())
                 if (
                     session.force_wipe_at
@@ -492,6 +537,37 @@ class AppController(MainWindow):
                     return
                 if status.server_name:
                     server_name = status.server_name
+
+                # Near a scheduled wipe a live response can still be the old
+                # map. Do not launch Rust until a restart was observed. A
+                # fresh provider offline result may release this hold in the
+                # parallel hint worker; otherwise require the normal two A2S
+                # misses after a known live server, or wait until the planned
+                # wipe time has passed while the server is unavailable.
+                if session.waiting_for_wipe_restart:
+                    restart_detected = False
+                    if status.alive:
+                        session.observe_query_result(True, now)
+                        if not session.wipe_wait_announced_online:
+                            self.log_safe(self.t("wipe_old_server_online"), "#98A2B3")
+                            session.wipe_wait_announced_online = True
+                    else:
+                        restart_detected = session.observe_query_result(False, now)
+                        restart_detected = restart_detected or session.wipe_time_has_arrived(now)
+                    if restart_detected and session.confirm_wipe_restart():
+                        self.log_safe(self.t("wipe_restart_detected"), "#F97316")
+                    else:
+                        self._update_server_profile(target, state="waiting_wipe", checked_at=int(time.time()))
+                        current_interval = session.interval_seconds(now)
+                        deadline = time.monotonic() + current_interval
+                        while self._is_current_session(operation_id, session) and time.monotonic() < deadline:
+                            if session.stop_event.wait(0.1):
+                                break
+                            if self._poll_wake_event.is_set():
+                                self._poll_wake_event.clear()
+                                break
+                        continue
+
                 ready = status.alive and status.has_join_capacity
                 if ready:
                     if session.stop_event.wait(PollingPolicy().confirmation_gap_seconds):
@@ -515,23 +591,45 @@ class AppController(MainWindow):
                         break
                     status = confirmed
 
-                # A full server is still a valid manual connection target:
-                # opening Steam here lets Rust handle its own queue. Do not
-                # use this path for armed recovery, which waits for capacity.
-                if status.alive and not status.has_join_capacity and session.queue_on_full:
-                    session.consume_hint()
-                    session.phase = ConnectionPhase.LAUNCH_REQUESTED
-                    self.dispatch_ui(self.set_connection_phase, session.phase.value, operation=("poll", operation_id))
-                    self.log_safe(self.t("server_full_join_queue"), "#F97316")
-                    self.dispatch_ui(
-                        self.history_store.add_to_history, target, server_name, canonical_target,
-                        operation=("poll", operation_id),
-                    )
-                    self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
-                    self._update_server_profile(target, state="queue", checked_at=int(time.time()))
-                    if self._wait_for_rust_update(operation_id, session):
-                        self.launch_game(target, session=session, operation_id=operation_id)
-                    break
+                # A manual Connect may use Rust's queue, but only after two
+                # fresh A2S replies agree that this is a real, full server.
+                # A missing/zero capacity is not a queue and never launches
+                # Steam, because it can be a starting or unavailable server.
+                if (
+                    status.alive
+                    and status.max_players > 0
+                    and not status.has_join_capacity
+                    and session.queue_on_full
+                ):
+                    if session.stop_event.wait(PollingPolicy().confirmation_gap_seconds):
+                        break
+                    confirmed = self.a2s_client.check_server_status(real_ip, port, session.stop_event)
+                    if not self._is_current_session(operation_id, session):
+                        return
+                    if (
+                        confirmed.alive
+                        and confirmed.max_players > 0
+                        and not confirmed.has_join_capacity
+                    ):
+                        session.consume_hint()
+                        session.phase = ConnectionPhase.QUEUED
+                        session.queue_requested = True
+                        self.dispatch_ui(self.set_connection_phase, session.phase.value, operation=("poll", operation_id))
+                        self.log_safe(self.t("server_full_join_queue"), "#F97316")
+                        self.dispatch_ui(
+                            self.history_store.add_to_history, target, server_name, canonical_target,
+                            operation=("poll", operation_id),
+                        )
+                        self.dispatch_ui(self.refresh_history_ui, operation=("poll", operation_id))
+                        self._update_server_profile(target, state="queue", checked_at=int(time.time()))
+                        if self._wait_for_rust_update(operation_id, session):
+                            self.launch_game(target, session=session, operation_id=operation_id, queue_mode=True)
+                        break
+                    # State changed between confirmations; evaluate it again
+                    # in the next bounded poll instead of launching on stale data.
+                    status = confirmed
+                    if status.alive and status.has_join_capacity:
+                        continue
 
                 if not (status.alive and status.has_join_capacity):
                     now = self.network_clock.now()
@@ -569,6 +667,8 @@ class AppController(MainWindow):
                 self.is_reconnecting = False
                 if getattr(self, '_active_session', None) and self._active_session.phase not in (
                     ConnectionPhase.LAUNCH_REQUESTED, 
+                    ConnectionPhase.WAITING_FOR_WIPE_RESTART,
+                    ConnectionPhase.QUEUED,
                     ConnectionPhase.AWAITING_LOG_CONFIRMATION, 
                     ConnectionPhase.CONNECTED
                 ):
@@ -1124,6 +1224,26 @@ class AppController(MainWindow):
     def _on_log_error(self, err: str):
         self.log_safe(f"[x] Log Error: {err}")
 
+    @staticmethod
+    def _log_confirms_current_connection(event: str, target: str, session: Optional[ConnectionSession]) -> bool:
+        """Accept only a post-launch client connection event for this session.
+
+        Rust's generic ``Spawning`` line merely means a local scene is loading.
+        If the log provides an endpoint, it must match the requested or
+        canonical target; older log formats without an endpoint remain a
+        conservative local confirmation, not a proof of remote identity.
+        """
+        if "Client connected" not in event:
+            return False
+        match = re.search(r"Client connected to\s+([A-Za-z0-9.-]+:\d{1,5})", event, re.IGNORECASE)
+        if not match:
+            return True
+        observed = match.group(1).lower()
+        expected = {target.lower()}
+        if session and session.canonical_endpoint:
+            expected.add(session.canonical_endpoint.lower())
+        return observed in expected
+
     def start_log_monitor(
         self,
         target_str: str,
@@ -1145,7 +1265,13 @@ class AppController(MainWindow):
             # Do NOT spam the UI with every game log line
             if watcher is not self.log_watcher or (session is not None and self._active_session is not session):
                 return
-            if not getattr(self, 'is_connected', False) and ("Client connected" in event or "Spawning" in event):
+            # Benchmarking established this as Rust's local menu-ready marker.
+            # It is informative only: the selected-server confirmation still
+            # requires the later Client connected event below.
+            if session is not None and not session.menu_ready and "[Bootstrap] DONE!" in event:
+                session.menu_ready = True
+                self.log_safe(self.t("rust_menu_ready_waiting"), "#98A2B3")
+            if not getattr(self, 'is_connected', False) and self._log_confirms_current_connection(event, target_str, session):
                 self.is_connected = True
                 if session:
                     session.phase = ConnectionPhase.CONNECTED
@@ -1204,6 +1330,26 @@ class AppController(MainWindow):
         )
         self.log_watcher = watcher
         watcher.start(loop=self.async_loop)
+
+        def confirmation_watchdog() -> None:
+            # Queue admission may legitimately take longer, but neither path
+            # is allowed to silently become a confirmed connection.
+            timeout = 900 if session and session.queue_requested else 120
+            if self._shutdown_event.wait(timeout):
+                return
+            if (
+                watcher is self.log_watcher
+                and session is self._active_session
+                and not self.__dict__.get("is_connected", False)
+                and session is not None
+                and session.phase in {ConnectionPhase.QUEUED, ConnectionPhase.AWAITING_LOG_CONFIRMATION}
+            ):
+                self.log_safe(self.t("connection_log_timeout", sec=timeout), "#F97316")
+                self._update_server_profile(target_str, state="unconfirmed", reason="Rust log confirmation timed out")
+
+        threading.Thread(
+            target=confirmation_watchdog, daemon=True, name="connection-log-watchdog",
+        ).start()
 
     def _on_log_disconnect(self, target_str: str, source_watcher, reason: str, *, session: Optional[ConnectionSession] = None):
         if self.log_watcher is not source_watcher:
@@ -1278,7 +1424,10 @@ class AppController(MainWindow):
             name="forced-server-poll",
         ).start()
 
-    def launch_game(self, target: str, *, session: Optional[ConnectionSession] = None, operation_id: Optional[int] = None):
+    def launch_game(
+        self, target: str, *, session: Optional[ConnectionSession] = None,
+        operation_id: Optional[int] = None, queue_mode: bool = False,
+    ):
         if not _is_valid_endpoint(target):
             self.log_safe(self.t("launch_skipped_invalid"), "#DE5148")
             return
@@ -1296,12 +1445,13 @@ class AppController(MainWindow):
             self.log_safe(self.t("launch_ok"))
             if session:
                 session.launched_by_app = True
-                session.phase = ConnectionPhase.AWAITING_LOG_CONFIRMATION
+                session.queue_requested = queue_mode
+                session.phase = ConnectionPhase.QUEUED if queue_mode else ConnectionPhase.AWAITING_LOG_CONFIRMATION
                 session.reset_offline_turbo()
                 if operation_id is not None:
                     self.dispatch_ui(self.set_connection_phase, session.phase.value, operation=("poll", operation_id))
-            self.dispatch_ui(self.set_connection_state, "Launching", target)
-            self._update_server_profile(target, state="launching")
+            self.dispatch_ui(self.set_connection_state, "Queueing" if queue_mode else "Launching", target)
+            self._update_server_profile(target, state="queue" if queue_mode else "launching")
             self.start_log_monitor(target, session=session, operation_id=operation_id)
         except Exception as e:
             self.dispatch_ui(self.set_connection_state, "Launch failed")

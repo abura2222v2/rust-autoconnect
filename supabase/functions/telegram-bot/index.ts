@@ -26,6 +26,11 @@ const words: Record<Locale, Record<string, string>> = {
 };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
+// Supabase can forward either the complete public path or the path after the
+// function slug.  Accept both forms so Telegram webhook updates never fall
+// through to a misleading 404 response.
+const routeIs = (path: string, route: string) =>
+  path === `/${route}` || path.endsWith(`/telegram-bot/${route}`);
 const validClient = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(value);
 const validCode = (value: unknown) => typeof value === "string" && /^[A-Z0-9]{8}$/.test(value);
 
@@ -126,7 +131,7 @@ Deno.serve(async (request) => {
   const path = new URL(request.url).pathname;
   const body = await request.json().catch(() => null);
 
-  if (path.endsWith("/telegram-bot/webhook")) {
+  if (routeIs(path, "webhook")) {
     if (!WEBHOOK_SECRET || request.headers.get("x-telegram-bot-api-secret-token") !== WEBHOOK_SECRET) return json({ error: "unauthorized" }, 401);
     const text = body?.message?.text;
     const chatId = body?.message?.chat?.id;
@@ -150,7 +155,7 @@ Deno.serve(async (request) => {
     return json({ accepted: true });
   }
 
-  if (path.endsWith("/telegram-bot/link")) {
+  if (routeIs(path, "link")) {
     if (!validClient(body?.client_id) || !validCode(body?.code)) return json({ error: "invalid link request" }, 400);
     const selectedLocale = locale(body?.locale);
     const notificationToken = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
@@ -162,7 +167,7 @@ Deno.serve(async (request) => {
     return error ? json({ error: "service unavailable" }, 503) : json({ accepted: true, notification_token: notificationToken });
   }
 
-  if (path.endsWith("/telegram-bot/notify")) {
+  if (routeIs(path, "notify")) {
     if (!validClient(body?.client_id) || typeof body?.notification_token !== "string" || !events.has(body?.event) || typeof body?.server !== "string") return json({ error: "invalid notification" }, 400);
     const { data: link } = await db.from("telegram_links").select("chat_id,notification_token_hash,preferences").eq("client_id", body.client_id).maybeSingle();
     if (!link || !link.chat_id || link.notification_token_hash !== await sha256(body.notification_token)) return json({ accepted: false }, 403);
@@ -190,14 +195,14 @@ Deno.serve(async (request) => {
     return json({ accepted: sent }, sent ? 202 : 503);
   }
 
-  if (path.endsWith("/telegram-bot/status")) {
+  if (routeIs(path, "status")) {
     if (!validClient(body?.client_id) || typeof body?.notification_token !== "string") return json({ error: "invalid status request" }, 400);
     const { data: link } = await db.from("telegram_links").select("chat_id,notification_token_hash,telegram_display_name").eq("client_id", body.client_id).maybeSingle();
     if (!link || link.notification_token_hash !== await sha256(body.notification_token)) return json({ accepted: false }, 403);
     return json({ linked: Boolean(link.chat_id), display_name: link.telegram_display_name ?? null });
   }
 
-  if (path.endsWith("/telegram-bot/unlink")) {
+  if (routeIs(path, "unlink")) {
     if (!validClient(body?.client_id) || typeof body?.notification_token !== "string") return json({ error: "invalid unlink request" }, 400);
     const { data: link } = await db.from("telegram_links").select("notification_token_hash").eq("client_id", body.client_id).maybeSingle();
     if (!link || link.notification_token_hash !== await sha256(body.notification_token)) return json({ accepted: false }, 403);
@@ -208,7 +213,7 @@ Deno.serve(async (request) => {
     return error ? json({ error: "service unavailable" }, 503) : json({ accepted: true });
   }
 
-  if (path.endsWith("/telegram-bot/locale")) {
+  if (routeIs(path, "locale")) {
     if (!validClient(body?.client_id) || typeof body?.notification_token !== "string") return json({ error: "invalid locale request" }, 400);
     const { data: link } = await db.from("telegram_links").select("chat_id,notification_token_hash,preferences").eq("client_id", body.client_id).maybeSingle();
     if (!link || link.notification_token_hash !== await sha256(body.notification_token)) return json({ accepted: false }, 403);
