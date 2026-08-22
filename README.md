@@ -3,29 +3,44 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-windows-lightgray.svg)]()
+[![Languages](https://img.shields.io/badge/UI-7%20languages-orange.svg)]()
 
 AutoConnect is a robust, log-based server connection manager for the game Rust. Designed with strict adherence to Easy Anti-Cheat (EAC) guidelines, it provides automated server queuing, crash recovery, and wipe scheduling without injecting into the game's memory space.
 
+The app has two interfaces sharing the same backend logic: a modern web UI (default) and a legacy desktop GUI. Both are fully localized into 7 languages.
+
 ## Features
 
-![Connect](assets/screenshots/connect.png)
+![Servers](assets/screenshots/connect.png)
 
 - **Safe Log-Based Monitoring**: Uses only Steam URLs, A2S server queries, the Windows process list, and the player's own Rust log. It never reads game memory, injects code, hooks Rust, uses RCON, or emulates input.
 - **Smart Auto-Arming**: Automatically detects when you successfully connect to a server and "arms" the connection. If your game crashes or you are disconnected unexpectedly, AutoConnect will instantly restart Rust and place you back in the queue.
-- **Force Wipe Intelligence**: Calculates the official first-Thursday wipe window from 19:00 London time, corrects scheduling from recent network time, and uses bounded quiet/watch/turbo polling.
+- **Force Wipe Intelligence**: Calculates the official first-Thursday, 18:00 UTC wipe window, corrects scheduling from recent network time, and uses bounded quiet/watch/turbo polling. A live countdown is shown on each server's details card.
+- **Live Server Status**: Every saved server is checked directly via A2S on a background cycle — not a static indicator — so the list reflects who's actually reachable right now.
 - **Swarm Peer Network**: Optional Supabase Realtime hints. A client announces availability only after its own Rust log confirms connection; every receiver independently confirms with A2S before launching.
 - **Shared Server Catalogue**: Optional GameMonitoring-backed cache deduplicates provider checks for saved servers. It shares only server addresses, never player lists, logs, Steam IDs, or account data; cached offline and wipe data are hints, while local A2S remains the launch decision.
 - **Performance Benchmarking**: Automated testing framework that measures game loading times (Time-to-Menu and Map Load) by playing standardized `.dem` files.
 - **Telegram Integration**: Receive queue updates and wipe notifications directly to your phone via the integrated Telegram bot framework.
+- **7-Language UI**: Russian, English, Ukrainian, German, French, Spanish, and Chinese — including the activity log, not just static labels.
+
+<details>
+<summary>More screenshots (server details, settings, benchmark)</summary>
+
+![Server details](assets/screenshots/server_card.png)
+![Settings](assets/screenshots/settings.png)
+![Benchmark](assets/screenshots/benchmark.png)
+
+</details>
 
 ## Architecture
 
 The application is built on a modern asynchronous Python stack (`asyncio`) to guarantee minimal memory footprint and zero interface stuttering, even during intense background polling.
 
-- **GUI**: CustomTkinter
-- **Networking**: `asyncio` UDP A2S Client for non-blocking server queries
-- **Data Persistence**: JSON-based local history store
-- **Realtime Infrastructure**: Supabase Edge Functions & WebSockets
+- **Web UI (default)**: `aiohttp` local server + a plain HTML/CSS/JS frontend, opened in a dedicated Microsoft Edge app-mode window. All `/api/*` endpoints require a per-session CSRF token, and user-supplied text is HTML-escaped before rendering.
+- **Desktop GUI (legacy, `--legacy` / `--tk` flag)**: CustomTkinter.
+- **Networking**: `asyncio` UDP A2S Client for non-blocking server queries.
+- **Data Persistence**: JSON-based local history store.
+- **Realtime Infrastructure**: Supabase Edge Functions & WebSockets.
 
 ## Force Wipe and time accuracy
 
@@ -36,7 +51,7 @@ The application is built on a modern asynchronous Python stack (`asyncio`) to gu
 | Server disappears early or late | One separate bounded turbo window after the offline signal |
 | Rust update detected | Steam Downloads opens once; Connect waits for the local build ID to match |
 
-The official monthly default is the first Thursday at 19:00 London time. Server owners can use a different schedule or restart early, so the countdown is an acceleration signal, not a promise that a particular server is ready. The application uses server time from its update check when available and falls back transparently to Windows time offline.
+The official monthly default is the first Thursday at **18:00 UTC** (19:00 London time during British Summer Time, 18:00 the rest of the year — the countdown always shows your local time). Server owners can use a different schedule or restart early, so the countdown is an acceleration signal, not a promise that a particular server is ready. The application uses server time from its update check when available and falls back transparently to Windows time offline.
 
 ## Installation & Setup
 
@@ -50,17 +65,17 @@ The official monthly default is the first Thursday at 19:00 London time. Server 
    ```bash
    pip install -r requirements.txt
    ```
-4. **Run**:
+4. **Run** (opens the web UI by default; pass `--legacy` for the desktop GUI):
    ```bash
    python main.py
    ```
 
 ## Building the Executable
 
-To compile AutoConnect into a standalone Windows executable (`.exe`):
+To compile AutoConnect into a standalone Windows executable (`.exe`), use the tracked PyInstaller spec — it bundles the web UI's static assets, which a plain `pyinstaller main.py` invocation will silently omit:
 
 ```bash
-pyinstaller --noconfirm --onedir --windowed --add-data "assets;assets" "main.py"
+pyinstaller RustAutoConnect.spec --noconfirm
 ```
 
 The executable intentionally contains only public runtime configuration. A
