@@ -6,6 +6,7 @@ class AppController {
   constructor() {
     this.currentTab = 'servers';
     this.state = null;
+    window.STRINGS = {};
 
     this.initElements();
     this.initNavigation();
@@ -39,9 +40,10 @@ class AppController {
 
   tickWipeCountdown() {
     if (!this.wipeCountdownLabel || !this.nextForceWipeAt) return;
+    const s = window.STRINGS || {};
     const remainingMs = this.nextForceWipeAt.getTime() - Date.now();
     if (remainingMs <= 0) {
-      this.wipeCountdownLabel.textContent = 'Вайп: идёт сейчас';
+      this.wipeCountdownLabel.textContent = s.wipe_now || 'Wipe: happening now';
       return;
     }
     const totalSeconds = Math.floor(remainingMs / 1000);
@@ -49,9 +51,10 @@ class AppController {
     const hours = Math.floor((totalSeconds % 86400) / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const parts = [];
-    if (days > 0) parts.push(`${days}д`);
-    parts.push(`${hours}ч`, `${minutes}м`);
-    this.wipeCountdownLabel.textContent = `Вайп через: ${parts.join(' ')}`;
+    if (days > 0) parts.push((s.wipe_days_suffix || '{days}d').replace('{days}', days));
+    parts.push((s.wipe_hours_suffix || '{hours}h').replace('{hours}', hours));
+    parts.push((s.wipe_minutes_suffix || '{minutes}m').replace('{minutes}', minutes));
+    this.wipeCountdownLabel.textContent = (s.wipe_countdown_label || 'Wipe in: {parts}').replace('{parts}', parts.join(' '));
   }
 
   initNavigation() {
@@ -127,7 +130,7 @@ class AppController {
     if (runBtn) {
       runBtn.addEventListener('click', async () => {
         runBtn.disabled = true;
-        runBtn.textContent = 'Тестирование...';
+        runBtn.textContent = (window.STRINGS || {}).bench_testing || 'Testing...';
         await window.api.runBenchmark();
       });
     }
@@ -141,7 +144,7 @@ class AppController {
         if (progressElem) progressElem.style.width = '100%';
         if (runBtn) {
           runBtn.disabled = false;
-          runBtn.textContent = 'Запустить тест';
+          runBtn.textContent = (window.STRINGS || {}).btn_run_benchmark || 'Run test';
         }
         this.refreshBenchmarkData();
       }
@@ -150,6 +153,7 @@ class AppController {
 
   async refreshBenchmarkData() {
     const info = await window.api.getBenchmarkInfo();
+    const s = window.STRINGS || {};
     const cpuElem = document.getElementById('spec-cpu');
     const ramElem = document.getElementById('spec-ram');
     const diskElem = document.getElementById('spec-disk');
@@ -158,7 +162,7 @@ class AppController {
     if (cpuElem) cpuElem.textContent = info.cpu || 'Unknown CPU';
     if (ramElem) ramElem.textContent = info.ram || 'Unknown RAM';
     if (diskElem) diskElem.textContent = info.disk || 'Unknown Storage';
-    if (countElem) countElem.textContent = `Локальных тестов: ${info.run_count || 0}`;
+    if (countElem) countElem.textContent = (s.bench_run_count || 'Local runs: {count}').replace('{count}', info.run_count || 0);
 
     const leaderboard = await window.api.getLeaderboard();
     const rankTableBody = document.getElementById('leaderboard-tbody');
@@ -244,8 +248,26 @@ class AppController {
     }
   }
 
+  applyTranslations(strings) {
+    if (!strings) return;
+    window.STRINGS = strings;
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      const text = strings[el.dataset.i18n];
+      if (text !== undefined) el.textContent = text;
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+      const text = strings[el.dataset.i18nPlaceholder];
+      if (text !== undefined) el.placeholder = text;
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+      const text = strings[el.dataset.i18nTitle];
+      if (text !== undefined) el.title = text;
+    });
+  }
+
   applyState(state) {
     this.state = state;
+    this.applyTranslations(state.strings);
 
     // Apply Servers & Widths
     if (state.servers) {
@@ -282,14 +304,15 @@ class AppController {
     }
 
     // Apply Connect Button State (smart-connect session in progress?)
+    const s = window.STRINGS || {};
     this.isConnecting = ['Connecting', 'Launching', 'Queueing'].includes(state.session_status);
     if (this.connectBtn) {
       const label = this.connectBtn.querySelector('span');
       if (this.isConnecting) {
-        if (label) label.textContent = 'ОТМЕНА';
+        if (label) label.textContent = s.btn_cancel || 'CANCEL';
         this.connectBtn.classList.add('connecting');
       } else {
-        if (label) label.textContent = 'ПОДКЛЮЧИТЬСЯ';
+        if (label) label.textContent = s.btn_connect || 'CONNECT';
         this.connectBtn.classList.remove('connecting');
       }
     }
@@ -299,12 +322,12 @@ class AppController {
       if (state.armed_server) {
         this.armedDot.style.backgroundColor = 'var(--success)';
         this.armedDot.style.boxShadow = '0 0 8px var(--success)';
-        this.armedLabel.textContent = `Автоподключение: включено (${state.armed_server})`;
+        this.armedLabel.textContent = (s.armed_status_on || 'AutoConnect: on ({server})').replace('{server}', state.armed_server);
         this.disarmBtn.disabled = false;
       } else {
         this.armedDot.style.backgroundColor = 'var(--muted)';
         this.armedDot.style.boxShadow = 'none';
-        this.armedLabel.textContent = 'Автоподключение: выключено';
+        this.armedLabel.textContent = s.armed_status_off || 'AutoConnect: off';
         this.disarmBtn.disabled = true;
       }
     }
@@ -314,6 +337,7 @@ class AppController {
   }
 
   renderTelegramStatus(state) {
+    const s = window.STRINGS || {};
     const tgStatusElem = document.getElementById('tg-settings-status');
     const tgBtn = document.getElementById('btn-open-tg-modal');
     const tgBadge = document.getElementById('tg-status-badge');
@@ -323,10 +347,10 @@ class AppController {
         tgBadge.style.display = 'none';
       }
       if (tgStatusElem) {
-        tgStatusElem.textContent = 'Получать пуш-уведомления об окончании очереди и вайпах на телефон';
+        tgStatusElem.textContent = s.tg_status_default || 'Get push notifications for queue slots and wipes on your phone';
       }
       if (tgBtn) {
-        tgBtn.textContent = 'Привязать бота';
+        tgBtn.textContent = s.btn_tg_link || 'Link bot';
       }
       return;
     }
@@ -334,23 +358,23 @@ class AppController {
     const { is_linked, display_name, link_code } = state.telegram;
 
     if (is_linked) {
-      const name = display_name || 'Привязан';
-      if (tgStatusElem) tgStatusElem.textContent = `Привязан к аккаунту: ${name}`;
-      if (tgBtn) tgBtn.textContent = 'Управление';
+      const name = display_name || s.tg_linked_default_name || 'Linked';
+      if (tgStatusElem) tgStatusElem.textContent = (s.tg_status_linked || 'Linked to account: {name}').replace('{name}', name);
+      if (tgBtn) tgBtn.textContent = s.btn_tg_manage || 'Manage';
       if (tgBadge) {
-        tgBadge.textContent = display_name || 'Подключен';
+        tgBadge.textContent = display_name || s.tg_badge_connected || 'Connected';
         tgBadge.className = 'tg-status-badge';
         tgBadge.style.display = 'inline-flex';
       }
     } else if (link_code) {
-      if (tgStatusElem) tgStatusElem.textContent = `Код привязки: ${link_code}`;
-      if (tgBtn) tgBtn.textContent = 'Показать код';
+      if (tgStatusElem) tgStatusElem.textContent = (s.tg_status_code || 'Link code: {link_code}').replace('{link_code}', link_code);
+      if (tgBtn) tgBtn.textContent = s.btn_tg_show_code || 'Show code';
       if (tgBadge) {
         tgBadge.style.display = 'none';
       }
     } else {
-      if (tgStatusElem) tgStatusElem.textContent = 'Получать пуш-уведомления об окончании очереди и вайпах на телефон';
-      if (tgBtn) tgBtn.textContent = 'Привязать бота';
+      if (tgStatusElem) tgStatusElem.textContent = s.tg_status_default || 'Get push notifications for queue slots and wipes on your phone';
+      if (tgBtn) tgBtn.textContent = s.btn_tg_link || 'Link bot';
       if (tgBadge) {
         tgBadge.style.display = 'none';
       }
@@ -360,18 +384,19 @@ class AppController {
 
   updateRustStatus(status) {
     if (!this.rustDot || !this.rustLabel) return;
+    const s = window.STRINGS || {};
 
     this.rustDot.classList.remove('running', 'starting');
     if (status === 'running') {
       this.rustDot.classList.add('running');
-      this.rustLabel.textContent = 'Rust: запущен';
+      this.rustLabel.textContent = s.rust_status_running || 'Rust: running';
       this.rustLabel.style.color = 'var(--text)';
     } else if (status === 'starting') {
       this.rustDot.classList.add('starting');
-      this.rustLabel.textContent = 'Rust: запуск...';
+      this.rustLabel.textContent = s.rust_status_starting || 'Rust: starting...';
       this.rustLabel.style.color = 'var(--warning)';
     } else {
-      this.rustLabel.textContent = 'Rust: не запущен';
+      this.rustLabel.textContent = s.rust_status_stopped || 'Rust: not running';
       this.rustLabel.style.color = 'var(--muted)';
     }
   }

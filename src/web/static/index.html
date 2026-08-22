@@ -139,15 +139,15 @@
     <nav class="nav-menu">
       <div class="nav-item active" data-tab="servers">
         <svg class="icon" viewBox="0 0 24 24"><use href="#icon-nav-home"></use></svg>
-        <span>Серверы</span>
+        <span data-i18n="nav_servers">Серверы</span>
       </div>
       <div class="nav-item" data-tab="bench">
         <svg class="icon" viewBox="0 0 24 24"><use href="#icon-nav-bench"></use></svg>
-        <span>Бенчмарк</span>
+        <span data-i18n="nav_bench">Бенчмарк</span>
       </div>
       <div class="nav-item" data-tab="settings">
         <svg class="icon" viewBox="0 0 24 24"><use href="#icon-nav-settings"></use></svg>
-        <span>Настройки</span>
+        <span data-i18n="nav_settings">Настройки</span>
       </div>
     </nav>
 
@@ -169,29 +169,29 @@
 
     <!-- 2.1 SERVERS VIEW -->
     <section id="view-servers" class="view-section active">
-      <h1 class="section-header">Серверы</h1>
+      <h1 class="section-header" data-i18n="section_servers">Серверы</h1>
 
       <!-- Action Toolbar -->
       <div class="action-toolbar">
         <div class="ip-input-wrapper">
-          <input type="text" id="ip-input" class="ip-input" placeholder="IP:PORT (например, 127.0.0.1:28015)" autocomplete="off" spellcheck="false">
+          <input type="text" id="ip-input" class="ip-input" data-i18n-placeholder="ip_input_placeholder" placeholder="IP:PORT (например, 127.0.0.1:28015)" autocomplete="off" spellcheck="false">
         </div>
 
         <button id="btn-connect-main" class="btn-primary">
           <svg class="icon" viewBox="0 0 24 24" style="width:14px; height:14px;"><use href="#icon-play"></use></svg>
-          <span>ПОДКЛЮЧИТЬСЯ</span>
+          <span data-i18n="btn_connect">ПОДКЛЮЧИТЬСЯ</span>
         </button>
 
         <div class="search-input-wrapper">
           <svg class="icon search-icon-pos"><use href="#icon-filter"></use></svg>
-          <input type="text" id="search-input" class="search-input" placeholder="Поиск серверов...">
+          <input type="text" id="search-input" class="search-input" data-i18n-placeholder="search_placeholder" placeholder="Поиск серверов...">
         </div>
 
-        <button id="btn-filter-toggle" class="btn-icon" title="Фильтр (Все / Избранное)">
+        <button id="btn-filter-toggle" class="btn-icon" data-i18n-title="filter_toggle_title" title="Фильтр (Все / Избранное)">
           <svg class="icon" viewBox="0 0 24 24"><use href="#icon-filter"></use></svg>
         </button>
 
-        <button id="btn-log-drawer" class="btn-icon" title="Журнал активности">
+        <button id="btn-log-drawer" class="btn-icon" data-i18n-title="drawer_title" title="Журнал активности">
           <svg class="icon" viewBox="0 0 24 24"><use href="#icon-list-menu"></use></svg>
         </button>
       </div>
@@ -202,19 +202,19 @@
           <div class="th-cell th-star">★</div>
           <div class="col-divider" data-col="star"></div>
 
-          <div class="th-cell th-name">Название сервера</div>
+          <div class="th-cell th-name" data-i18n="th_name">Название сервера</div>
           <div class="col-divider" data-col="name"></div>
 
-          <div class="th-cell th-addr">Адрес</div>
+          <div class="th-cell th-addr" data-i18n="th_addr">Адрес</div>
           <div class="col-divider" data-col="addr"></div>
 
-          <div class="th-cell th-players">Игроки</div>
+          <div class="th-cell th-players" data-i18n="th_players">Игроки</div>
           <div class="col-divider" data-col="players"></div>
 
-          <div class="th-cell th-local">Статус</div>
+          <div class="th-cell th-local" data-i18n="th_status">Статус</div>
           <div class="col-divider" data-col="local"></div>
 
-          <div class="th-cell th-action">Действие</div>
+          <div class="th-cell th-action" data-i18n="th_action">Действие</div>
         </div>
 
         <!-- Ghost Guide Line & Width Tooltip during Drag -->
@@ -229,15 +229,15 @@
 
     <!-- 2.2 BENCHMARK VIEW -->
     <section id="view-bench" class="view-section">
-      <h1 class="section-header">Бенчмарк оборудования</h1>
+      <h1 class="section-header" data-i18n="section_bench">Бенчмарк оборудования</h1>
 
       <div class="bench-card" style="margin-bottom: 20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
           <div>
-            <div style="font-size:16px; font-weight:700;">Характеристики системы</div>
+            <div style="font-size:16px; font-weight:700;" data-i18n="bench_system_specs">Характеристики системы</div>
             <div id="bench-run-count" style="font-size:12px; color:var(--muted);">Локальных тестов: 0</div>
           </div>
-          <button id="btn-run-benchmark" class="btn-primary">Запустить тест</button>
+          <button id="btn-run-benchmark" class="btn-primary" data-i18n="btn_run_benchmark">Запустить тест</button>
         </div>
 
         <div style="height: 4px; background:var(--surface-alt); border-radius:2px; overflow:hidden; margin-bottom:16px;">
@@ -246,29 +246,29 @@
 
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
           <div style="background:var(--surface-alt); padding:12px; border-radius:6px; border:1px solid var(--border);">
-            <div style="font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase;">Процессор</div>
+            <div style="font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase;" data-i18n="bench_cpu_label">Процессор</div>
             <div id="spec-cpu" style="font-size:13px; font-weight:700; margin-top:4px;">Loading...</div>
           </div>
           <div style="background:var(--surface-alt); padding:12px; border-radius:6px; border:1px solid var(--border);">
-            <div style="font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase;">ОЗУ</div>
+            <div style="font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase;" data-i18n="bench_ram_label">ОЗУ</div>
             <div id="spec-ram" style="font-size:13px; font-weight:700; margin-top:4px;">Loading...</div>
           </div>
           <div style="background:var(--surface-alt); padding:12px; border-radius:6px; border:1px solid var(--border);">
-            <div style="font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase;">Накопитель</div>
+            <div style="font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase;" data-i18n="bench_disk_label">Накопитель</div>
             <div id="spec-disk" style="font-size:13px; font-weight:700; margin-top:4px;">Loading...</div>
           </div>
         </div>
       </div>
 
       <div class="bench-card" style="flex:1; overflow-y:auto;">
-        <div style="font-size:16px; font-weight:700; margin-bottom:6px;">Онлайн рейтинг (Время загрузки)</div>
+        <div style="font-size:16px; font-weight:700; margin-bottom:6px;" data-i18n="bench_online_ranking">Онлайн рейтинг (Время загрузки)</div>
         <table class="ranking-table">
           <thead>
             <tr>
               <th>#</th>
-              <th>Конфигурация</th>
-              <th style="text-align:right;">Время</th>
-              <th style="text-align:right;">Тестов</th>
+              <th data-i18n="rank_col_config">Конфигурация</th>
+              <th style="text-align:right;" data-i18n="rank_col_time">Время</th>
+              <th style="text-align:right;" data-i18n="rank_col_tests">Тестов</th>
             </tr>
           </thead>
           <tbody id="leaderboard-tbody">
@@ -280,14 +280,14 @@
 
     <!-- 2.3 SETTINGS VIEW -->
     <section id="view-settings" class="view-section">
-      <h1 class="section-header">Настройки приложения</h1>
+      <h1 class="section-header" data-i18n="section_settings">Настройки приложения</h1>
 
       <div class="settings-card">
         <!-- Language -->
         <div class="setting-row">
           <div class="setting-info">
-            <div class="setting-title">Язык интерфейса</div>
-            <div class="setting-desc">Выберите предпочтительный язык для всех надписей</div>
+            <div class="setting-title" data-i18n="setting_lang_title">Язык интерфейса</div>
+            <div class="setting-desc" data-i18n="setting_lang_desc">Выберите предпочтительный язык для всех надписей</div>
           </div>
           <select id="select-lang" class="select-box">
             <option value="RU">Русский (RU)</option>
@@ -296,17 +296,15 @@
             <option value="DE">Deutsch (DE)</option>
             <option value="FR">Français (FR)</option>
             <option value="ES">Español (ES)</option>
-            <option value="TR">Türkçe (TR)</option>
-            <option value="PL">Polski (PL)</option>
-            <option value="CN">中文 (CN)</option>
+            <option value="ZH">中文 (ZH)</option>
           </select>
         </div>
 
         <!-- Tray -->
         <div class="setting-row">
           <div class="setting-info">
-            <div class="setting-title">Сворачивать в системный трей</div>
-            <div class="setting-desc">Оставлять программу работать в фоне рядом с часами</div>
+            <div class="setting-title" data-i18n="setting_tray_title">Сворачивать в системный трей</div>
+            <div class="setting-desc" data-i18n="setting_tray_desc">Оставлять программу работать в фоне рядом с часами</div>
           </div>
           <label class="custom-checkbox">
             <input type="checkbox" id="chk-tray">
@@ -317,8 +315,8 @@
         <!-- Swarm P2P -->
         <div class="setting-row">
           <div class="setting-info">
-            <div class="setting-title">P2P сеть Swarm</div>
-            <div class="setting-desc">Обмен информацией о состоянии серверов с другими игроками</div>
+            <div class="setting-title" data-i18n="setting_swarm_title">P2P сеть Swarm</div>
+            <div class="setting-desc" data-i18n="setting_swarm_desc">Обмен информацией о состоянии серверов с другими игроками</div>
           </div>
           <label class="custom-checkbox">
             <input type="checkbox" id="chk-swarm">
@@ -329,8 +327,8 @@
         <!-- Share Saved Servers -->
         <div class="setting-row">
           <div class="setting-info">
-            <div class="setting-title">Синхронизация сохранённых серверов</div>
-            <div class="setting-desc">Помогать обновлять пинг и статус популярных серверов в сети</div>
+            <div class="setting-title" data-i18n="setting_share_title">Синхронизация сохранённых серверов</div>
+            <div class="setting-desc" data-i18n="setting_share_desc">Помогать обновлять пинг и статус популярных серверов в сети</div>
           </div>
           <label class="custom-checkbox">
             <input type="checkbox" id="chk-share-servers">
@@ -342,12 +340,12 @@
         <div class="setting-row">
           <div class="setting-info">
             <div class="setting-title" style="display:flex; align-items:center; gap:8px;">
-              <span>Telegram Бот оповещений</span>
+              <span data-i18n="setting_tg_title">Telegram Бот оповещений</span>
               <span id="tg-status-badge" class="tg-status-badge" style="display:none;"></span>
             </div>
-            <div id="tg-settings-status" class="setting-desc">Получать пуш-уведомления об окончании очереди и вайпах на телефон</div>
+            <div id="tg-settings-status" class="setting-desc" data-i18n="tg_status_default">Получать пуш-уведомления об окончании очереди и вайпах на телефон</div>
           </div>
-          <button id="btn-open-tg-modal" class="btn-primary" style="height:34px; padding:0 14px; font-size:12px;">Привязать бота</button>
+          <button id="btn-open-tg-modal" class="btn-primary" style="height:34px; padding:0 14px; font-size:12px;" data-i18n="btn_tg_link">Привязать бота</button>
         </div>
       </div>
     </section>
@@ -360,16 +358,16 @@
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
   <aside id="activity-drawer" class="activity-drawer">
     <div class="drawer-header">
-      <div class="drawer-title">Журнал активности</div>
+      <div class="drawer-title" data-i18n="drawer_title">Журнал активности</div>
       <div class="drawer-actions">
         <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); cursor:pointer;">
           <input type="checkbox" id="chk-autoscroll" checked>
-          <span>Автопрокрутка</span>
+          <span data-i18n="chk_autoscroll_label">Автопрокрутка</span>
         </label>
-        <button id="btn-clear-log" class="btn-icon" style="width:30px; height:30px;" title="Очистить лог">
+        <button id="btn-clear-log" class="btn-icon" style="width:30px; height:30px;" data-i18n-title="btn_clear_log_title" title="Очистить лог">
           <svg class="icon" viewBox="0 0 24 24"><use href="#icon-trash"></use></svg>
         </button>
-        <button id="btn-close-drawer" class="btn-icon" style="width:30px; height:30px;" title="Закрыть">
+        <button id="btn-close-drawer" class="btn-icon" style="width:30px; height:30px;" data-i18n-title="btn_close_title" title="Закрыть">
           <svg class="icon" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
         </button>
       </div>
@@ -383,7 +381,7 @@
   <div id="server-card-modal" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-banner">
-        <button class="modal-close-btn" title="Закрыть">
+        <button class="modal-close-btn" data-i18n-title="btn_close_title" title="Закрыть">
           <svg class="icon" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
         </button>
       </div>
@@ -392,7 +390,7 @@
         <h2 id="m-server-title" class="modal-title">Rustafied.com - EU Small</h2>
         <div class="modal-addr-row">
           <span id="m-server-ip">198.244.168.34:28015</span>
-          <button id="m-btn-copy-ip" class="btn-copy-mini" title="Копировать IP">
+          <button id="m-btn-copy-ip" class="btn-copy-mini" data-i18n-title="btn_copy_ip_title" title="Копировать IP">
             <svg class="icon" viewBox="0 0 24 24"><use href="#icon-copy"></use></svg>
           </button>
         </div>
@@ -401,21 +399,21 @@
           <div class="modal-stat-tile">
             <div class="stat-icon-wrap"><svg class="icon" viewBox="0 0 24 24" style="width:22px; height:22px;"><use href="#icon-players"></use></svg></div>
             <div class="stat-labels">
-              <span class="stat-title">Игроки</span>
+              <span class="stat-title" data-i18n="th_players">Игроки</span>
               <span id="m-players-val" class="stat-val">97/150</span>
             </div>
           </div>
           <div class="modal-stat-tile">
             <div class="stat-icon-wrap"><svg class="icon" viewBox="0 0 24 24" style="width:22px; height:22px;"><use href="#icon-map"></use></svg></div>
             <div class="stat-labels">
-              <span class="stat-title">Карта</span>
+              <span class="stat-title" data-i18n="modal_stat_map">Карта</span>
               <span id="m-map-val" class="stat-val">Procedural</span>
             </div>
           </div>
           <div class="modal-stat-tile">
             <div class="stat-icon-wrap"><svg class="icon" viewBox="0 0 24 24" style="width:22px; height:22px;"><use href="#icon-cube"></use></svg></div>
             <div class="stat-labels">
-              <span class="stat-title">Размер</span>
+              <span class="stat-title" data-i18n="modal_stat_size">Размер</span>
               <span id="m-size-val" class="stat-val">4.0 km</span>
             </div>
           </div>
@@ -432,11 +430,11 @@
           </button>
           <button id="m-btn-website" class="btn-link">
             <svg class="icon" viewBox="0 0 24 24"><use href="#icon-website"></use></svg>
-            <span>Веб-сайт</span>
+            <span data-i18n="modal_btn_website">Веб-сайт</span>
           </button>
           <button id="m-btn-rules" class="btn-link">
             <svg class="icon" viewBox="0 0 24 24"><use href="#icon-rules"></use></svg>
-            <span>Правила</span>
+            <span data-i18n="modal_btn_rules">Правила</span>
           </button>
         </div>
 
@@ -448,11 +446,11 @@
         <div class="modal-actions-row">
           <button id="m-btn-map" class="btn-icon" style="width:100%; height:44px; font-weight:700; gap:8px;">
             <svg class="icon" viewBox="0 0 24 24"><use href="#icon-map"></use></svg>
-            <span>Открыть карту</span>
+            <span data-i18n="modal_btn_map">Открыть карту</span>
           </button>
           <button id="m-btn-connect" class="btn-primary" style="height:44px; justify-content:center;">
             <svg class="icon" viewBox="0 0 24 24" style="width:14px; height:14px;"><use href="#icon-play"></use></svg>
-            <span>ПОДКЛЮЧИТЬСЯ</span>
+            <span data-i18n="btn_connect">ПОДКЛЮЧИТЬСЯ</span>
           </button>
         </div>
       </div>
@@ -465,14 +463,14 @@
   <div id="telegram-link-modal" class="modal-overlay">
     <div class="modal-card" style="width:480px;">
       <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 22px; border-bottom:1px solid var(--border);">
-        <div style="font-size:16px; font-weight:700;">Привязка Telegram Бота</div>
-        <button class="modal-close-btn" style="position:static;" title="Закрыть">
+        <div style="font-size:16px; font-weight:700;" data-i18n="tg_modal_title">Привязка Telegram Бота</div>
+        <button class="modal-close-btn" style="position:static;" data-i18n-title="btn_close_title" title="Закрыть">
           <svg class="icon" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
         </button>
       </div>
 
       <div style="padding:22px;">
-        <div id="tg-modal-status" style="font-size:12px; color:var(--muted); margin-bottom:16px; line-height:1.5;">
+        <div id="tg-modal-status" style="font-size:12px; color:var(--muted); margin-bottom:16px; line-height:1.5;" data-i18n="tg_modal_status_default">
           Отправьте данный код Telegram-боту для связывания вашего аккаунта:
         </div>
 
@@ -481,8 +479,8 @@
         </div>
 
         <div style="display:flex; justify-content:space-between; gap:10px;">
-          <button id="tg-unlink-btn" class="btn-icon" style="height:40px; padding:0 14px; color:var(--danger); display:none;">Отвязать</button>
-          <button id="tg-copy-btn" class="btn-primary" style="height:40px; margin-left:auto;">Скопировать код</button>
+          <button id="tg-unlink-btn" class="btn-icon" style="height:40px; padding:0 14px; color:var(--danger); display:none;" data-i18n="tg_unlink_btn">Отвязать</button>
+          <button id="tg-copy-btn" class="btn-primary" style="height:40px; margin-left:auto;" data-i18n="tg_copy_btn">Скопировать код</button>
         </div>
       </div>
     </div>
@@ -494,25 +492,25 @@
   <div id="context-menu" class="context-menu">
     <div id="ctx-connect" class="context-item">
       <svg class="icon" viewBox="0 0 24 24"><use href="#icon-play"></use></svg>
-      <span>Подключиться</span>
+      <span data-i18n="ctx_connect">Подключиться</span>
     </div>
     <div id="ctx-autoarm" class="context-item">
       <svg class="icon" viewBox="0 0 24 24"><use href="#icon-shield-armed"></use></svg>
-      <span>Взвести автоподключение</span>
+      <span data-i18n="ctx_autoarm_arm">Взвести автоподключение</span>
     </div>
     <div class="context-separator"></div>
     <div id="ctx-copy" class="context-item">
       <svg class="icon" viewBox="0 0 24 24"><use href="#icon-copy"></use></svg>
-      <span>Копировать адрес</span>
+      <span data-i18n="ctx_copy">Копировать адрес</span>
     </div>
     <div id="ctx-details" class="context-item">
       <svg class="icon" viewBox="0 0 24 24"><use href="#icon-cube"></use></svg>
-      <span>Информация о сервере</span>
+      <span data-i18n="ctx_details">Информация о сервере</span>
     </div>
     <div class="context-separator"></div>
     <div id="ctx-delete" class="context-item" style="color:var(--danger);">
       <svg class="icon" viewBox="0 0 24 24"><use href="#icon-trash"></use></svg>
-      <span>Удалить из списка</span>
+      <span data-i18n="ctx_delete">Удалить из списка</span>
     </div>
   </div>
 
@@ -523,14 +521,14 @@
     <!-- Left: Rust Process Status Indicator -->
     <div class="footer-section footer-left">
       <div id="rust-status-dot" class="footer-dot"></div>
-      <span id="rust-status-label" style="font-weight:700; font-size:12px; color:var(--muted);">Rust: не запущен</span>
+      <span id="rust-status-label" style="font-weight:700; font-size:12px; color:var(--muted);" data-i18n="rust_status_stopped">Rust: не запущен</span>
     </div>
 
     <!-- Right: Auto-reconnect armed status + Disarm button -->
     <div class="footer-section footer-right">
       <div id="armed-status-dot" class="footer-dot"></div>
-      <span id="armed-status-label" style="font-weight:700; font-size:12px; color:var(--muted);">Автоподключение: выключено</span>
-      <button id="btn-disarm-footer" class="btn-disarm" disabled>Выключить</button>
+      <span id="armed-status-label" style="font-weight:700; font-size:12px; color:var(--muted);" data-i18n="armed_status_off">Автоподключение: выключено</span>
+      <button id="btn-disarm-footer" class="btn-disarm" disabled data-i18n="btn_disarm">Выключить</button>
     </div>
   </footer>
 

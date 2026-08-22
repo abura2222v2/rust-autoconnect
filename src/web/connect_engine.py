@@ -22,6 +22,7 @@ from typing import Optional
 from ..core.a2s_client import a2s_client
 from ..core.config import config
 from ..core.history_store import history_store
+from ..core.i18n import i18n
 from ..core.network_clock import NetworkClock
 from ..core.smart_monitor import ConnectionPhase, ConnectionSession
 from ..services import steam_service
@@ -171,18 +172,18 @@ class WebConnectController:
                 host, port_str = target.split(":", 1)
                 port = int(port_str)
             except ValueError:
-                self.bridge.log("Неверный формат адреса (ожидается IP:PORT).", level="error")
+                self.bridge.log(i18n.t("err_invalid_address"), level="error")
                 self.stop(explicit=False)
                 self.bridge._session_status = "idle"
                 self.bridge.broadcast("state_updated", self.bridge.get_state())
                 return
 
-            self.bridge.log(f"Определение IP для {host}...", level="info")
+            self.bridge.log(i18n.t("log_resolving_ip", host=host), level="info")
             real_ip, dns_error = _resolve_hostname_bounded(host)
             if dns_error:
-                self.bridge.log(f"Не удалось определить IP для {host}, использую как есть.", level="warning")
+                self.bridge.log(i18n.t("log_dns_failed", host=host), level="warning")
             elif real_ip != host:
-                self.bridge.log(f"IP определён: {real_ip}", level="success")
+                self.bridge.log(i18n.t("log_dns_resolved", real_ip=real_ip), level="success")
 
             if not self._is_current(operation_id, session):
                 return
@@ -194,12 +195,12 @@ class WebConnectController:
             self._refresh_provider_hint(operation_id, session, canonical_target)
 
             if session.begin_wipe_restart_hold(self.network_clock.now()):
-                self.bridge.log("Ожидание рестарта после вайпа перед подключением...", level="warning")
+                self.bridge.log(i18n.t("log_wipe_restart_wait"), level="warning")
 
             swarm_service.join_room(canonical_target)
             history_store.add_to_history(target, host, canonical_target)
             self.bridge.broadcast("state_updated", self.bridge.get_state())
-            self.bridge.log(f"Начинаю умный мониторинг {canonical_target}...", level="info")
+            self.bridge.log(i18n.t("log_smart_monitor_start", canonical_target=canonical_target), level="info")
 
             while self._is_current(operation_id, session):
                 now = self.network_clock.now()
@@ -208,14 +209,14 @@ class WebConnectController:
                     self._refresh_provider_hint(operation_id, session, canonical_target)
 
                 if session.begin_wipe_restart_hold(now):
-                    self.bridge.log("Ожидание рестарта после вайпа...", level="warning")
+                    self.bridge.log(i18n.t("log_wipe_restart_wait_loop"), level="warning")
 
                 status = a2s_client.check_server_status(real_ip, port, session.stop_event)
                 if not self._is_current(operation_id, session):
                     return
 
                 if session.observe_query_result(status.alive, self.network_clock.now()):
-                    self.bridge.log("Сервер перестал отвечать после успешного ответа. Быстрый поиск включён.", level="warning")
+                    self.bridge.log(i18n.t("log_server_stopped_responding"), level="warning")
 
                 if status.alive:
                     has_capacity = status.max_players <= 0 or status.player_count < status.max_players
@@ -223,7 +224,7 @@ class WebConnectController:
                         self._dispatch_launch(operation_id, session, canonical_target, queue_mode=not has_capacity)
                         return
                     self.bridge.log(
-                        f"Сервер полон ({status.player_count}/{status.max_players}). Жду свободное место...",
+                        i18n.t("log_server_full", player_count=status.player_count, max_players=status.max_players),
                         level="warning",
                     )
                     wait = session.full_server_retry_seconds(self.network_clock.now())
@@ -259,7 +260,7 @@ class WebConnectController:
                 )
                 if online is False and changed:
                     if session.confirm_wipe_restart():
-                        self.bridge.log("Рестарт вайпа обнаружен по общему кэшу.", level="warning")
+                        self.bridge.log(i18n.t("log_wipe_restart_detected_cache"), level="warning")
                     self._poll_wake_event.set()
                 # A changed map seed near force-wipe time is direct proof the map
                 # regenerated - the same signal community wipe trackers rely on.
@@ -267,7 +268,7 @@ class WebConnectController:
                     fingerprint = (snapshot.map_seed, snapshot.map_size)
                     if session.observe_provider_wipe_fingerprint(fingerprint, now=self.network_clock.now()):
                         if session.confirm_wipe_restart():
-                            self.bridge.log("Изменение карты обнаружено - сервер только что вайпнулся.", level="warning")
+                            self.bridge.log(i18n.t("log_map_change_detected"), level="warning")
                         session.request_turbo(self.network_clock.now())
                         self._poll_wake_event.set()
             finally:
@@ -287,13 +288,14 @@ class WebConnectController:
             else:
                 import webbrowser
                 webbrowser.open(url)
-            self.bridge.log("Команда запуска отправлена в Steam." + (" (очередь)" if queue_mode else ""), level="success")
+            queue_suffix = i18n.t("log_launch_sent_queue_suffix") if queue_mode else ""
+            self.bridge.log(i18n.t("log_launch_sent") + queue_suffix, level="success")
             self.bridge._session_status = "Queueing" if queue_mode else "Launching"
             self.bridge._last_connected_ip = target
             self.bridge.broadcast("state_updated", self.bridge.get_state())
             self._start_confirmation_watchdog(session, target, queue_mode=queue_mode)
         except Exception as err:
-            self.bridge.log(f"Ошибка запуска: {err}", level="error")
+            self.bridge.log(i18n.t("log_launch_error", err=str(err)), level="error")
             self.stop(explicit=False)
 
     def _start_confirmation_watchdog(self, session: ConnectionSession, target: str, *, queue_mode: bool) -> None:
@@ -304,7 +306,7 @@ class WebConnectController:
                 return
             if self._active_session is session and not self.is_connected:
                 self.bridge.log(
-                    f"Подключение к {target} не подтверждено логом Rust за {int(timeout)}с.",
+                    i18n.t("log_confirm_watchdog_timeout", target=target, timeout=int(timeout)),
                     level="warning",
                 )
 
@@ -323,7 +325,7 @@ class WebConnectController:
             if not self.is_connected and _log_confirms_connection(event, target, session):
                 self.is_connected = True
                 session.phase = ConnectionPhase.CONNECTED
-                self.bridge.log(f"Подключение подтверждено: {target}", level="success")
+                self.bridge.log(i18n.t("log_connection_confirmed", target=target), level="success")
                 self.bridge._session_status = "Connected"
                 self.bridge.broadcast("state_updated", self.bridge.get_state())
                 threading.Thread(target=telegram_service.notify, args=("connected", target), daemon=True, name="telegram-connected").start()
@@ -336,7 +338,7 @@ class WebConnectController:
                 session.target_connection_attempt_seen = True
 
         def handle_disconnect(reason: str) -> None:
-            self.bridge.log(f"Отключение от сервера: {reason}", level="warning")
+            self.bridge.log(i18n.t("log_disconnected", reason=reason), level="warning")
             was_connected = self.is_connected
             self.is_connected = False
             armed = history_store.get_armed_server()
@@ -350,12 +352,12 @@ class WebConnectController:
             self.bridge._session_status = "idle"
             self.bridge.broadcast("state_updated", self.bridge.get_state())
             if should_reconnect:
-                self.bridge.log("Автоподключение: переподключаюсь...", level="info")
+                self.bridge.log(i18n.t("log_autoreconnect"), level="info")
                 self.connect(target)
 
         watcher = LogWatcher(
             on_disconnect=handle_disconnect,
-            on_error=lambda err: self.bridge.log(f"Ошибка чтения лога: {err}", level="error"),
+            on_error=lambda err: self.bridge.log(i18n.t("log_read_log_error", err=str(err)), level="error"),
             on_event=handle_event,
         )
         self.log_watcher = watcher
@@ -365,17 +367,13 @@ class WebConnectController:
         watcher.start(loop=self.bridge._event_loop)
 
     def _on_swarm_status(self, status: str) -> None:
-        messages = {
-            "disabled": ("Swarm: отключен в настройках.", "info"),
-            "not_configured": ("Swarm: включен, но публичный ключ Supabase не настроен.", "warning"),
-            "invalid_key": ("Swarm: неверный ключ доступа (нужен публичный ключ Realtime).", "error"),
-            "connecting": ("Swarm: подключение...", "info"),
-            "connected": ("Swarm: подключено.", "success"),
-            "disconnected": ("Swarm: отключено, переподключаюсь...", "warning"),
-            "error": ("Swarm: ошибка соединения.", "error"),
+        levels = {
+            "disabled": "info", "not_configured": "warning", "invalid_key": "error",
+            "connecting": "info", "connected": "success", "disconnected": "warning", "error": "error",
         }
-        message, level = messages.get(status, (f"Swarm: {status}", "info"))
-        self.bridge.log(message, level=level)
+        key = f"swarm_{status}"
+        message = i18n.t(key) if key in levels else f"Swarm: {status}"
+        self.bridge.log(message, level=levels.get(status, "info"))
 
     def _on_swarm_event(self, event_name: str, ip_port: str) -> None:
         if not self.is_polling:
@@ -386,7 +384,7 @@ class WebConnectController:
         if event_name == "server_connected":
             self._poll_wake_event.set()
         elif event_name == "swarm_stop_spam" and not session.launched_by_app:
-            self.bridge.log("Другой участник Swarm уже подключился. Приостанавливаю мониторинг.", level="info")
+            self.bridge.log(i18n.t("log_swarm_paused"), level="info")
             self.stop(explicit=True)
             self.bridge._session_status = "idle"
             self.bridge.broadcast("state_updated", self.bridge.get_state())

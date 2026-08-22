@@ -65,7 +65,8 @@ class ModalManager {
       sizeVal.textContent = (typeof raw === 'number' && raw > 100) ? `${(raw / 1000).toFixed(1)} km` : raw;
     }
     if (descElem) {
-      descElem.textContent = server.description || 'Классический Rust сервер. Еженедельный вайп по пятницам. Активное комьюнити, баланс между выживанием и PvP. Удачи и приятной игры!';
+      descElem.textContent = server.description || (window.STRINGS || {}).modal_desc_default
+        || 'A classic Rust server. Weekly wipe on Fridays. Active community, a good balance between survival and PvP. Good luck and have fun!';
     }
 
     // Community Link Handlers
@@ -108,9 +109,11 @@ class ModalManager {
     const statusText = document.getElementById('tg-modal-status');
     const unlinkBtn = document.getElementById('tg-unlink-btn');
 
+    const s = window.STRINGS || {};
+
     if (codeBox) {
       if (isLinked) {
-        const formattedName = displayName || 'Подключен';
+        const formattedName = displayName || s.tg_badge_connected || 'Connected';
         codeBox.textContent = formattedName;
         codeBox.style.color = 'var(--success)';
         codeBox.style.fontSize = '20px';
@@ -123,8 +126,8 @@ class ModalManager {
 
     if (statusText) {
       statusText.textContent = isLinked
-        ? `Привязан к Telegram-аккаунту: ${displayName || 'Пользователь'}`
-        : 'Отправьте данный код Telegram-боту для связывания вашего аккаунта:';
+        ? (s.tg_status_linked_modal || 'Linked to Telegram account: {display_name}').replace('{display_name}', displayName || s.tg_user_fallback || 'User')
+        : (s.tg_modal_status_default || 'Send this code to the Telegram bot to link your account:');
     }
 
     if (unlinkBtn) {
@@ -140,8 +143,8 @@ class ModalManager {
       copyBtn.onclick = () => {
         if (code) {
           navigator.clipboard.writeText(code);
-          copyBtn.textContent = 'Скопировано!';
-          setTimeout(() => { copyBtn.textContent = 'Скопировать код'; }, 1400);
+          copyBtn.textContent = s.tg_copy_done || 'Copied!';
+          setTimeout(() => { copyBtn.textContent = s.tg_copy_btn || 'Copy code'; }, 1400);
         }
       };
     }

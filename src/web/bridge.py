@@ -36,6 +36,33 @@ def _is_valid_endpoint(value: str) -> bool:
         return False
 
 
+# Every translation key the web UI's static markup and JS can reference via
+# state.strings. Log-message keys used only server-side don't need to be here.
+WEB_STRING_KEYS = [
+    "nav_servers", "nav_bench", "nav_settings", "section_servers", "ip_input_placeholder", "btn_connect",
+    "search_placeholder", "filter_toggle_title", "drawer_title", "th_name", "th_addr",
+    "th_players", "th_status", "th_action", "section_bench", "bench_system_specs",
+    "bench_run_count", "btn_run_benchmark", "bench_cpu_label", "bench_ram_label",
+    "bench_disk_label", "bench_online_ranking", "rank_col_config", "rank_col_time",
+    "rank_col_tests", "section_settings", "setting_lang_title", "setting_lang_desc",
+    "setting_tray_title", "setting_tray_desc", "setting_swarm_title", "setting_swarm_desc",
+    "setting_share_title", "setting_share_desc", "setting_tg_title", "tg_status_default",
+    "btn_tg_link", "chk_autoscroll_label", "btn_clear_log_title", "btn_close_title",
+    "btn_copy_ip_title", "modal_stat_map", "modal_stat_size", "modal_desc_default",
+    "modal_btn_website", "modal_btn_rules", "modal_btn_map", "tg_modal_title",
+    "tg_modal_status_default", "tg_unlink_btn", "tg_copy_btn", "ctx_connect",
+    "ctx_autoarm_arm", "ctx_autoarm_disarm", "ctx_copy", "ctx_details", "ctx_delete",
+    "rust_status_stopped", "rust_status_running", "rust_status_starting", "armed_status_off",
+    "armed_status_on", "btn_disarm", "wipe_now", "wipe_countdown_label", "wipe_days_suffix",
+    "wipe_hours_suffix", "wipe_minutes_suffix", "bench_testing", "btn_cancel",
+    "tg_linked_default_name", "tg_status_linked", "btn_tg_manage", "tg_badge_connected",
+    "tg_status_code", "btn_tg_show_code", "status_online", "status_offline", "status_checking",
+    "btn_favorite_title", "btn_autoarm_on_title", "btn_autoarm_off_title", "btn_delete_title",
+    "confirm_delete_server", "confirm_delete_server_ctx", "tg_status_linked_modal",
+    "tg_user_fallback", "tg_copy_done", "no_servers_found",
+]
+
+
 class WebBridge:
     """Manages state, WebSocket broadcast, and command dispatch for Web UI."""
 
@@ -209,7 +236,7 @@ class WebBridge:
                         if isinstance(endpoint, str) and _is_valid_endpoint(endpoint):
                             endpoints.append(endpoint)
                     if server_intelligence_service.share_saved_endpoints(endpoints):
-                        self.log(f"Отправлено {len(endpoints)} сохранённых серверов в общий кэш.", level="info")
+                        self.log(self.i18n.t("log_share_saved_servers", count=len(endpoints)), level="info")
             except Exception:
                 pass
             time.sleep(600.0)
@@ -285,6 +312,7 @@ class WebBridge:
             },
             "version": "v0.7.0",
             "version_status": "Latest",
+            "strings": {key: self.i18n.t(key) for key in WEB_STRING_KEYS},
         }
 
     # ==========================================
@@ -307,7 +335,7 @@ class WebBridge:
             self.connect_engine.connect(final_ip)
             return {"success": True, "ip": final_ip, "name": meta.get("name", final_ip)}
         except Exception as err:
-            self.log(f"Ошибка подключения: {err}", level="error")
+            self.log(self.i18n.t("err_connect_error", err=str(err)), level="error")
             return {"success": False, "error": str(err)}
 
     def stop_connecting(self) -> Dict[str, Any]:
@@ -322,10 +350,10 @@ class WebBridge:
         current_armed = self.history_store.get_armed_server()
         if current_armed == ip:
             self.history_store.set_armed_server(ip)  # Toggles off
-            self.log(f"Автоподключение снято с {ip}", level="info")
+            self.log(self.i18n.t("log_autoarm_removed", ip=ip), level="info")
         else:
             self.history_store.set_armed_server(ip)
-            self.log(f"Автоподключение взведено на {ip} ({name})", level="success")
+            self.log(self.i18n.t("log_autoarm_armed", ip=ip, name=name), level="success")
 
         self.broadcast("state_updated", self.get_state())
         return {"success": True, "armed": self.history_store.get_armed_server()}
@@ -334,7 +362,7 @@ class WebBridge:
         armed = self.history_store.get_armed_server()
         if armed:
             self.history_store.set_armed_server(armed)
-            self.log("Автоподключение выключено", level="info")
+            self.log(self.i18n.t("log_autoarm_disarmed"), level="info")
         self.broadcast("state_updated", self.get_state())
         return {"success": True}
 
@@ -345,7 +373,7 @@ class WebBridge:
 
     def remove_server(self, ip: str) -> Dict[str, Any]:
         self.history_store.remove_from_history(ip)
-        self.log(f"Сервер {ip} удалён из истории", level="info")
+        self.log(self.i18n.t("log_server_removed", ip=ip), level="info")
         self.broadcast("state_updated", self.get_state())
         return {"success": True}
 
@@ -382,7 +410,7 @@ class WebBridge:
                 unresolved = 0
             else:
                 added, updated, unresolved = self.history_store.import_server_text(content)
-            self.log(f"Импорт завершён: добавлено {added}, обновлено {updated}", level="success")
+            self.log(self.i18n.t("log_import_done", added=added, updated=updated), level="success")
             self.broadcast("state_updated", self.get_state())
             return {"success": True, "added": added, "updated": updated, "unresolved": unresolved}
         except Exception as err:
@@ -411,7 +439,7 @@ class WebBridge:
 
     def run_benchmark(self) -> Dict[str, Any]:
         def work():
-            self.log("Запуск теста производительности оборудования...", level="info", color="#E94B16")
+            self.log(self.i18n.t("log_benchmark_start"), level="info", color="#E94B16")
             self.broadcast("benchmark_status", {"status": "running", "progress": 10})
             time.sleep(1.0)
             self.broadcast("benchmark_status", {"status": "running", "progress": 40})
@@ -430,7 +458,7 @@ class WebBridge:
                 "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             }
             self.history_store.add_benchmark_run(run_data)
-            self.log(f"Тест завершён! Время загрузки: {total_time:.2f}с", level="success")
+            self.log(self.i18n.t("log_benchmark_done", total_time=f"{total_time:.2f}"), level="success")
             self.broadcast("benchmark_status", {"status": "completed", "result": run_data})
 
         threading.Thread(target=work, daemon=True, name="web-benchmark").start()

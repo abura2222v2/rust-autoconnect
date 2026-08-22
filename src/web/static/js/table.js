@@ -90,7 +90,7 @@ class ServerTableManager {
       this.tableBody.innerHTML = `
         <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:180px; color:var(--muted); gap:8px;">
           <svg class="icon" viewBox="0 0 24 24" style="width:32px; height:32px; opacity:0.4;"><use href="#icon-filter"></use></svg>
-          <div>Серверы не найдены</div>
+          <div>${(window.STRINGS || {}).no_servers_found || 'No servers found'}</div>
         </div>
       `;
       return;
@@ -107,15 +107,20 @@ class ServerTableManager {
     const armClass = s.is_armed ? 'armed' : '';
     const safeName = escapeHtml(s.name || s.ip);
     const safeIp = escapeHtml(s.ip);
-    const statusTitles = { online: 'Онлайн', offline: 'Оффлайн', checking: 'Проверка...' };
+    const strings = window.STRINGS || {};
+    const statusTitles = {
+      online: strings.status_online || 'Online',
+      offline: strings.status_offline || 'Offline',
+      checking: strings.status_checking || 'Checking...',
+    };
     const statusClass = s.status || 'checking';
-    const statusTitle = statusTitles[statusClass] || 'Проверка...';
+    const statusTitle = statusTitles[statusClass] || statusTitles.checking;
 
     return `
       <div class="table-row" data-ip="${safeIp}" data-name="${safeName}">
         <!-- 1. Star Favorite -->
         <div class="td-cell td-star">
-          <button class="btn-star ${starClass}" title="В избранное" data-action="favorite">
+          <button class="btn-star ${starClass}" title="${strings.btn_favorite_title || 'Add to favorites'}" data-action="favorite">
             <svg class="icon" viewBox="0 0 24 24"><use href="#${starIcon}"></use></svg>
           </button>
         </div>
@@ -132,7 +137,7 @@ class ServerTableManager {
         <!-- 3. Address -->
         <div class="td-cell td-addr" title="${safeIp}">
           <span>${safeIp}</span>
-          <button class="btn-copy-mini" title="Копировать адрес" data-action="copy">
+          <button class="btn-copy-mini" title="${strings.ctx_copy || 'Copy address'}" data-action="copy">
             <svg class="icon" viewBox="0 0 24 24"><use href="#icon-copy"></use></svg>
           </button>
         </div>
@@ -155,13 +160,13 @@ class ServerTableManager {
 
         <!-- 6. Actions (AutoArm, Delete, Connect) -->
         <div class="td-cell td-action">
-          <button class="btn-row-action ${armClass}" title="${s.is_armed ? 'Автоподключение: включено' : 'Взвести автоподключение (AutoArm)'}" data-action="autoarm">
+          <button class="btn-row-action ${armClass}" title="${s.is_armed ? (strings.btn_autoarm_on_title || 'AutoConnect: on') : (strings.btn_autoarm_off_title || 'Arm AutoConnect')}" data-action="autoarm">
             <svg class="icon" viewBox="0 0 24 24"><use href="#${armIcon}"></use></svg>
           </button>
-          <button class="btn-row-action" title="Удалить сервер" data-action="delete">
+          <button class="btn-row-action" title="${strings.btn_delete_title || 'Delete server'}" data-action="delete">
             <svg class="icon" viewBox="0 0 24 24"><use href="#icon-trash"></use></svg>
           </button>
-          <button class="btn-row-action connect" title="Подключиться" data-action="connect">
+          <button class="btn-row-action connect" title="${strings.ctx_connect || 'Connect'}" data-action="connect">
             <svg class="icon" viewBox="0 0 24 24"><use href="#icon-play"></use></svg>
           </button>
         </div>
@@ -220,7 +225,8 @@ class ServerTableManager {
       if (delBtn) {
         delBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (confirm(`Удалить сервер ${name || ip} из списка?`)) {
+          const msg = ((window.STRINGS || {}).confirm_delete_server || 'Remove server {name} from the list?').replace('{name}', name || ip);
+          if (confirm(msg)) {
             window.api.removeServer(ip);
           }
         });
@@ -391,7 +397,9 @@ class ServerTableManager {
     if (deleteItem) {
       deleteItem.addEventListener('click', () => {
         if (this._activeContextMenuServer) {
-          if (confirm(`Удалить сервер ${this._activeContextMenuServer.name || this._activeContextMenuServer.ip}?`)) {
+          const name = this._activeContextMenuServer.name || this._activeContextMenuServer.ip;
+          const msg = ((window.STRINGS || {}).confirm_delete_server_ctx || 'Delete server {name}?').replace('{name}', name);
+          if (confirm(msg)) {
             window.api.removeServer(this._activeContextMenuServer.ip);
           }
         }
@@ -405,9 +413,10 @@ class ServerTableManager {
 
     const armItem = document.getElementById('ctx-autoarm');
     if (armItem) {
-      armItem.innerHTML = server.is_armed
-        ? '<svg class="icon" viewBox="0 0 24 24"><use href="#icon-shield"></use></svg> <span>Снять автоподключение</span>'
-        : '<svg class="icon" viewBox="0 0 24 24"><use href="#icon-shield-armed"></use></svg> <span>Взвести автоподключение</span>';
+      const s = window.STRINGS || {};
+      const label = server.is_armed ? (s.ctx_autoarm_disarm || 'Disarm AutoConnect') : (s.ctx_autoarm_arm || 'Arm AutoConnect');
+      const icon = server.is_armed ? 'icon-shield' : 'icon-shield-armed';
+      armItem.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><use href="#${icon}"></use></svg> <span>${escapeHtml(label)}</span>`;
     }
 
     this.contextMenu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
