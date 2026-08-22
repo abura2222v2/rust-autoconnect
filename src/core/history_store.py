@@ -20,7 +20,10 @@ DEFAULT_DATA: Dict[str, Any] = {
     "leaderboard_enabled": True, "username": "", "client_id": "",
     "installation_id": "", "armed_server": "", "benchmark_runs": [],
     "home_splitter_width": 270, "bench_splitter_width": 270, "auto_arm": True,
-    "share_saved_servers": False,
+    "share_saved_servers": False, "deleted_popular_ips": [],
+    "column_widths": {
+        "star": 32, "name": 260, "addr": 180, "players": 76, "local": 56, "action": 110
+    },
 }
 
 _TEXT_ENDPOINT_RE = re.compile(r"[A-Za-z0-9.-]{1,253}(?::\d{1,5})?")
@@ -52,6 +55,20 @@ class HistoryStore:
             item for item in normalized["benchmark_runs"]
             if isinstance(item, dict) and isinstance(item.get("id"), str) and isinstance(item.get("configuration_key"), str)
         ][-250:]
+        deleted = normalized.get("deleted_popular_ips", [])
+        if isinstance(deleted, list):
+            normalized["deleted_popular_ips"] = [ip for ip in deleted if isinstance(ip, str)]
+        else:
+            normalized["deleted_popular_ips"] = []
+        col_w = normalized.get("column_widths")
+        if isinstance(col_w, dict):
+            clean_cw = copy.deepcopy(DEFAULT_DATA["column_widths"])
+            for k in clean_cw:
+                if isinstance(col_w.get(k), (int, float)) and col_w[k] > 0:
+                    clean_cw[k] = int(col_w[k])
+            normalized["column_widths"] = clean_cw
+        else:
+            normalized["column_widths"] = copy.deepcopy(DEFAULT_DATA["column_widths"])
         return normalized
 
     def _backup_corrupted_file(self, data_file: Path) -> None:
@@ -77,6 +94,7 @@ class HistoryStore:
                 self._backup_corrupted_file(data_file)
                 self.data = copy.deepcopy(DEFAULT_DATA)
                 self.save()
+
     def save(self) -> bool:
         """Atomically persist the current validated state."""
         with self._lock:
@@ -102,6 +120,9 @@ class HistoryStore:
 
     def add_to_history(self, ip_port: str, name: str, canonical_endpoint: str = ""):
         with self._lock:
+            deleted = self.data.get("deleted_popular_ips")
+            if isinstance(deleted, list) and ip_port in deleted:
+                deleted.remove(ip_port)
             previous = next((item for item in self.data["history"] if item.get("ip") == ip_port), {})
             history = [item for item in self.data["history"] if item.get("ip") != ip_port]
             record = {**previous, "ip": ip_port, "name": name, "added_at": int(time.time())}
@@ -111,7 +132,10 @@ class HistoryStore:
             self.data["history"] = history[:20]
             self.save()
 
-    def update_server_profile(self, ip_port: str, *, state: str = "", reason: str = "", checked_at: int | None = None) -> bool:
+    def update_server_profile(
+        self, ip_port: str, *, state: str = "", reason: str = "", checked_at: int | None = None,
+        connected_at: int | None = None,
+    ) -> bool:
         """Persist concise local connection state for one saved server."""
         with self._lock:
             for item in self.data["history"]:
@@ -119,6 +143,8 @@ class HistoryStore:
                     item["last_state"] = str(state).strip()[:48]
                     item["last_checked_at"] = int(checked_at if checked_at is not None else time.time())
                     item["last_disconnect_reason"] = str(reason).strip()[:256]
+                    if connected_at is not None:
+                        item["last_connected_at"] = max(1, int(connected_at))
                     return self.save()
         return False
 
@@ -131,16 +157,43 @@ class HistoryStore:
                 "last_state": item.get("last_state", ""),
                 "last_checked_at": item.get("last_checked_at", 0),
                 "last_disconnect_reason": item.get("last_disconnect_reason", ""),
+                "last_connected_at": item.get("last_connected_at", 0),
             }
 
     def remove_from_history(self, ip_port: str):
-        """Forget one server completely, including local favorite/arm state."""
+        """Forget one server completely, including local favorite/arm state and tracking deleted popular servers."""
         with self._lock:
             self.data["history"] = [item for item in self.data["history"] if item.get("ip") != ip_port]
             self.data["favorites"] = [item for item in self.data["favorites"] if item.get("ip") != ip_port]
             if self.data.get("armed_server") == ip_port:
                 self.data["armed_server"] = ""
+            deleted = self.data.setdefault("deleted_popular_ips", [])
+            if not isinstance(deleted, list):
+                deleted = []
+                self.data["deleted_popular_ips"] = deleted
+            if ip_port not in deleted:
+                deleted.append(ip_port)
             return self.save()
+
+    def get_active_history(self, popular_list: list[dict] | None = None) -> list[dict]:
+        """Return active history merged with popular servers, excluding deleted popular servers."""
+        with self._lock:
+            deleted = set(self.data.get("deleted_popular_ips", []))
+            history_items = [item for item in self.data["history"] if item.get("ip") not in deleted]
+            if not popular_list:
+                return copy.deepcopy(history_items)
+            seen = {item.get("ip") for item in history_items}
+            combined = copy.deepcopy(history_items)
+            for pop in popular_list:
+                pop_ip = pop.get("ip") if isinstance(pop, dict) else None
+                if pop_ip and pop_ip not in seen and pop_ip not in deleted:
+                    combined.append(copy.deepcopy(pop))
+                    seen.add(pop_ip)
+            return combined
+
+    def get_deleted_popular_ips(self) -> list[str]:
+        with self._lock:
+            return copy.deepcopy(self.data.get("deleted_popular_ips", []))
 
     def toggle_favorite(self, ip_port: str, name: str):
         with self._lock:
@@ -318,6 +371,7 @@ class HistoryStore:
         added = 0
         updated = 0
         with self._lock:
+            deleted_popular = self.data.get("deleted_popular_ips", [])
             current = {item.get("ip"): item for item in self.data["history"] if isinstance(item, dict)}
             canonical_index = {
                 item.get("canonical_endpoint"): item
@@ -326,6 +380,8 @@ class HistoryStore:
             }
             favorite_ips = {item.get("ip") for item in self.data["favorites"] if isinstance(item, dict)}
             for entry in deduped.values():
+                if isinstance(deleted_popular, list) and entry["ip"] in deleted_popular:
+                    deleted_popular.remove(entry["ip"])
                 existing = current.get(entry["ip"]) or canonical_index.get(entry["canonical_endpoint"])
                 if existing:
                     stored_ip = existing.get("ip", entry["ip"])
@@ -371,6 +427,7 @@ class HistoryStore:
         added = 0
         updated = 0
         with self._lock:
+            deleted_popular = self.data.get("deleted_popular_ips", [])
             current = {item.get("ip"): item for item in self.data["history"] if isinstance(item, dict)}
             for server in servers[:100]:
                 if not isinstance(server, dict):
@@ -385,6 +442,8 @@ class HistoryStore:
                 port = int(ip.rsplit(":", 1)[1])
                 if not 1 <= port <= 65535:
                     continue
+                if isinstance(deleted_popular, list) and ip in deleted_popular:
+                    deleted_popular.remove(ip)
                 try:
                     added_at = int(server.get("added_at", time.time()))
                 except (TypeError, ValueError, OverflowError):
@@ -535,9 +594,14 @@ class HistoryStore:
     def set_auto_arm(self, val: bool):
         self._set_value("auto_arm", bool(val))
 
-    def set_armed_server(self, ip_port: str):
+    def set_armed_server(self, ip_port: str | None, force: bool = False):
+        """Set or toggle armed server. If force=True, sets without toggling off."""
         with self._lock:
-            self.data["armed_server"] = "" if self.data["armed_server"] == ip_port else ip_port
+            target = ip_port or ""
+            if force:
+                self.data["armed_server"] = target
+            else:
+                self.data["armed_server"] = "" if self.data.get("armed_server") == target else target
             self.save()
 
     def get_home_splitter_width(self) -> int:
@@ -553,6 +617,21 @@ class HistoryStore:
             
     def set_bench_splitter_width(self, width: int):
         self._set_value("bench_splitter_width", width)
+
+    def get_column_widths(self) -> Dict[str, int]:
+        with self._lock:
+            return copy.deepcopy(self.data.get("column_widths", DEFAULT_DATA["column_widths"]))
+
+    def set_column_widths(self, widths: Dict[str, int]) -> bool:
+        if not isinstance(widths, dict):
+            return False
+        with self._lock:
+            current = copy.deepcopy(self.data.get("column_widths", DEFAULT_DATA["column_widths"]))
+            for k, v in widths.items():
+                if k in current and isinstance(v, (int, float)) and v > 0:
+                    current[k] = int(v)
+            self.data["column_widths"] = current
+            return self.save()
 
 
 history_store = HistoryStore()

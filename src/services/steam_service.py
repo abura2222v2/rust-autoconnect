@@ -26,21 +26,22 @@ def get_steam_path() -> str:
     return steam_path
 
 FORCE_WIPE_ZONE = ZoneInfo("Europe/London")
+FORCE_WIPE_UTC_HOUR = 18
 
 
 def next_force_wipe_at(now_utc: Optional[datetime] = None) -> datetime:
     """Return the next official force-wipe instant in UTC.
 
-    Facepunch's default monthly schedule is the first Thursday at 19:00
-    London time.  Keeping this as an aware timestamp handles DST correctly.
+    The application uses the published global schedule: first Thursday at
+    18:00 UTC.  The displayed local time is derived from this instant.
     """
     now = (now_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    local = now.astimezone(FORCE_WIPE_ZONE)
-    first = local.replace(day=1, hour=19, minute=0, second=0, microsecond=0)
+    local = now.astimezone(timezone.utc)
+    first = local.replace(day=1, hour=FORCE_WIPE_UTC_HOUR, minute=0, second=0, microsecond=0)
     first += timedelta(days=(3 - first.weekday()) % 7)
     if first.astimezone(timezone.utc) <= now:
         next_month = (local.replace(day=28) + timedelta(days=4)).replace(day=1)
-        first = next_month.replace(hour=19, minute=0, second=0, microsecond=0)
+        first = next_month.replace(hour=FORCE_WIPE_UTC_HOUR, minute=0, second=0, microsecond=0)
         first += timedelta(days=(3 - first.weekday()) % 7)
     return first.astimezone(timezone.utc)
 
@@ -48,8 +49,8 @@ def next_force_wipe_at(now_utc: Optional[datetime] = None) -> datetime:
 def relevant_force_wipe_at(now_utc: Optional[datetime] = None) -> datetime:
     """Return this month's wipe while its post-wipe watch window is active."""
     now = (now_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    local = now.astimezone(FORCE_WIPE_ZONE)
-    current = local.replace(day=1, hour=19, minute=0, second=0, microsecond=0)
+    local = now.astimezone(timezone.utc)
+    current = local.replace(day=1, hour=FORCE_WIPE_UTC_HOUR, minute=0, second=0, microsecond=0)
     current += timedelta(days=(3 - current.weekday()) % 7)
     current_utc = current.astimezone(timezone.utc)
     if current_utc + timedelta(minutes=30) >= now:

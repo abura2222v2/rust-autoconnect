@@ -1,13 +1,13 @@
 [Setup]
 AppName=Rust AutoConnect
-AppVersion=0.6.1
+AppVersion=0.7.0
 DefaultDirName={autopf}\RustAutoConnect
 DefaultGroupName=Rust AutoConnect
 UninstallDisplayIcon={app}\RustAutoConnect.exe
 Compression=lzma2
 SolidCompression=yes
 OutputDir=dist
-OutputBaseFilename=RustAutoConnect_Setup_v0.6.1
+OutputBaseFilename=RustAutoConnect_Setup_v0.7.0
 
 [Files]
 Source: "dist\RustAutoConnect.exe"; DestDir: "{app}"; Flags: ignoreversion

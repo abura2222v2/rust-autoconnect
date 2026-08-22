@@ -26,6 +26,29 @@ from .gui.main_window import COLORS, MainWindow
 from .core.logger import app_logger
 
 
+def _resolve_hostname_bounded(host: str, timeout: float = 2.0) -> tuple[str, str]:
+    """Resolve a hostname with a hard timeout.
+
+    Uses shutdown(wait=False) so a slow/unresponsive DNS lookup doesn't block this
+    call past `timeout` - the default context-manager shutdown(wait=True) would
+    still block here until the underlying lookup finishes, defeating the timeout.
+    """
+    import concurrent.futures
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = pool.submit(socket.gethostbyname, host)
+        try:
+            return future.result(timeout=timeout), ""
+        except concurrent.futures.TimeoutError:
+            return host, f"DNS resolution timed out for {host}"
+        except socket.gaierror as e:
+            return host, str(e)
+        except Exception as e:
+            return host, str(e)
+    finally:
+        pool.shutdown(wait=False)
+
+
 def _is_valid_endpoint(value: str) -> bool:
     """Accept a bounded hostname-or-IP endpoint without interpreting it as a URL."""
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9.-]{1,253}:\d{1,5}", value):
@@ -230,6 +253,16 @@ class AppController(MainWindow):
                         self.log_safe(self.t("wipe_restart_detected"), "#F97316")
                     self.log_safe(self.t("provider_offline_turbo"), "#F97316")
                     self._poll_wake_event.set()
+                # A changed map seed near force-wipe time is direct proof the map
+                # regenerated (the same signal community wipe trackers rely on),
+                # catching a fast auto-restart that a single A2S miss might not.
+                if snapshot.fresh and snapshot.map_seed is not None:
+                    fingerprint = (snapshot.map_seed, snapshot.map_size)
+                    if session.observe_provider_wipe_fingerprint(fingerprint, now=self.network_clock.now()):
+                        if session.confirm_wipe_restart():
+                            self.log_safe(self.t("wipe_restart_detected"), "#F97316")
+                        session.request_turbo(self.network_clock.now())
+                        self._poll_wake_event.set()
             finally:
                 session.provider_refresh_in_flight = False
 
@@ -286,9 +319,9 @@ class AppController(MainWindow):
             match = re.search(r"(?:Connecting to|Client connected to)\s+([a-zA-Z0-9.-]+:\d{1,5})", event, re.IGNORECASE)
             if match and self.history_store.get_auto_arm():
                 ip_port = match.group(1)
-                if getattr(self, '_last_armed_from_log', None) != ip_port:
+                if self.__dict__.get('_last_armed_from_log') != ip_port:
                     self._last_armed_from_log = ip_port
-                    self.history_store.set_armed_server(ip_port)
+                    self.history_store.set_armed_server(ip_port, force=True)
                     self.dispatch_ui(self.refresh_history_ui)
                     self.dispatch_ui(self._refresh_session_state_once)
                     self.log_safe(self.t("auto_armed_server", default=f"Auto-Armed server: {ip_port}"), "#F97316")
@@ -375,8 +408,9 @@ class AppController(MainWindow):
         self.swarm_service.leave_room()
 
         def _update_ui():
+            connect_text = "ПОДКЛЮЧИТЬСЯ" if getattr(self, "lang", "EN") == "RU" else "CONNECT"
             self.connect_btn.configure(
-                text="CONNECT", fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"]
+                text=connect_text, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["text"]
             )
             self.ip_entry.configure(state="normal")
             self.set_connection_state("Idle")
@@ -407,15 +441,13 @@ class AppController(MainWindow):
                 self.stop_polling_safe()
                 return
 
-            # 1. Resolve DNS
-            real_ip = host
-            try:
-                self.log_safe(self.t("dns_resolve", host=host))
-                real_ip = socket.gethostbyname(host)
-                if real_ip != host:
-                    self.log_safe(self.t("dns_ok", ip=real_ip))
-            except socket.gaierror:
+            # 1. Resolve DNS (bounded so an unreachable DNS server can't stall the whole polling thread)
+            self.log_safe(self.t("dns_resolve", host=host))
+            real_ip, dns_error = _resolve_hostname_bounded(host)
+            if dns_error:
                 self.log_safe(self.t("dns_err", host=host))
+            elif real_ip != host:
+                self.log_safe(self.t("dns_ok", ip=real_ip))
 
             if not self._is_current_session(operation_id, session):
                 return
@@ -491,10 +523,20 @@ class AppController(MainWindow):
                     status = self.a2s_client.check_server_status(real_ip, port, session.stop_event)
                     if not self._is_current_session(operation_id, session):
                         return
-                    outcome = "launch_online" if status.alive else "launch_offline"
+                    rust_running = False
+                    monitor = self.__dict__.get("process_monitor")
+                    if monitor:
+                        try:
+                            rust_running = bool(monitor.is_rust_running())
+                        except Exception:
+                            rust_running = False
+                    outcome = ("rust_open_" if rust_running else "launch_") + ("online" if status.alive else "offline")
                     if outcome != getattr(self, "_last_probe_outcome", ""):
+                        msg_key = ("rust_open_server_online" if rust_running else "launch_server_online") if status.alive else (
+                            "rust_open_server_offline" if rust_running else "launch_server_offline"
+                        )
                         self.log_safe(
-                            self.t("launch_server_online" if status.alive else "launch_server_offline"),
+                            self.t(msg_key),
                             "#48D16D" if status.alive else "#F97316",
                         )
                         self._last_probe_outcome = outcome
@@ -712,7 +754,6 @@ class AppController(MainWindow):
             if event_name == "server_connected":
                 session = self._active_session
                 if session:
-                    session.request_turbo()
                     self._poll_wake_event.set()
                 self.log_safe(self.t("swarm_hint_received"), "#F97316")
             elif event_name == "swarm_stop_spam":
@@ -749,7 +790,7 @@ class AppController(MainWindow):
         import tkinter.messagebox as messagebox
         if self.process_monitor.is_rust_running():
             msg = self.t("bench_warn_running")
-            if messagebox.askyesno(self.t("close_rust_title"), msg):
+            if messagebox.askyesno(self.t("close_rust_title"), msg, parent=self):
                 self.process_monitor.force_kill_rust()
                 self.log_safe(self.t("closed_rust"))
             else:
@@ -760,7 +801,7 @@ class AppController(MainWindow):
             pass # No early return, proceed to combined instruction
             
         combined_msg = f"{self.t('bench_confirm_msg')}\n\n{self.t('bench_warn_f5')}"
-        if not messagebox.askokcancel(self.t("bench_instr_title"), combined_msg):
+        if not messagebox.askokcancel(self.t("bench_instr_title"), combined_msg, parent=self):
             self.log_safe(self.t("bench_aborted"))
             self.bench_btn.configure(state="normal")
             return
@@ -782,7 +823,7 @@ class AppController(MainWindow):
                 history_store.set_rust_path(rust_path)
             else:
                 self.log_safe(self.t("cannot_detect_rust"))
-                rust_path = filedialog.askdirectory(title=self.t("select_rust_folder_title"))
+                rust_path = filedialog.askdirectory(title=self.t("select_rust_folder_title"), parent=self)
                 if not rust_path:
                     self.log_safe(self.t("bench_aborted_no_path"))
                     self.bench_btn.configure(state="normal", text=self.t("run_test"), fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"])
@@ -807,7 +848,7 @@ class AppController(MainWindow):
         rust_path = history_store.get_rust_path()
         if not rust_path or not os.path.exists(rust_path):
             import tkinter.messagebox as messagebox
-            messagebox.showerror(self.t("error_title"), self.t("rust_path_not_found_err"))
+            messagebox.showerror(self.t("error_title"), self.t("rust_path_not_found_err"), parent=self)
             return
             
         import shutil
@@ -819,14 +860,14 @@ class AppController(MainWindow):
         user_cfg_path = os.path.join(rust_path, f"cfg_user_backup_{timestamp}")
         
         if not os.path.exists(cfg_path):
-            messagebox.showerror(self.t("error_title"), self.t("no_cfg_folder_err"))
+            messagebox.showerror(self.t("error_title"), self.t("no_cfg_folder_err"), parent=self)
             return
             
         try:
             shutil.copytree(cfg_path, user_cfg_path)
-            messagebox.showinfo(self.t("success_title"), self.t("user_config_saved", path=user_cfg_path))
+            messagebox.showinfo(self.t("success_title"), self.t("user_config_saved", path=user_cfg_path), parent=self)
         except Exception as e:
-            messagebox.showerror(self.t("error_title"), self.t("user_config_save_failed", err=e))
+            messagebox.showerror(self.t("error_title"), self.t("user_config_save_failed", err=e), parent=self)
 
     def run_benchmark_logic(self, rust_path, benchmark_operation):
         # Stop existing watchers to release log file locks
@@ -1225,24 +1266,83 @@ class AppController(MainWindow):
         self.log_safe(f"[x] Log Error: {err}")
 
     @staticmethod
-    def _log_confirms_current_connection(event: str, target: str, session: Optional[ConnectionSession]) -> bool:
-        """Accept only a post-launch client connection event for this session.
+    def _log_reports_target_connection_attempt(event: str, target: str, session: Optional[ConnectionSession]) -> bool:
+        targets = {target.lower()}
+        if ":" in target:
+            targets.add(target.split(":", 1)[0].lower())
+        if session and session.canonical_endpoint:
+            targets.add(session.canonical_endpoint.lower())
+            if ":" in session.canonical_endpoint:
+                targets.add(session.canonical_endpoint.split(":", 1)[0].lower())
+        match = re.search(r"Connecting:\s*([A-Za-z0-9.-]+(?::\d{1,5})?)", event, re.IGNORECASE)
+        if match:
+            observed = match.group(1).lower()
+            return observed in targets or (":" in observed and observed.split(":", 1)[0] in targets)
+        return False
 
-        Rust's generic ``Spawning`` line merely means a local scene is loading.
-        If the log provides an endpoint, it must match the requested or
-        canonical target; older log formats without an endpoint remain a
-        conservative local confirmation, not a proof of remote identity.
-        """
-        if "Client connected" not in event:
-            return False
-        match = re.search(r"Client connected to\s+([A-Za-z0-9.-]+:\d{1,5})", event, re.IGNORECASE)
-        if not match:
-            return True
-        observed = match.group(1).lower()
+    @staticmethod
+    def _log_confirms_current_connection(event: str, target: str, session: Optional[ConnectionSession]) -> bool:
         expected = {target.lower()}
+        if ":" in target:
+            expected.add(target.split(":", 1)[0].lower())
         if session and session.canonical_endpoint:
             expected.add(session.canonical_endpoint.lower())
-        return observed in expected
+            if ":" in session.canonical_endpoint:
+                expected.add(session.canonical_endpoint.split(":", 1)[0].lower())
+
+        match = re.search(r"Client connected to\s+([A-Za-z0-9.-]+:\d{1,5})", event, re.IGNORECASE)
+        if match:
+            observed = match.group(1).lower()
+            return observed in expected
+
+        if "Client connected" in event:
+            return bool(session and getattr(session, "target_connection_attempt_seen", False))
+
+        return bool(
+            session
+            and getattr(session, "target_connection_attempt_seen", False)
+            and re.search(r"\bClient\s*:\s*OnClientConnected\b", event, re.IGNORECASE)
+        )
+
+    @staticmethod
+    def _steam_handoff_no_log_message(rust_is_running: bool) -> tuple[str, str]:
+        if rust_is_running:
+            return (
+                "Rust wrote no new Player.log lines after the Steam request",
+                "steam_request_no_rust_log",
+            )
+        return (
+            "Rust process is no longer running after the Steam request",
+            "steam_request_rust_closed",
+        )
+
+    def _can_open_server_card(self, endpoint: str) -> bool:
+        if not endpoint:
+            return False
+        session = self.__dict__.get("_active_session")
+        if session and (
+            endpoint == getattr(session, "requested_endpoint", None)
+            or endpoint == getattr(session, "canonical_endpoint", None)
+        ):
+            return True
+        store = self.__dict__.get("history_store")
+        profile = store.get_server_profile(endpoint) if store else {}
+        if not profile:
+            return False
+        if profile.get("favorite"):
+            return True
+        last_connected_at = profile.get("last_connected_at", 0) or 0
+        if last_connected_at and time.time() - last_connected_at < 600:
+            return True
+        return False
+
+    def _update_server_profile(self, target_str: str, **kwargs) -> None:
+        store = self.__dict__.get("history_store")
+        if store:
+            try:
+                store.update_server_profile(target_str, **kwargs)
+            except Exception:
+                pass
 
     def start_log_monitor(
         self,
@@ -1271,6 +1371,12 @@ class AppController(MainWindow):
             if session is not None and not session.menu_ready and "[Bootstrap] DONE!" in event:
                 session.menu_ready = True
                 self.log_safe(self.t("rust_menu_ready_waiting"), "#98A2B3")
+            if (
+                session is not None
+                and not session.target_connection_attempt_seen
+                and self._log_reports_target_connection_attempt(event, target_str, session)
+            ):
+                session.target_connection_attempt_seen = True
             if not getattr(self, 'is_connected', False) and self._log_confirms_current_connection(event, target_str, session):
                 self.is_connected = True
                 if session:
@@ -1297,7 +1403,8 @@ class AppController(MainWindow):
                     self.is_polling = False
                     self._poll_stop_event.set()
                     self._poll_wake_event.set()
-                    self.dispatch_ui(self.connect_btn.configure, text="CONNECT", fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["canvas"])
+                    connect_text = "ПОДКЛЮЧИТЬСЯ" if getattr(self, "lang", "EN") == "RU" else "CONNECT"
+                    self.dispatch_ui(self.connect_btn.configure, text=connect_text, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color=COLORS["text"])
                     self.dispatch_ui(self.ip_entry.configure, state="normal")
 
         import uuid
@@ -1329,6 +1436,9 @@ class AppController(MainWindow):
             on_queue_update=handle_queue,
         )
         self.log_watcher = watcher
+        # Ignore any stale lines already in the log (e.g. a "Client connected" from a
+        # previous session/server) so they can't be misread as confirming this connection.
+        watcher.capture_start_position()
         watcher.start(loop=self.async_loop)
 
         def confirmation_watchdog() -> None:
@@ -1436,13 +1546,6 @@ class AppController(MainWindow):
             return
         self.log_safe(self.t("launch", url=target))
         try:
-            url = steam_service.build_connect_url(target, config.STEAM_APP_ID)
-            if os.name == 'nt':
-                os.startfile(url)
-            else:
-                import webbrowser
-                webbrowser.open(url)
-            self.log_safe(self.t("launch_ok"))
             if session:
                 session.launched_by_app = True
                 session.queue_requested = queue_mode
@@ -1450,9 +1553,19 @@ class AppController(MainWindow):
                 session.reset_offline_turbo()
                 if operation_id is not None:
                     self.dispatch_ui(self.set_connection_phase, session.phase.value, operation=("poll", operation_id))
+            self.start_log_monitor(target, session=session, operation_id=operation_id)
+            url = steam_service.build_connect_url(target, config.STEAM_APP_ID)
+            if session:
+                session.steam_url_dispatched = True
+                session.steam_request_started_at = time.monotonic()
+            if os.name == 'nt':
+                os.startfile(url)
+            else:
+                import webbrowser
+                webbrowser.open(url)
+            self.log_safe(self.t("launch_ok"))
             self.dispatch_ui(self.set_connection_state, "Queueing" if queue_mode else "Launching", target)
             self._update_server_profile(target, state="queue" if queue_mode else "launching")
-            self.start_log_monitor(target, session=session, operation_id=operation_id)
         except Exception as e:
             self.dispatch_ui(self.set_connection_state, "Launch failed")
             self.log_safe(self.t("launch_err", err=str(e)))
@@ -1473,12 +1586,9 @@ class AppController(MainWindow):
             self.log_safe(self.t("err_port"))
             return
 
-        real_ip = host
-        try:
-            real_ip = socket.gethostbyname(host)
+        real_ip, dns_error = _resolve_hostname_bounded(host)
+        if not dns_error:
             self.dispatch_ui(self.update_entry, f"{real_ip}:{port}")
-        except socket.gaierror:
-            pass
 
         try:
             server_name = host

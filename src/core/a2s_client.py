@@ -1,6 +1,7 @@
 import asyncio
 import socket
 import time
+import re
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 import threading
@@ -69,11 +70,13 @@ class A2SClient:
         with self._lock:
             cached_port = self._cached_ports.get(key)
 
+        attempted_base_port = False
         if cached_port:
             cached_result = await self._query(ip, cached_port, stop_event)
             if cached_result:
                 return cached_result
         else:
+            attempted_base_port = True
             base_result = await self._query(ip, base_port, stop_event)
             if base_result:
                 with self._lock:
@@ -90,7 +93,11 @@ class A2SClient:
         ports = [
             base_port + offset
             for offset in self.offsets
-            if 1 <= base_port + offset <= 65535 and base_port + offset != cached_port
+            if (
+                1 <= base_port + offset <= 65535
+                and base_port + offset != cached_port
+                and not (attempted_base_port and base_port + offset == base_port)
+            )
         ]
         if not ports:
             return ServerStatus(False, query_port=base_port)
@@ -141,6 +148,60 @@ class A2SClient:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 return pool.submit(lambda: asyncio.run(self.get_server_status(ip, base_port, stop_event))).result()
         return asyncio.run(self.get_server_status(ip, base_port, stop_event))
+
+    @staticmethod
+    def rustmaps_view_url(level_url: object) -> str:
+        """Convert Rust's public level URL to RustMaps' stable viewer URL."""
+        if not isinstance(level_url, str):
+            return ""
+        match = re.search(r"maps\.rustmaps\.com/\d+/([0-9a-fA-F]{32})/", level_url)
+        return f"https://rustmaps.com/map/{match.group(1).lower()}" if match else ""
+
+    async def _get_rustmaps_url_async(self, ip: str, query_port: int) -> str:
+        try:
+            rules = await a2s.arules((ip, query_port), timeout=min(2.0, max(0.6, self.timeout * 2)))
+            return self.rustmaps_view_url(rules.get("level_url") or rules.get("levelurl"))
+        except (a2s.exceptions.BrokenMessageError, OSError, socket.timeout, ValueError, asyncio.TimeoutError):
+            return ""
+
+    def get_rustmaps_url(self, ip: str, query_port: int) -> str:
+        """Fetch an optional map viewer URL outside the connection hot path."""
+        if not 1 <= query_port <= 65535:
+            return ""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            import concurrent.futures
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    return pool.submit(lambda: asyncio.run(self._get_rustmaps_url_async(ip, query_port))).result()
+            except Exception:
+                return ""
+        try:
+            return asyncio.run(self._get_rustmaps_url_async(ip, query_port))
+        except Exception:
+            return ""
+
+    async def _get_rustmaps_url_by_endpoint_async(self, ip: str, base_port: int) -> str:
+        status = await self.get_server_status(ip, base_port)
+        if not status.alive:
+            return ""
+        return await self._get_rustmaps_url_async(ip, status.query_port)
+
+    def get_rustmaps_url_for_endpoint(self, ip: str, base_port: int) -> str:
+        """Resolve the server's query port itself, then fetch the map viewer URL.
+
+        For use from a plain background thread only (not an active event loop) -
+        it always calls asyncio.run() directly.
+        """
+        if not 1 <= base_port <= 65535:
+            return ""
+        try:
+            return asyncio.run(self._get_rustmaps_url_by_endpoint_async(ip, base_port))
+        except Exception:
+            return ""
 
 
 a2s_client = A2SClient()

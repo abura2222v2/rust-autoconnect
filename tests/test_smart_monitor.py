@@ -18,7 +18,7 @@ def test_down_and_swarm_hints_have_bounded_turbo_window():
     now = datetime(2026, 8, 9, 12, tzinfo=timezone.utc)
     session = ConnectionSession("127.0.0.1:28015")
     session.request_turbo(now)
-    assert session.interval_seconds(now) == 1.0
+    assert session.interval_seconds(now) == 2.0
     assert session.interval_seconds(now + timedelta(minutes=6)) == PollingPolicy().watch_seconds
     assert session.phase == ConnectionPhase.WATCH
 
@@ -42,7 +42,7 @@ def test_initial_query_timeout_uses_backoff_without_turbo():
     assert session.phase == ConnectionPhase.SCHEDULED
 
     assert not session.observe_query_result(False, now)
-    assert session.query_retry_seconds(now) == 60.0
+    assert session.query_retry_seconds(now) == 30.0
     assert session.phase == ConnectionPhase.SCHEDULED
 
 
@@ -155,3 +155,46 @@ def test_cancel_stops_smart_session():
     session.cancel()
     assert session.phase == ConnectionPhase.IDLE
     assert session.stop_event.is_set()
+
+
+def test_connection_diagnostics_record_only_stage_changes():
+    session = ConnectionSession("127.0.0.1:28015")
+
+    elapsed, changed = session.record_stage("Resolving server address")
+    repeated_elapsed, repeated_changed = session.record_stage("Resolving server address")
+
+    assert changed and not repeated_changed
+    assert elapsed >= 0 and repeated_elapsed >= elapsed
+    assert session.diagnostic_events == [("Resolving server address", elapsed)]
+
+
+def test_selected_server_uses_thirty_second_normal_poll_and_two_second_turbo():
+    now = datetime(2026, 8, 9, 12, tzinfo=timezone.utc)
+    session = ConnectionSession("127.0.0.1:28015")
+
+    assert session.interval_seconds(now) == 30.0
+    session.request_turbo(now)
+    assert session.interval_seconds(now) == 2.0
+
+
+def test_swarm_hint_does_not_escalate_polling_rate():
+    now = datetime(2026, 8, 9, 12, tzinfo=timezone.utc)
+    session = ConnectionSession("127.0.0.1:28015")
+
+    assert session.interval_seconds(now, swarm_hint=True) == 30.0
+
+
+def test_force_wipe_fingerprint_change_requires_window_and_releases_hold():
+    now = datetime(2026, 8, 6, 17, 56, tzinfo=timezone.utc)
+    session = ConnectionSession("127.0.0.1:28015", force_wipe_at=now + timedelta(minutes=4))
+    assert session.begin_wipe_restart_hold(now)
+    assert not session.observe_provider_wipe_fingerprint(("2632", "old", 1), now)
+    assert session.observe_provider_wipe_fingerprint(("2633", "new", 2), now)
+    assert session.confirm_wipe_restart()
+
+
+def test_provider_wipe_restart_requires_offline_then_online():
+    session = ConnectionSession("127.0.0.1:28015")
+    assert not session.observe_provider_wipe_availability(True)
+    assert not session.observe_provider_wipe_availability(False)
+    assert session.observe_provider_wipe_availability(True)

@@ -62,7 +62,7 @@ class TestHardwareService(unittest.TestCase):
     @patch("subprocess.check_output")
     def test_run_ps_timeout_handling(self, mock_check_output):
         mock_check_output.side_effect = subprocess.TimeoutExpired(cmd="powershell", timeout=5.0)
-        hw = HardwareService()
+        hw = HardwareService(auto_start=False)
 
         with patch("os.name", "nt"):
             res = hw._run_ps("Get-CPU")

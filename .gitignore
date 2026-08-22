@@ -29,11 +29,20 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
-.pytest_tmp/
+.pytest_tmp*/
+temp_pytest_run/
 *.egg-info/
+
+# Local CLI tooling (machine-specific, not project source)
+.bin/
+.tools/
+.codex-remote-attachments/
+supabase/.temp/
 
 # PyInstaller
 *.spec
+!main.spec
+!RustAutoConnect.spec
 build/
 dist/
 

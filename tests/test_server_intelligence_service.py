@@ -57,6 +57,41 @@ def test_snapshot_preserves_provider_status_without_treating_empty_as_offline():
     assert snapshot.fresh is True
 
 
+def test_force_refresh_bypasses_the_short_lived_client_cache():
+    service = configured_service()
+    with patch("urllib.request.urlopen", side_effect=[
+        FakeResponse({"status": "refreshing"}),
+        FakeResponse({"status": "ready", "players": 12}),
+    ]) as request:
+        first = service.observe_endpoint("example.test:28015", active=False)
+        second = service.observe_endpoint("example.test:28015", active=False, force_refresh=True)
+
+    assert first.status == "refreshing"
+    assert second.status == "ready"
+    assert second.players == 12
+    assert request.call_count == 2
+
+
+def test_snapshot_parses_safe_game_monitoring_card_fields_and_query_port():
+    service = configured_service()
+    with patch("urllib.request.urlopen", return_value=FakeResponse({
+        "status": "ready", "server_id": 5446410, "query_port": 28015,
+        "name": "Example", "players": 300, "max_players": 350,
+        "map": "Custom Map", "seed": 1337, "map_size": 4750,
+        "version": "2632", "description": "Public description", "website": "https://example.test",
+        "checked_at": "2026-08-12T12:00:00Z", "fresh": True,
+    })) as request:
+        snapshot = service.observe_endpoint("203.0.113.10:28010", active=True, query_port=28015)
+
+    assert snapshot.server_id == 5446410
+    assert snapshot.query_port == 28015
+    assert snapshot.players == 300
+    assert snapshot.map_seed == 1337
+    assert snapshot.website == "https://example.test"
+    payload = json.loads(request.call_args.args[0].data.decode("utf-8"))
+    assert payload["query_port"] == 28015
+
+
 def test_share_deduplicates_and_limits_addresses():
     service = configured_service()
     endpoints = ["example.test:28015"] * 2 + [f"s{i}.test:28015" for i in range(30)]

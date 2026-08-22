@@ -173,6 +173,7 @@ def test_server_profile_tracks_local_connection_state(monkeypatch, tmp_path):
         "last_state": "disconnected",
         "last_checked_at": 123,
         "last_disconnect_reason": "Timed out",
+        "last_connected_at": 0,
     }
 
 
@@ -182,3 +183,54 @@ def test_share_saved_servers_is_opt_in_and_persisted(monkeypatch, tmp_path):
     store.set_share_saved_servers(True)
     assert store.get_share_saved_servers() is True
     assert configure_store(monkeypatch, tmp_path).get_share_saved_servers() is True
+
+
+def test_deleted_popular_servers_tracking_and_active_history(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    popular = [
+        {"name": "Popular 1", "ip": "1.1.1.1:28015"},
+        {"name": "Popular 2", "ip": "2.2.2.2:28015"},
+    ]
+    # Initially, active history includes popular servers
+    active = store.get_active_history(popular)
+    assert len(active) == 2
+    assert {s["ip"] for s in active} == {"1.1.1.1:28015", "2.2.2.2:28015"}
+
+    # Remove popular 1
+    store.remove_from_history("1.1.1.1:28015")
+    assert "1.1.1.1:28015" in store.get_deleted_popular_ips()
+
+    # Active history should no longer include popular 1
+    active_after = store.get_active_history(popular)
+    assert len(active_after) == 1
+    assert active_after[0]["ip"] == "2.2.2.2:28015"
+
+    # User re-adds 1.1.1.1:28015 manually
+    store.add_to_history("1.1.1.1:28015", "My Custom Server")
+    assert "1.1.1.1:28015" not in store.get_deleted_popular_ips()
+    active_readded = store.get_active_history(popular)
+    assert len(active_readded) == 2
+    assert active_readded[0]["ip"] == "1.1.1.1:28015"
+
+
+def test_set_armed_server_force_flag(monkeypatch, tmp_path):
+    store = configure_store(monkeypatch, tmp_path)
+    endpoint = "127.0.0.1:28015"
+
+    # Default toggling behavior
+    store.set_armed_server(endpoint, force=False)
+    assert store.get_armed_server() == endpoint
+
+    store.set_armed_server(endpoint, force=False)
+    assert store.get_armed_server() == ""
+
+    # Force flag behavior (does not toggle off if already set)
+    store.set_armed_server(endpoint, force=True)
+    assert store.get_armed_server() == endpoint
+
+    store.set_armed_server(endpoint, force=True)
+    assert store.get_armed_server() == endpoint
+
+    store.set_armed_server("", force=True)
+    assert store.get_armed_server() == ""
+

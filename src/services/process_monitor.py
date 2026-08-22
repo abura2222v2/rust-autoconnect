@@ -15,7 +15,7 @@ class ProcessMonitor:
             if self.cached_pid is not None:
                 try:
                     p = psutil.Process(self.cached_pid)
-                    if p.name() == 'RustClient.exe':
+                    if p.name().lower() == 'rustclient.exe':
                         return True
                     else:
                         self.cached_pid = None
@@ -30,7 +30,8 @@ class ProcessMonitor:
             # Slow path: iterate processes
             for p in psutil.process_iter(['name']):
                 try:
-                    if p.info['name'] == 'RustClient.exe':
+                    name = p.info.get('name')
+                    if name and name.lower() == 'rustclient.exe':
                         self.cached_pid = p.pid
                         return True
                 except Exception:
@@ -43,7 +44,8 @@ class ProcessMonitor:
         pids = set()
         for process in psutil.process_iter(['name']):
             try:
-                if process.info['name'] == 'RustClient.exe':
+                name = process.info.get('name')
+                if name and name.lower() == 'rustclient.exe':
                     pids.add(process.pid)
             except (psutil.Error, OSError):
                 continue

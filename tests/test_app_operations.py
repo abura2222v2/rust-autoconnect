@@ -1,9 +1,10 @@
 import asyncio
 import queue
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
-from src.app import AppController
+from src.app import AppController, _resolve_hostname_bounded
 from src.core.smart_monitor import ConnectionPhase, ConnectionSession
 
 
@@ -29,6 +30,38 @@ def test_ui_dispatch_discards_stale_operation():
     controller._drain_ui_queue()
 
     assert called == ["current"]
+
+
+def test_server_card_is_limited_to_favorites_active_or_recent_connections():
+    controller = make_controller_stub()
+    endpoint = "203.0.113.10:28015"
+    controller.history_store = MagicMock()
+    controller._active_session = None
+    controller.history_store.get_server_profile.return_value = {
+        "favorite": False,
+        "last_connected_at": 0,
+    }
+
+    assert not AppController._can_open_server_card(controller, endpoint)
+
+    controller.history_store.get_server_profile.return_value = {
+        "favorite": True,
+        "last_connected_at": 0,
+    }
+    assert AppController._can_open_server_card(controller, endpoint)
+
+    controller.history_store.get_server_profile.return_value = {
+        "favorite": False,
+        "last_connected_at": int(time.time()) - 599,
+    }
+    assert AppController._can_open_server_card(controller, endpoint)
+
+    controller.history_store.get_server_profile.return_value = {
+        "favorite": False,
+        "last_connected_at": 0,
+    }
+    controller._active_session = MagicMock(requested_endpoint=endpoint, canonical_endpoint="203.0.113.10:28016")
+    assert AppController._can_open_server_card(controller, endpoint)
 
 
 def test_restore_benchmark_cfg_replaces_modified_cfg(tmp_path):
@@ -334,11 +367,74 @@ def test_only_client_connected_confirms_the_current_connection():
     assert AppController._log_confirms_current_connection(
         "Client connected to 203.0.113.10:28015", "server.example:28015", session,
     )
+    assert not AppController._log_confirms_current_connection(
+        "Client connected", "server.example:28015", session,
+    )
+    assert AppController._log_reports_target_connection_attempt(
+        "Connecting: 203.0.113.10:28015 (Raknet)", "server.example:28015", session,
+    )
+    session.target_connection_attempt_seen = True
     assert AppController._log_confirms_current_connection(
         "Client connected", "server.example:28015", session,
     )
+    assert AppController._log_confirms_current_connection(
+        "Client:OnClientConnected", "server.example:28015", session,
+    )
     assert not AppController._log_confirms_current_connection(
         "[Bootstrap] DONE!", "server.example:28015", session,
+    )
+
+
+def test_log_attempt_for_another_server_never_confirms_current_session():
+    session = ConnectionSession("server.example:28015", canonical_endpoint="203.0.113.10:28015")
+
+    assert not AppController._log_reports_target_connection_attempt(
+        "Connecting: 203.0.113.99:28015 (Raknet)", "server.example:28015", session,
+    )
+    assert not AppController._log_confirms_current_connection(
+        "Client:OnClientConnected", "server.example:28015", session,
+    )
+
+
+def test_launch_arms_log_watcher_before_dispatching_steam(monkeypatch):
+    controller = object.__new__(AppController)
+    events = []
+    controller.log_safe = MagicMock()
+    controller.dispatch_ui = lambda callback, *args, **kwargs: callback(*args)
+    controller.set_connection_phase = MagicMock()
+    controller.set_connection_state = MagicMock()
+    controller.start_log_monitor = lambda *_args, **_kwargs: events.append("watcher")
+    controller._update_server_profile = MagicMock()
+
+    monkeypatch.setattr("src.app.os.startfile", lambda _url: events.append("steam"))
+    session = ConnectionSession("127.0.0.1:28015")
+
+    AppController.launch_game(controller, "127.0.0.1:28015", session=session)
+
+    assert events == ["watcher", "steam"]
+    assert session.steam_url_dispatched
+
+
+def test_dns_resolution_timeout_keeps_the_entered_hostname(monkeypatch):
+    def slow_dns(_host):
+        time.sleep(0.05)
+        return "203.0.113.10"
+
+    monkeypatch.setattr("src.app.socket.gethostbyname", slow_dns)
+    resolved, issue = _resolve_hostname_bounded("server.example", timeout=0.01)
+
+    assert resolved == "server.example"
+    assert "timed out" in issue
+
+
+def test_steam_handoff_warning_distinguishes_no_log_from_closed_rust():
+    assert AppController._steam_handoff_no_log_message(True) == (
+        "Rust wrote no new Player.log lines after the Steam request",
+        "steam_request_no_rust_log",
+    )
+    assert AppController._steam_handoff_no_log_message(False) == (
+        "Rust process is no longer running after the Steam request",
+        "steam_request_rust_closed",
     )
 
 
@@ -368,4 +464,4 @@ def test_swarm_hint_only_wakes_local_confirmation_probe():
 
     assert controller._poll_wake_event.is_set()
     assert controller._active_session.phase == ConnectionPhase.IDLE
-    assert controller._active_session.interval_seconds() == 1.0
+    assert controller._active_session.interval_seconds() == 30.0

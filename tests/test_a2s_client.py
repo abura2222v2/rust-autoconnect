@@ -47,3 +47,22 @@ def test_status_exposes_capacity_without_breaking_legacy_tuple():
         assert status.alive and status.has_join_capacity
         assert status.map_name == "Procedural Map"
         assert client.check_server_alive("127.0.0.1", 28015) == (True, "Rust Test", 100, 28015)
+
+
+def test_discovery_does_not_repeat_a_failed_base_port():
+    client = A2SClient(timeout=0.01, offsets=(0, 15))
+
+    with patch("a2s.info", side_effect=OSError("offline")) as info:
+        status = asyncio.run(client.get_server_status("127.0.0.1", 28015))
+
+    assert not status.alive
+    queried_ports = [call.args[0][1] for call in info.call_args_list]
+    assert queried_ports.count(28015) == 1
+    assert queried_ports.count(28030) == 1
+
+
+def test_rustmaps_view_url_uses_the_level_url_identifier():
+    url = "https://maps.rustmaps.com/287/0d2f0871e261486f9effa2aea06b5ac9/example.map"
+
+    assert A2SClient.rustmaps_view_url(url) == "https://rustmaps.com/map/0d2f0871e261486f9effa2aea06b5ac9"
+    assert A2SClient.rustmaps_view_url("https://example.test/map") == ""

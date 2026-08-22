@@ -109,8 +109,11 @@ class SwarmService:
         if not self.is_enabled:
             return
             
-        self.current_ip_port = ip_port
         room_name = f"realtime:room_{ip_port.replace('.', '_').replace(':', '_')}"
+        if self.current_room and self.current_room != room_name:
+            self.leave_room()
+
+        self.current_ip_port = ip_port
         self.current_room = room_name
         
         if self.is_connected and self.ws:

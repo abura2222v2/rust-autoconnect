@@ -156,13 +156,27 @@ class LeaderboardWindow(ctk.CTkToplevel):
             frame = ctk.CTkFrame(self.scroll, fg_color=COLORS["surface_alt"], corner_radius=4)
             frame.pack(fill="x", padx=10, pady=2)
             ctk.CTkLabel(frame, text=f"#{index}", width=42, anchor="w").pack(side="left", padx=6, pady=8)
-            median = float(row.get("median_total_time", 0.0))
+            raw_median = row.get("median_total_time")
+            try:
+                median = float(raw_median) if raw_median is not None and raw_median != "" else 0.0
+            except (ValueError, TypeError):
+                median = 0.0
             ctk.CTkLabel(frame, text=f"{median:.1f}s", width=84, anchor="w", text_color=COLORS["accent"], font=ctk.CTkFont(weight="bold")).pack(side="left", padx=3)
             cpu = str(row.get("cpu", "Unknown"))
             storage = str(row.get("storage", "Unknown"))
             ctk.CTkLabel(frame, text=f"{cpu} | {storage}", width=420, anchor="w").pack(side="left", padx=3)
-            ctk.CTkLabel(frame, text=str(row.get("installation_count", 0)), width=75).pack(side="left", padx=3)
-            ctk.CTkLabel(frame, text=str(row.get("run_count", 0)), width=60).pack(side="left", padx=3)
+            raw_inst = row.get("installation_count")
+            try:
+                inst_count = int(raw_inst) if raw_inst is not None and raw_inst != "" else 0
+            except (ValueError, TypeError):
+                inst_count = 0
+            raw_run = row.get("run_count")
+            try:
+                run_count = int(raw_run) if raw_run is not None and raw_run != "" else 0
+            except (ValueError, TypeError):
+                run_count = 0
+            ctk.CTkLabel(frame, text=str(inst_count), width=75).pack(side="left", padx=3)
+            ctk.CTkLabel(frame, text=str(run_count), width=60).pack(side="left", padx=3)
             details_txt = self.parent.t("details") if hasattr(self.parent, "t") else "Details"
             ctk.CTkButton(frame, text=details_txt, width=64, height=26, command=lambda item=row: self._load_detail(item)).pack(side="right", padx=8)
 
@@ -187,20 +201,45 @@ class LeaderboardWindow(ctk.CTkToplevel):
         popup.geometry("540x440")
         popup.configure(fg_color=COLORS["canvas"])
         summary = detail.get("summary", {})
+        med_summary_raw = summary.get("median_total_time")
+        try:
+            med_summary = float(med_summary_raw) if med_summary_raw is not None and med_summary_raw != "" else 0.0
+        except (ValueError, TypeError):
+            med_summary = 0.0
+        raw_inst = summary.get("installation_count")
+        try:
+            inst_count = int(raw_inst) if raw_inst is not None and raw_inst != "" else 0
+        except (ValueError, TypeError):
+            inst_count = 0
+        raw_run = summary.get("run_count")
+        try:
+            run_count = int(raw_run) if raw_run is not None and raw_run != "" else 0
+        except (ValueError, TypeError):
+            run_count = 0
+        min_time = summary.get("min_total_time") if summary.get("min_total_time") is not None else "?"
+        max_time = summary.get("max_total_time") if summary.get("max_total_time") is not None else "?"
         ctk.CTkLabel(
             popup,
-            text=(f"Median: {float(summary.get('median_total_time', 0.0)):.1f}s\n"
-                  f"Installations: {summary.get('installation_count', 0)}\n"
-                  f"Runs: {summary.get('run_count', 0)}\n"
-                  f"Range: {summary.get('min_total_time', '?')} - {summary.get('max_total_time', '?')}s"),
+            text=(f"Median: {med_summary:.1f}s\n"
+                  f"Installations: {inst_count}\n"
+                  f"Runs: {run_count}\n"
+                  f"Range: {min_time} - {max_time}s"),
             justify="left",
             font=ctk.CTkFont(size=14),
         ).pack(anchor="w", padx=18, pady=18)
         scroll = ctk.CTkScrollableFrame(popup, fg_color=COLORS["surface"])
         scroll.pack(fill="both", expand=True, padx=18, pady=(0, 18))
         for item in detail.get("installations", []):
-            med_t = float(item.get('median_total_time', 0.0))
-            rc = item.get('run_count', 0)
+            raw_med_t = item.get("median_total_time")
+            try:
+                med_t = float(raw_med_t) if raw_med_t is not None and raw_med_t != "" else 0.0
+            except (ValueError, TypeError):
+                med_t = 0.0
+            raw_rc = item.get("run_count")
+            try:
+                rc = int(raw_rc) if raw_rc is not None and raw_rc != "" else 0
+            except (ValueError, TypeError):
+                rc = 0
             inst_text = self.parent.t("anon_install_fmt", time=med_t, count=rc) if hasattr(self.parent, "t") else f"Anonymous installation: {med_t:.1f}s | {rc} runs"
             ctk.CTkLabel(
                 scroll,

@@ -16,18 +16,32 @@ class LogWatcher:
                  on_event: Optional[Callable[[str], None]] = None, 
                  on_queue_update: Optional[Callable[[int], None]] = None,
                  seek_end: bool = True,
-                 target_log_path: Optional[Path] = None):
+                 target_log_path: Optional[Path] = None,
+                 poll_interval: float = 0.5):
         self.on_disconnect = on_disconnect
         self.on_error = on_error
         self.on_event = on_event
         self.on_queue_update = on_queue_update
         self.seek_end = seek_end
         self.target_log_path = target_log_path
+        self.poll_interval = max(0.02, float(poll_interval))
         self.is_monitoring = False
         self._task: Optional[asyncio.Task] = None
         self._stop_event = threading.Event()
         self._task_future = None
         self._last_error = ""
+        self._start_path: Optional[Path] = None
+        self._start_offset: Optional[int] = None
+
+    def capture_start_position(self) -> None:
+        """Set a pre-launch boundary so only later log lines are consumed."""
+        path = self._resolve_log_path()
+        self._start_path = path
+        try:
+            self._start_offset = path.stat().st_size
+        except OSError:
+            # A file created or rotated after this point belongs to this session.
+            self._start_offset = 0
 
     def start(self, loop=None) -> None:
         if self.is_monitoring:
@@ -84,19 +98,23 @@ class LogWatcher:
 
     async def _watch_loop(self) -> None:
         try:
-            log_path: Optional[Path] = None
+            log_path: Optional[Path] = self._start_path
             while self.is_monitoring and not self._stop_event.is_set():
                 if not log_path or not log_path.exists():
                     log_path = self._resolve_log_path()
                     if not log_path.exists():
                         for _ in range(10):
                             if self._stop_event.is_set(): break
-                            await asyncio.sleep(0.1)
+                            await asyncio.sleep(min(0.1, self.poll_interval))
                         continue
                 try:
                     with log_path.open("r", encoding="utf-8", errors="ignore") as file:
                         self._last_error = ""
-                        if self.seek_end:
+                        if self._start_offset is not None:
+                            file.seek(min(self._start_offset, log_path.stat().st_size), os.SEEK_SET)
+                            self._start_offset = None
+                            self.seek_end = False
+                        elif self.seek_end:
                             file.seek(0, os.SEEK_END)
                             self.seek_end = False
                         last_size = log_path.stat().st_size
@@ -112,9 +130,9 @@ class LogWatcher:
                             last_size = current_size
                             new_data = file.read(4096)
                             if not new_data:
-                                for _ in range(5):
+                                for _ in range(max(1, round(self.poll_interval / 0.02))):
                                     if self._stop_event.is_set(): break
-                                    await asyncio.sleep(0.1)
+                                    await asyncio.sleep(0.02)
                                 continue
                             buffer = (buffer + new_data)[-1024 * 1024:]
                             lines = buffer.split("\n")
@@ -145,7 +163,7 @@ class LogWatcher:
                     self._report_error(error)
                     for _ in range(10):
                             if self._stop_event.is_set(): break
-                            await asyncio.sleep(0.1)
+                            await asyncio.sleep(min(0.1, self.poll_interval))
         except asyncio.CancelledError:
             pass
         finally:

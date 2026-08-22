@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ru" translate="no" class="notranslate">
+<head>
+  <meta charset="UTF-8">
+  <meta name="google" content="notranslate">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust AutoConnect</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<!-- Native Inline SVG Vector Sprite Definition (Zero Latency / 100% Reliable) -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <defs>
+    <!-- Brand Logo -->
+    <g id="icon-brand">
+      <rect width="28" height="28" rx="6" fill="#E94B16"/>
+      <rect x="7" y="6" width="4" height="16" fill="#FFFFFF"/>
+      <rect x="11" y="6" width="10" height="4" fill="#FFFFFF"/>
+      <rect x="11" y="11" width="8" height="3.5" fill="#FFFFFF"/>
+    </g>
+
+    <!-- Navigation -->
+    <g id="icon-nav-home">
+      <path d="M3 10L12 3L21 10V20C21 20.55 20.55 21 20 21H15V14H9V21H4C3.45 21 3 20.55 3 20V10Z" fill="currentColor"/>
+    </g>
+
+    <g id="icon-nav-bench">
+      <rect x="4" y="13" width="4" height="8" rx="1.5" fill="currentColor"/>
+      <rect x="10" y="8" width="4" height="13" rx="1.5" fill="currentColor"/>
+      <rect x="16" y="4" width="4" height="17" rx="1.5" fill="currentColor"/>
+    </g>
+
+    <g id="icon-nav-settings">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M12 15.5C13.933 15.5 15.5 13.933 15.5 12C15.5 10.067 13.933 8.5 12 8.5C10.067 8.5 8.5 10.067 8.5 12C8.5 13.933 10.067 15.5 12 15.5ZM19.43 12.98C19.47 12.66 19.5 12.34 19.5 12C19.5 11.66 19.47 11.34 19.43 11.02L21.54 9.37C21.73 9.22 21.78 8.95 21.66 8.73L19.66 5.27C19.54 5.05 19.27 4.97 19.05 5.05L16.56 6.05C16.04 5.65 15.48 5.32 14.87 5.07L14.49 2.42C14.46 2.18 14.25 2 14 2H10C9.75 2 9.54 2.18 9.51 2.42L9.13 5.07C8.52 5.32 7.96 5.66 7.44 6.05L4.95 5.05C4.73 4.96 4.46 5.05 4.34 5.27L2.34 8.73C2.21 8.95 2.27 9.22 2.46 9.37L4.57 11.02C4.53 11.34 4.5 11.67 4.5 12C4.5 12.33 4.53 12.66 4.57 12.98L2.46 14.63C2.27 14.78 2.21 15.05 2.34 15.27L4.34 18.73C4.46 18.95 4.73 19.03 4.95 18.95L7.44 17.95C7.96 18.35 8.52 18.68 9.13 18.93L9.51 21.58C9.54 21.82 9.75 22 10 22H14C14.25 22 14.46 21.82 14.49 21.58L14.87 18.93C15.48 18.68 16.04 18.34 16.56 17.95L19.05 18.95C19.28 19.04 19.54 18.95 19.66 18.73L21.66 15.27C21.78 15.05 21.73 14.78 21.54 14.63L19.43 12.98Z" fill="currentColor"/>
+    </g>
+
+    <!-- Star Favorite Filled -->
+    <g id="icon-star-filled">
+      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="#E94B16"/>
+    </g>
+
+    <!-- Star Favorite Outline -->
+    <g id="icon-star-outline">
+      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="none" stroke="#5E6778" stroke-width="2" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Shield / AutoArm Armed -->
+    <g id="icon-shield-armed">
+      <path d="M12 2L3 6V12C3 17.55 6.84 22.74 12 24C17.16 22.74 21 17.55 21 12V6L12 2Z" fill="#2ECC71"/>
+      <path d="M9.5 12.5L11.5 14.5L15.5 9.5" stroke="#0F1217" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Shield Inactive -->
+    <g id="icon-shield">
+      <path d="M12 2L3 6V12C3 17.55 6.84 22.74 12 24C17.16 22.74 21 17.55 21 12V6L12 2Z" fill="#5E6778"/>
+    </g>
+
+    <!-- Play / Connect -->
+    <g id="icon-play">
+      <path d="M8 5V19L19 12L8 5Z" fill="currentColor"/>
+    </g>
+
+    <!-- Trash / Delete -->
+    <g id="icon-trash">
+      <path d="M6 19C6 20.1 6.9 21 8 21H16C17.1 21 18 20.1 18 19V7H6V19ZM19 4H15.5L14.5 3H9.5L8.5 4H5V6H19V4Z" fill="currentColor"/>
+    </g>
+
+    <!-- Copy -->
+    <g id="icon-copy">
+      <path d="M16 1H4C2.9 1 2 1.9 2 3V17H4V3H16V1ZM19 5H8C6.9 5 6 5.9 6 7V21C6 22.1 6.9 23 8 23H19C20.1 23 21 22.1 21 21V7C21 5.9 20.1 5 19 5ZM19 21H8V7H19V21Z" fill="currentColor"/>
+    </g>
+
+    <!-- Filter -->
+    <g id="icon-filter">
+      <path d="M10 18H14V16H10V18ZM3 6V8H21V6H3ZM6 13H18V11H6V13Z" fill="currentColor"/>
+    </g>
+
+    <!-- List Menu / Drawer -->
+    <g id="icon-list-menu">
+      <path d="M3 18H15V16H3V18ZM3 13H15V11H3V13ZM3 6V8H15V6H3ZM18 16.59L19.41 18L24 13.41L19.41 8.83L18 10.24L21.17 13.41L18 16.59Z" fill="currentColor"/>
+    </g>
+
+    <!-- Discord -->
+    <g id="icon-discord">
+      <path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.01.06.02.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z" fill="currentColor"/>
+    </g>
+
+    <!-- Website -->
+    <g id="icon-website">
+      <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM11 19.93C7.05 19.44 4 16.08 4 12C4 11.38 4.08 10.79 4.21 10.21L9 15V16C9 17.1 9.9 18 11 18V19.93ZM17.9 17.39C17.64 16.58 16.9 16 16 16H15V13C15 12.45 14.55 12 14 12H8V10H10C10.55 10 11 9.55 11 9V7H13C14.1 7 15 6.1 15 5V4.59C17.93 5.78 20 8.65 20 12C20 14.08 19.2 15.97 17.9 17.39Z" fill="currentColor"/>
+    </g>
+
+    <!-- Rules / Book -->
+    <g id="icon-rules">
+      <path d="M18 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V4C20 2.9 19.1 2 18 2ZM6 4H11V12L8.5 10.5L6 12V4ZM18 20H6V19H18V20ZM18 17H6V15H18V17ZM18 13H6V12.97C6.01 12.97 6 12.98 6 12.98V12H18V13Z" fill="currentColor"/>
+    </g>
+
+    <!-- Map -->
+    <g id="icon-map">
+      <path d="M20.5 3L13.88 5.65L7 3L2 5.08V21L8.12 18.35L15 21L21 18.92V3.08L20.5 3ZM15 19L9 16.6V5L15 7.4V19Z" fill="currentColor"/>
+    </g>
+
+    <!-- Players Group -->
+    <g id="icon-players">
+      <path d="M16 11C17.66 11 18.99 9.66 18.99 8C18.99 6.34 17.66 5 16 5C14.34 5 13 6.34 13 8C13 9.66 14.34 11 16 11ZM8 11C9.66 11 10.99 9.66 10.99 8C10.99 6.34 9.66 5 8 5C6.34 5 5 6.34 5 8C5 9.66 6.34 11 8 11ZM8 13C5.67 13 1 14.17 1 16.5V19H15V16.5C15 14.17 10.33 13 8 13ZM16 13C15.71 13 15.38 13.02 15.03 13.05C16.19 13.89 17 15.02 17 16.5V19H23V16.5C23 14.17 18.33 13 16 13Z" fill="currentColor"/>
+    </g>
+
+    <!-- Cube / Map Size -->
+    <g id="icon-cube">
+      <path d="M12 2L2 7V17L12 22L22 17V7L12 2ZM12 4.35L19.15 7.92L12 11.5L4.85 7.92L12 4.35ZM4 9.65L11 13.15V20.15L4 16.65V9.65ZM13 20.15V13.15L20 9.65V16.65L13 20.15Z" fill="currentColor"/>
+    </g>
+
+    <!-- Clock -->
+    <g id="icon-clock">
+      <path d="M11.99 2C6.47 2 2 6.48 2 12C2 17.52 6.46 22 11.99 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 11.99 2ZM12 20C7.58 20 4 16.42 4 12C4 7.58 7.58 4 12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20ZM12.5 7H11V13L16.25 16.15L17 14.92L12.5 12.25V7Z" fill="currentColor"/>
+    </g>
+
+    <!-- Close (X) -->
+    <g id="icon-close">
+      <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/>
+    </g>
+  </defs>
+</svg>
+
+<div id="app-container">
+
+  <!-- ==========================================
+       1. SIDEBAR
+       ========================================== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg class="icon" viewBox="0 0 24 24" style="width:28px; height:28px;"><use href="#icon-brand"></use></svg>
+      </div>
+      <div class="brand-title">Rust <span>AutoConnect</span></div>
+    </div>
+
+    <nav class="nav-menu">
+      <div class="nav-item active" data-tab="servers">
+        <svg class="icon" viewBox="0 0 24 24"><use href="#icon-nav-home"></use></svg>
+        <span>Серверы</span>
+      </div>
+      <div class="nav-item" data-tab="bench">
+        <svg class="icon" viewBox="0 0 24 24"><use href="#icon-nav-bench"></use></svg>
+        <span>Бенчмарк</span>
+      </div>
+      <div class="nav-item" data-tab="settings">
+        <svg class="icon" viewBox="0 0 24 24"><use href="#icon-nav-settings"></use></svg>
+        <span>Настройки</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-watermark"></div>
+
+    <div class="sidebar-footer">
+      <span class="version-tag">v0.7.0</span>
+      <div class="version-badge">
+        <div class="dot"></div>
+        <span>Latest</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==========================================
+       2. MAIN CONTENT
+       ========================================== -->
+  <main class="main-content">
+
+    <!-- 2.1 SERVERS VIEW -->
+    <section id="view-servers" class="view-section active">
+      <h1 class="section-header">Серверы</h1>
+
+      <!-- Action Toolbar -->
+      <div class="action-toolbar">
+        <div class="ip-input-wrapper">
+          <input type="text" id="ip-input" class="ip-input" placeholder="IP:PORT (например, 127.0.0.1:28015)" autocomplete="off" spellcheck="false">
+        </div>
+
+        <button id="btn-connect-main" class="btn-primary">
+          <svg class="icon" viewBox="0 0 24 24" style="width:14px; height:14px;"><use href="#icon-play"></use></svg>
+          <span>ПОДКЛЮЧИТЬСЯ</span>
+        </button>
+
+        <div class="search-input-wrapper">
+          <svg class="icon search-icon-pos"><use href="#icon-filter"></use></svg>
+          <input type="text" id="search-input" class="search-input" placeholder="Поиск серверов...">
+        </div>
+
+        <button id="btn-filter-toggle" class="btn-icon" title="Фильтр (Все / Избранное)">
+          <svg class="icon" viewBox="0 0 24 24"><use href="#icon-filter"></use></svg>
+        </button>
+
+        <button id="btn-log-drawer" class="btn-icon" title="Журнал активности">
+          <svg class="icon" viewBox="0 0 24 24"><use href="#icon-list-menu"></use></svg>
+        </button>
+      </div>
+
+      <!-- Resizable Server Table -->
+      <div id="table-panel" class="table-panel">
+        <div class="table-header">
+          <div class="th-cell th-star">★</div>
+          <div class="col-divider" data-col="star"></div>
+
+          <div class="th-cell th-name">Название сервера</div>
+          <div class="col-divider" data-col="name"></div>
+
+          <div class="th-cell th-addr">Адрес</div>
+          <div class="col-divider" data-col="addr"></div>
+
+          <div class="th-cell th-players">Игроки</div>
+          <div class="col-divider" data-col="players"></div>
+
+          <div class="th-cell th-local">Статус</div>
+          <div class="col-divider" data-col="local"></div>
+
+          <div class="th-cell th-action">Действие</div>
+        </div>
+
+        <!-- Ghost Guide Line & Width Tooltip during Drag -->
+        <div id="ghost-guide-line" class="ghost-guide-line"></div>
+        <div id="ghost-guide-badge" class="ghost-guide-badge">280 px</div>
+
+        <div id="table-body" class="table-body">
+          <!-- Rows injected via table.js -->
+        </div>
+      </div>
+    </section>
+
+    <!-- 2.2 BENCHMARK VIEW -->
+    <section id="view-bench" class="view-section">
+      <h1 class="section-header">Бенчмарк оборудования</h1>
+
+      <div class="bench-card" style="margin-bottom: 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div>
+            <div style="font-size:16px; font-weight:700;">Характеристики системы</div>
+            <div id="bench-run-count" style="font-size:12px; color:var(--muted);">Локальных тестов: 0</div>
+          </div>
+          <button id="btn-run-benchmark" class="btn-primary">Запустить тест</button>
+        </div>
+
+        <div style="height: 4px; background:var(--surface-alt); border-radius:2px; overflow:hidden; margin-bottom:16px;">
+          <div id="bench-progress-bar" style="width:0%; height:100%; background:var(--accent); transition: width 0.3s;"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
+          <div style="background:var(--surface-alt); padding:12px; border-radius:6px; border:1px solid var(--border);">
+            <div style="font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase;">Процессор</div>
+            <div id="spec-cpu" style="font-size:13px; font-weight:700; margin-top:4px;">Loading...</div>
+          </div>
+          <div style="background:var(--surface-alt); padding:12px; border-radius:6px; border:1px solid var(--border);">
+            <div style="font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase;">ОЗУ</div>
+            <div id="spec-ram" style="font-size:13px; font-weight:700; margin-top:4px;">Loading...</div>
+          </div>
+          <div style="background:var(--surface-alt); padding:12px; border-radius:6px; border:1px solid var(--border);">
+            <div style="font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase;">Накопитель</div>
+            <div id="spec-disk" style="font-size:13px; font-weight:700; margin-top:4px;">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bench-card" style="flex:1; overflow-y:auto;">
+        <div style="font-size:16px; font-weight:700; margin-bottom:6px;">Онлайн рейтинг (Время загрузки)</div>
+        <table class="ranking-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Конфигурация</th>
+              <th style="text-align:right;">Время</th>
+              <th style="text-align:right;">Тестов</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-tbody">
+            <!-- Ranking rows injected via app.js -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 2.3 SETTINGS VIEW -->
+    <section id="view-settings" class="view-section">
+      <h1 class="section-header">Настройки приложения</h1>
+
+      <div class="settings-card">
+        <!-- Language -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Язык интерфейса</div>
+            <div class="setting-desc">Выберите предпочтительный язык для всех надписей</div>
+          </div>
+          <select id="select-lang" class="select-box">
+            <option value="RU">Русский (RU)</option>
+            <option value="EN">English (EN)</option>
+            <option value="UK">Українська (UK)</option>
+            <option value="DE">Deutsch (DE)</option>
+            <option value="FR">Français (FR)</option>
+            <option value="ES">Español (ES)</option>
+            <option value="TR">Türkçe (TR)</option>
+            <option value="PL">Polski (PL)</option>
+            <option value="CN">中文 (CN)</option>
+          </select>
+        </div>
+
+        <!-- Tray -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Сворачивать в системный трей</div>
+            <div class="setting-desc">Оставлять программу работать в фоне рядом с часами</div>
+          </div>
+          <label class="custom-checkbox">
+            <input type="checkbox" id="chk-tray">
+            <span class="checkbox-slider"></span>
+          </label>
+        </div>
+
+        <!-- Swarm P2P -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">P2P сеть Swarm</div>
+            <div class="setting-desc">Обмен информацией о состоянии серверов с другими игроками</div>
+          </div>
+          <label class="custom-checkbox">
+            <input type="checkbox" id="chk-swarm">
+            <span class="checkbox-slider"></span>
+          </label>
+        </div>
+
+        <!-- Share Saved Servers -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Синхронизация сохранённых серверов</div>
+            <div class="setting-desc">Помогать обновлять пинг и статус популярных серверов в сети</div>
+          </div>
+          <label class="custom-checkbox">
+            <input type="checkbox" id="chk-share-servers">
+            <span class="checkbox-slider"></span>
+          </label>
+        </div>
+
+        <!-- Telegram Bot -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title" style="display:flex; align-items:center; gap:8px;">
+              <span>Telegram Бот оповещений</span>
+              <span id="tg-status-badge" class="tg-status-badge" style="display:none;"></span>
+            </div>
+            <div id="tg-settings-status" class="setting-desc">Получать пуш-уведомления об окончании очереди и вайпах на телефон</div>
+          </div>
+          <button id="btn-open-tg-modal" class="btn-primary" style="height:34px; padding:0 14px; font-size:12px;">Привязать бота</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==========================================
+       3. 144 FPS SLIDING ACTIVITY LOG DRAWER
+       ========================================== -->
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+  <aside id="activity-drawer" class="activity-drawer">
+    <div class="drawer-header">
+      <div class="drawer-title">Журнал активности</div>
+      <div class="drawer-actions">
+        <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); cursor:pointer;">
+          <input type="checkbox" id="chk-autoscroll" checked>
+          <span>Автопрокрутка</span>
+        </label>
+        <button id="btn-clear-log" class="btn-icon" style="width:30px; height:30px;" title="Очистить лог">
+          <svg class="icon" viewBox="0 0 24 24"><use href="#icon-trash"></use></svg>
+        </button>
+        <button id="btn-close-drawer" class="btn-icon" style="width:30px; height:30px;" title="Закрыть">
+          <svg class="icon" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+    </div>
+    <div id="drawer-log-body" class="drawer-body"></div>
+  </aside>
+
+  <!-- ==========================================
+       4. SERVER DETAILS MODAL CARD
+       ========================================== -->
+  <div id="server-card-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-banner">
+        <button class="modal-close-btn" title="Закрыть">
+          <svg class="icon" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <h2 id="m-server-title" class="modal-title">Rustafied.com - EU Small</h2>
+        <div class="modal-addr-row">
+          <span id="m-server-ip">198.244.168.34:28015</span>
+          <button id="m-btn-copy-ip" class="btn-copy-mini" title="Копировать IP">
+            <svg class="icon" viewBox="0 0 24 24"><use href="#icon-copy"></use></svg>
+          </button>
+        </div>
+
+        <div class="modal-stats-grid">
+          <div class="modal-stat-tile">
+            <div class="stat-icon-wrap"><svg class="icon" viewBox="0 0 24 24" style="width:22px; height:22px;"><use href="#icon-players"></use></svg></div>
+            <div class="stat-labels">
+              <span class="stat-title">Игроки</span>
+              <span id="m-players-val" class="stat-val">97/150</span>
+            </div>
+          </div>
+          <div class="modal-stat-tile">
+            <div class="stat-icon-wrap"><svg class="icon" viewBox="0 0 24 24" style="width:22px; height:22px;"><use href="#icon-map"></use></svg></div>
+            <div class="stat-labels">
+              <span class="stat-title">Карта</span>
+              <span id="m-map-val" class="stat-val">Procedural</span>
+            </div>
+          </div>
+          <div class="modal-stat-tile">
+            <div class="stat-icon-wrap"><svg class="icon" viewBox="0 0 24 24" style="width:22px; height:22px;"><use href="#icon-cube"></use></svg></div>
+            <div class="stat-labels">
+              <span class="stat-title">Размер</span>
+              <span id="m-size-val" class="stat-val">4.0 km</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="m-server-desc" class="modal-desc">
+          Классический Rust сервер. Еженедельный вайп по пятницам. Активное комьюнити, баланс между выживанием и PvP. Удачи и приятной игры!
+        </div>
+
+        <div class="modal-links-row">
+          <button id="m-btn-discord" class="btn-link">
+            <svg class="icon" viewBox="0 0 24 24"><use href="#icon-discord"></use></svg>
+            <span>Discord</span>
+          </button>
+          <button id="m-btn-website" class="btn-link">
+            <svg class="icon" viewBox="0 0 24 24"><use href="#icon-website"></use></svg>
+            <span>Веб-сайт</span>
+          </button>
+          <button id="m-btn-rules" class="btn-link">
+            <svg class="icon" viewBox="0 0 24 24"><use href="#icon-rules"></use></svg>
+            <span>Правила</span>
+          </button>
+        </div>
+
+        <div id="m-wipe-countdown" class="modal-wipe-countdown">
+          <svg class="icon" viewBox="0 0 24 24"><use href="#icon-clock"></use></svg>
+          <span>Вайп через: --</span>
+        </div>
+
+        <div class="modal-actions-row">
+          <button id="m-btn-map" class="btn-icon" style="width:100%; height:44px; font-weight:700; gap:8px;">
+            <svg class="icon" viewBox="0 0 24 24"><use href="#icon-map"></use></svg>
+            <span>Открыть карту</span>
+          </button>
+          <button id="m-btn-connect" class="btn-primary" style="height:44px; justify-content:center;">
+            <svg class="icon" viewBox="0 0 24 24" style="width:14px; height:14px;"><use href="#icon-play"></use></svg>
+            <span>ПОДКЛЮЧИТЬСЯ</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       5. TELEGRAM PAIRING MODAL
+       ========================================== -->
+  <div id="telegram-link-modal" class="modal-overlay">
+    <div class="modal-card" style="width:480px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 22px; border-bottom:1px solid var(--border);">
+        <div style="font-size:16px; font-weight:700;">Привязка Telegram Бота</div>
+        <button class="modal-close-btn" style="position:static;" title="Закрыть">
+          <svg class="icon" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+
+      <div style="padding:22px;">
+        <div id="tg-modal-status" style="font-size:12px; color:var(--muted); margin-bottom:16px; line-height:1.5;">
+          Отправьте данный код Telegram-боту для связывания вашего аккаунта:
+        </div>
+
+        <div id="tg-pairing-code" style="background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:14px; text-align:center; font-family:var(--font-mono); font-size:24px; font-weight:800; color:var(--accent); letter-spacing:3px; margin-bottom:16px;">
+          ------
+        </div>
+
+        <div style="display:flex; justify-content:space-between; gap:10px;">
+          <button id="tg-unlink-btn" class="btn-icon" style="height:40px; padding:0 14px; color:var(--danger); display:none;">Отвязать</button>
+          <button id="tg-copy-btn" class="btn-primary" style="height:40px; margin-left:auto;">Скопировать код</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       6. RIGHT-CLICK CONTEXT MENU
+       ========================================== -->
+  <div id="context-menu" class="context-menu">
+    <div id="ctx-connect" class="context-item">
+      <svg class="icon" viewBox="0 0 24 24"><use href="#icon-play"></use></svg>
+      <span>Подключиться</span>
+    </div>
+    <div id="ctx-autoarm" class="context-item">
+      <svg class="icon" viewBox="0 0 24 24"><use href="#icon-shield-armed"></use></svg>
+      <span>Взвести автоподключение</span>
+    </div>
+    <div class="context-separator"></div>
+    <div id="ctx-copy" class="context-item">
+      <svg class="icon" viewBox="0 0 24 24"><use href="#icon-copy"></use></svg>
+      <span>Копировать адрес</span>
+    </div>
+    <div id="ctx-details" class="context-item">
+      <svg class="icon" viewBox="0 0 24 24"><use href="#icon-cube"></use></svg>
+      <span>Информация о сервере</span>
+    </div>
+    <div class="context-separator"></div>
+    <div id="ctx-delete" class="context-item" style="color:var(--danger);">
+      <svg class="icon" viewBox="0 0 24 24"><use href="#icon-trash"></use></svg>
+      <span>Удалить из списка</span>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       7. BOTTOM STATUS BAR (2 sections)
+       ========================================== -->
+  <footer class="footer-bar">
+    <!-- Left: Rust Process Status Indicator -->
+    <div class="footer-section footer-left">
+      <div id="rust-status-dot" class="footer-dot"></div>
+      <span id="rust-status-label" style="font-weight:700; font-size:12px; color:var(--muted);">Rust: не запущен</span>
+    </div>
+
+    <!-- Right: Auto-reconnect armed status + Disarm button -->
+    <div class="footer-section footer-right">
+      <div id="armed-status-dot" class="footer-dot"></div>
+      <span id="armed-status-label" style="font-weight:700; font-size:12px; color:var(--muted);">Автоподключение: выключено</span>
+      <button id="btn-disarm-footer" class="btn-disarm" disabled>Выключить</button>
+    </div>
+  </footer>
+
+</div>
+
+<script>window.__AC_SESSION_TOKEN__ = "__AC_TOKEN_VALUE__";</script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/modal.js"></script>
+<script src="/static/js/drawer.js"></script>
+<script src="/static/js/table.js"></script>
+<script src="/static/js/app.js"></script>
+
+</body>
+</html>

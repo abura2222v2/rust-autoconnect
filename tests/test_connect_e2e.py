@@ -54,3 +54,27 @@ def test_localhost_full_server_is_not_ready_to_join():
         server.stop()
     assert status.alive
     assert not status.has_join_capacity
+
+
+def test_watcher_start_boundary_ignores_old_lines_and_keeps_immediate_new_lines(tmp_path: Path):
+    log_file = tmp_path / "Player.log"
+    log_file.write_text("Client connected to old.example:28015\n", encoding="utf-8")
+    events = []
+
+    async def scenario():
+        watcher = LogWatcher(
+            lambda _reason: None, lambda error: (_ for _ in ()).throw(AssertionError(error)),
+            events.append, target_log_path=log_file, poll_interval=0.02,
+        )
+        watcher.capture_start_position()
+        watcher.start(loop=asyncio.get_running_loop())
+        with log_file.open("a", encoding="utf-8") as handle:
+            handle.write("Client connected to 127.0.0.1:28015\n")
+        for _ in range(20):
+            if events:
+                break
+            await asyncio.sleep(0.02)
+        watcher.stop()
+
+    asyncio.run(scenario())
+    assert events == ["Client connected to 127.0.0.1:28015"]

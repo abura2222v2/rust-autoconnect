@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from threading import Event
+from threading import Event, Lock
+import time
 from typing import Optional
 
 
@@ -26,9 +27,11 @@ class ConnectionPhase(str, Enum):
 class PollingPolicy:
     # Quiet by default.  Turbo is deliberately short and only enabled by a
     # trusted schedule, a confirmed offline transition, or a Swarm hint.
-    idle_seconds: float = 600.0
+    # A selected/armed server is intentionally simple: one local check every
+    # 30 seconds.  Provider data is fetched independently at most once/minute.
+    idle_seconds: float = 30.0
     watch_seconds: float = 30.0
-    turbo_seconds: float = 1.0
+    turbo_seconds: float = 2.0
     watch_window: timedelta = timedelta(minutes=30)
     turbo_window: timedelta = timedelta(minutes=5)
     max_turbo_duration: timedelta = timedelta(minutes=5)
@@ -54,6 +57,11 @@ class ConnectionSession:
     force_wipe_at: Optional[datetime] = None
     phase: ConnectionPhase = ConnectionPhase.IDLE
     launched_by_app: bool = False
+    steam_url_dispatched: bool = False
+    steam_request_started_at: Optional[float] = None
+    post_dispatch_log_activity_seen: bool = False
+    steam_handoff_warning_reported: bool = False
+    target_connection_attempt_seen: bool = False
     queue_requested: bool = False
     menu_ready: bool = False
     waiting_for_wipe_restart: bool = False
@@ -73,16 +81,35 @@ class ConnectionSession:
     provider_checked_at: Optional[datetime] = None
     provider_last_requested_at: Optional[datetime] = None
     provider_refresh_in_flight: bool = False
+    provider_query_port: Optional[int] = None
+    provider_wipe_baseline: Optional[tuple[object, ...]] = None
+    provider_wipe_change_detected: bool = False
+    provider_wipe_offline_seen: bool = False
     watch_until: Optional[datetime] = None
     stop_event: Event = field(default_factory=Event)
+    diagnostic_started_at: float = field(default_factory=time.monotonic)
+    diagnostic_stage: str = ""
+    diagnostic_events: list[tuple[str, float]] = field(default_factory=list)
+    dns_refresh_attempted: bool = False
+    _diagnostic_lock: Lock = field(default_factory=Lock, repr=False, compare=False)
+
+    def record_stage(self, stage: str) -> tuple[float, bool]:
+        """Record a user-visible connection stage using a monotonic clock."""
+        elapsed = max(0.0, time.monotonic() - self.diagnostic_started_at)
+        with self._diagnostic_lock:
+            changed = stage != self.diagnostic_stage
+            if changed:
+                self.diagnostic_stage = stage
+                self.diagnostic_events.append((stage, elapsed))
+        return elapsed, changed
 
     def select_phase(self, now: Optional[datetime] = None, swarm_hint: bool = False) -> ConnectionPhase:
         now = now or datetime.now(timezone.utc)
         if self.stop_event.is_set():
             self.phase = ConnectionPhase.IDLE
             return self.phase
-        if swarm_hint:
-            self.request_turbo(now)
+        # Swarm is advisory only.  It may wake the next local probe but must
+        # never escalate the connection rate or trigger a Steam launch.
         if self.turbo_until is not None:
             if now < self.turbo_until:
                 self.phase = ConnectionPhase.TURBO
@@ -181,6 +208,33 @@ class ConnectionSession:
         if online is False:
             self.observe_server_down(now)
         return changed
+
+    def observe_provider_wipe_fingerprint(
+        self, fingerprint: tuple[object, ...], now: Optional[datetime] = None,
+    ) -> bool:
+        """Detect a post-force-wipe provider change without trusting a clock alone."""
+        now = now or datetime.now(timezone.utc)
+        if not fingerprint or not self.force_wipe_at:
+            return False
+        if not self.force_wipe_at - timedelta(minutes=30) <= now <= self.force_wipe_at + timedelta(minutes=30):
+            return False
+        if self.provider_wipe_baseline is None:
+            self.provider_wipe_baseline = fingerprint
+            return False
+        if fingerprint != self.provider_wipe_baseline and now >= self.force_wipe_at - timedelta(minutes=5):
+            self.provider_wipe_change_detected = True
+            return True
+        return False
+
+    def observe_provider_wipe_availability(self, online: Optional[bool]) -> bool:
+        """Require an observed provider offline-to-online transition for a wipe restart."""
+        if online is False:
+            self.provider_wipe_offline_seen = True
+            return False
+        if online is True and self.provider_wipe_offline_seen:
+            self.provider_wipe_offline_seen = False
+            return True
+        return False
 
     def observe_query_result(self, alive: bool, now: Optional[datetime] = None) -> bool:
         """Record an A2S result and return whether a restart is confirmed.

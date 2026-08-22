@@ -55,6 +55,8 @@ def _loading_controller(status: ServerStatus):
     controller.swarm_service = MagicMock()
     controller.a2s_client = MagicMock()
     controller.a2s_client.check_server_status.return_value = status
+    controller.process_monitor = MagicMock()
+    controller.process_monitor.is_rust_running.return_value = False
     controller._refresh_provider_hint = MagicMock()
     controller.log_safe = MagicMock()
     controller.set_connection_phase = MagicMock()
@@ -96,3 +98,12 @@ def test_loading_rust_keeps_observing_server_without_second_steam_launch(status,
     assert profile_call.kwargs["state"] == expected_state
     assert isinstance(profile_call.kwargs["checked_at"], int)
     assert any(call.args[0] == expected_log for call in controller.log_safe.call_args_list)
+
+
+def test_open_rust_reports_handoff_instead_of_loading():
+    controller, _session = _loading_controller(ServerStatus(True, player_count=0, max_players=100))
+    controller.process_monitor.is_rust_running.return_value = True
+
+    AppController.run_logic(controller, "127.0.0.1:28015", operation_id=7)
+
+    assert any(call.args[0] == "rust_open_server_online" for call in controller.log_safe.call_args_list)

@@ -13,15 +13,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = PROJECT_ROOT / ".pytest_tmp" / "gui_smoke"
 
 
-def capture(window, destination: Path) -> None:
+def capture(window, destination: Path, *, front_window=None) -> None:
     from PIL import ImageGrab
 
     window.deiconify()
-    was_topmost = bool(window.attributes("-topmost"))
-    window.attributes("-topmost", True)
+    front = front_window or window
+    was_topmost = bool(front.attributes("-topmost"))
+    front.attributes("-topmost", True)
     try:
-        window.lift()
-        window.focus_force()
+        front.lift()
+        front.focus_force()
         window.update_idletasks()
         window.update()
         time.sleep(0.4)
@@ -32,7 +33,7 @@ def capture(window, destination: Path) -> None:
         height = window.winfo_height()
         ImageGrab.grab(bbox=(x, y, x + width, y + height)).save(destination)
     finally:
-        window.attributes("-topmost", was_topmost)
+        front.attributes("-topmost", was_topmost)
 
 
 def main() -> int:
@@ -74,6 +75,13 @@ def main() -> int:
         window.update_idletasks()
         capture(window, OUTPUT_DIR / "connect_wide.png")
 
+        window.toggle_activity_log()
+        window.update_idletasks()
+        capture(window, OUTPUT_DIR / "connect_log_open.png")
+        window.toggle_activity_log()
+        window.update_idletasks()
+
+        window.toggle_activity_log()
         drag_start = SimpleNamespace(x_root=100)
         window._start_home_resize(drag_start)
         # A real pointer produces a burst of motion events.  The UI must
@@ -92,6 +100,24 @@ def main() -> int:
         window._apply_home_split(window.home_content.winfo_width())
         capture(window, OUTPUT_DIR / "connect_history_min.png")
         window._reset_home_split(None)
+        window.toggle_activity_log()
+        snapshot = SimpleNamespace(
+            status="ready", name="Rustoria EU Long", players=240, max_players=300,
+            map_name="Procedural Map", map_size=4250, map_seed=1234, version="2632",
+            country="United Kingdom", city="London", fps=30, entities_count=123456,
+            checked_at=None, description="Public server description", website="https://example.test",
+            map_url="", rustmaps_url="https://rustmaps.com/map/0123456789abcdef0123456789abcdef",
+            banner_url="", server_id=5446410, links=(),
+        )
+        window.show_server_card("54.37.244.21:28015", snapshot)
+        window.update()
+        capture(window, OUTPUT_DIR / "server_card.png")
+        assert window._server_card_window.winfo_toplevel() is window
+        assert window.grab_current() is window._server_card_window
+        window.event_generate("<Escape>")
+        window.update()
+        assert window._server_card_window is None
+        window.hide_server_card()
 
         window.show_bench_frame()
         capture(window, OUTPUT_DIR / "benchmark.png")
