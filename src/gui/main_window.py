@@ -750,11 +750,11 @@ class MainWindow(ctk.CTk):
         self.sidebar_watermark = ctk.CTkLabel(self.sidebar_frame, text="", image=self._sidebar_watermark_ctk)
         self.sidebar_watermark.grid(row=4, column=0, sticky="sew")
 
-        # Sidebar footer (v0.7.0 • Latest)
+        # Sidebar footer (v0.8.0 • Latest)
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, height=38, corner_radius=0, fg_color="transparent")
         self.sidebar_footer.grid(row=5, column=0, sticky="sew", padx=16, pady=(0, 12))
 
-        self.version_label = ctk.CTkLabel(self.sidebar_footer, text="v0.7.0", font=ctk.CTkFont(size=12, weight="bold"), text_color=COLORS["muted"])
+        self.version_label = ctk.CTkLabel(self.sidebar_footer, text="v0.8.0", font=ctk.CTkFont(size=12, weight="bold"), text_color=COLORS["muted"])
         self.version_label.pack(side="left", padx=(0, 10))
 
         self.version_badge = ctk.CTkFrame(self.sidebar_footer, fg_color=COLORS["surface_card"], border_width=1, border_color=COLORS["border"], corner_radius=4, height=24)

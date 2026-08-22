@@ -310,7 +310,7 @@ class WebBridge:
                 "display_name": self.telegram_service.display_name,
                 "link_code": self.telegram_service.link_code,
             },
-            "version": "v0.7.0",
+            "version": "v0.8.0",
             "version_status": "Latest",
             "strings": {key: self.i18n.t(key) for key in WEB_STRING_KEYS},
         }
