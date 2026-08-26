@@ -20,6 +20,8 @@ TEST_INFRA.md
 # User data created at runtime
 data.json
 history.json
+# Local APPDATA fallback dir (used when %APPDATA% isn't set, e.g. on Linux)
+/RustAutoConnect/
 
 # Distribution output
 RustAutoConnect.exe
