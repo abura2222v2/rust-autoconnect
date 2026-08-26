@@ -145,7 +145,7 @@ class WebConnectController:
         self.is_polling = True
         self.is_connected = False
 
-        session = ConnectionSession(requested_endpoint=target)
+        session = ConnectionSession(requested_endpoint=target, smart_mode=history_store.get_smart_mode())
         session.queue_on_full = queue_on_full
         self._active_session = session
 

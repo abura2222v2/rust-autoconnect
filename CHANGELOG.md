@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- A "Smart mode" toggle in Settings. Normal mode (now the default, and the only mode actually reachable) polls the target server every ~2 seconds from the moment Start is pressed and connects on the first online result, with no wipe-time awareness — for the "server closed before wipe, just keep hammering it" case. The existing wipe-aware quiet/watch/turbo logic is kept in `smart_monitor.py` behind a `smart_mode` flag for a future release; trying to switch the toggle on currently shows a "Smart mode is temporarily unavailable" toast and the toggle snaps back off. The wipe countdown on the server details card (a Smart-mode feature) shows the same toast when clicked.
+- Auto-arm (reconnect an armed server after a log-confirmed disconnect) and Swarm (P2P server-status sharing) are unaffected by this toggle — both already worked independently of the wipe schedule and continue to work the same way in Normal mode.
+
 ## [0.7.0] - 2026-08-22
 
 ### Added

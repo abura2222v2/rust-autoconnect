@@ -2,6 +2,21 @@
  * Rust AutoConnect - Main Reactive Application Controller
  */
 
+function showToast(message) {
+  const container = document.getElementById('toast-container');
+  if (!container || !message) return;
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = message;
+  container.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('toast-visible'));
+  setTimeout(() => {
+    el.classList.remove('toast-visible');
+    setTimeout(() => el.remove(), 250);
+  }, 2500);
+}
+window.showToast = showToast;
+
 class AppController {
   constructor() {
     this.currentTab = 'servers';
@@ -36,6 +51,18 @@ class AppController {
     this.wipeCountdownLabel = document.querySelector('#m-wipe-countdown span');
     this.nextForceWipeAt = null;
     setInterval(() => this.tickWipeCountdown(), 1000);
+
+    // The countdown is a Smart Mode feature. Smart Mode isn't reachable yet,
+    // so clicking it explains why instead of doing nothing silently.
+    const wipeCountdownEl = document.getElementById('m-wipe-countdown');
+    if (wipeCountdownEl) {
+      wipeCountdownEl.addEventListener('click', () => {
+        const smartModeOn = !!(this.state && this.state.settings && this.state.settings.smart_mode);
+        if (smartModeOn) return;
+        const strings = window.STRINGS || {};
+        showToast(strings.smart_mode_unavailable || 'Функция недоступна в обычном режиме');
+      });
+    }
   }
 
   tickWipeCountdown() {
@@ -213,6 +240,26 @@ class AppController {
       });
     }
 
+    const smartModeToggle = document.getElementById('chk-smart-mode');
+    if (smartModeToggle) {
+      smartModeToggle.addEventListener('change', async (e) => {
+        const wantsOn = e.target.checked;
+        if (!wantsOn) {
+          window.api.updateSetting('smart_mode', false);
+          return;
+        }
+        // Smart mode isn't ready yet: reject the toggle and snap it back off.
+        e.target.checked = false;
+        const res = await window.api.updateSetting('smart_mode', true);
+        const strings = window.STRINGS || {};
+        showToast(
+          (res && res.error === 'smart_mode_unavailable' && strings.smart_mode_unavailable)
+          || strings.smart_mode_unavailable
+          || 'Функция недоступна в обычном режиме'
+        );
+      });
+    }
+
     const tgLinkBtn = document.getElementById('btn-open-tg-modal');
     if (tgLinkBtn) {
       tgLinkBtn.addEventListener('click', async () => {
@@ -287,6 +334,9 @@ class AppController {
 
       const share = document.getElementById('chk-share-servers');
       if (share) share.checked = !!state.settings.share_saved_servers;
+
+      const smartMode = document.getElementById('chk-smart-mode');
+      if (smartMode) smartMode.checked = !!state.settings.smart_mode;
     }
 
     if (state.lang) {

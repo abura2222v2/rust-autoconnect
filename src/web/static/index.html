@@ -312,6 +312,18 @@
           </label>
         </div>
 
+        <!-- Smart Mode -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title" data-i18n="setting_smart_mode_title">Умный режим</div>
+            <div class="setting-desc" data-i18n="setting_smart_mode_desc">Обычный режим (сейчас единственный доступный) сразу опрашивает сервер каждые ~2 секунды с момента нажатия «Старт» и подключается при первом же онлайне — удобно, если сервер закрылся до вайпа. Умный режим (расчёт времени вайпа и адаптивная частота опроса) пока в разработке.</div>
+          </div>
+          <label class="custom-checkbox">
+            <input type="checkbox" id="chk-smart-mode">
+            <span class="checkbox-slider"></span>
+          </label>
+        </div>
+
         <!-- Swarm P2P -->
         <div class="setting-row">
           <div class="setting-info">
@@ -531,6 +543,8 @@
       <button id="btn-disarm-footer" class="btn-disarm" disabled data-i18n="btn_disarm">Выключить</button>
     </div>
   </footer>
+
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
 </div>
 

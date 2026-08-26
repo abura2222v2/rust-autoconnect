@@ -304,6 +304,7 @@ class WebBridge:
                 "share_saved_servers": self.history_store.get_share_saved_servers(),
                 "auto_update": self.history_store.get_auto_update(),
                 "auto_arm": self.history_store.get_auto_arm(),
+                "smart_mode": self.history_store.get_smart_mode(),
             },
             "telegram": {
                 "is_linked": self.telegram_service.is_linked,
@@ -399,6 +400,13 @@ class WebBridge:
             self.history_store.set_auto_update(bool(value))
         elif key == "auto_arm":
             self.history_store.set_auto_arm(bool(value))
+        elif key == "smart_mode":
+            if bool(value):
+                # Smart (wipe-aware) mode is not available yet; keep it off
+                # in storage and report failure so the UI can show a toast
+                # and snap the toggle back.
+                return {"success": False, "key": key, "value": False, "error": "smart_mode_unavailable"}
+            self.history_store.set_smart_mode(False)
         self.broadcast("state_updated", self.get_state())
         return {"success": True, "key": key, "value": value}
 

@@ -51,6 +51,10 @@ class PollingPolicy:
 @dataclass
 class ConnectionSession:
     requested_endpoint: str
+    # Normal mode: constant fast polling from Start, ignoring the wipe
+    # schedule entirely. Smart mode (wipe-aware quiet/watch/turbo) is kept
+    # intact below but is not currently reachable from the settings UI.
+    smart_mode: bool = False
     canonical_endpoint: str = ""
     wipe_at: Optional[datetime] = None
     wipe_source: str = ""
@@ -108,6 +112,10 @@ class ConnectionSession:
         if self.stop_event.is_set():
             self.phase = ConnectionPhase.IDLE
             return self.phase
+        if not self.smart_mode:
+            # Normal mode: dumb constant-rate polling, no wipe awareness.
+            self.phase = ConnectionPhase.TURBO
+            return self.phase
         # Swarm is advisory only.  It may wake the next local probe but must
         # never escalate the connection rate or trigger a Steam launch.
         if self.turbo_until is not None:
@@ -158,6 +166,8 @@ class ConnectionSession:
         who is already in Rust.
         """
         now = now or datetime.now(timezone.utc)
+        if not self.smart_mode:
+            return False
         if self.launched_by_app or self.waiting_for_wipe_restart or self.wipe_restart_seen:
             return False
         candidates = (self.wipe_at, self.force_wipe_at)

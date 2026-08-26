@@ -20,6 +20,7 @@ DEFAULT_DATA: Dict[str, Any] = {
     "leaderboard_enabled": True, "username": "", "client_id": "",
     "installation_id": "", "armed_server": "", "benchmark_runs": [],
     "home_splitter_width": 270, "bench_splitter_width": 270, "auto_arm": True,
+    "smart_mode": False,
     "share_saved_servers": False, "deleted_popular_ips": [],
     "column_widths": {
         "star": 32, "name": 260, "addr": 180, "players": 76, "local": 56, "action": 110
@@ -593,6 +594,13 @@ class HistoryStore:
             
     def set_auto_arm(self, val: bool):
         self._set_value("auto_arm", bool(val))
+
+    def get_smart_mode(self) -> bool:
+        with self._lock:
+            return bool(self.data.get("smart_mode", False))
+
+    def set_smart_mode(self, val: bool):
+        self._set_value("smart_mode", bool(val))
 
     def set_armed_server(self, ip_port: str | None, force: bool = False):
         """Set or toggle armed server. If force=True, sets without toggling off."""
