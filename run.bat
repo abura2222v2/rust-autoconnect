@@ -1,6 +1,6 @@
 @echo off
 echo Устанавливаем библиотеки...
-pip install -r requirements.txt
+py -m pip install -r requirements.txt
 echo Запускаем приложение...
-python main.py
+py main.py
 pause

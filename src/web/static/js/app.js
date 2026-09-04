@@ -127,10 +127,18 @@ class AppController {
   // ==========================================
   initBenchmark() {
     const runBtn = document.getElementById('btn-run-benchmark');
+    let isBenchmarking = false;
     if (runBtn) {
       runBtn.addEventListener('click', async () => {
-        runBtn.disabled = true;
-        runBtn.textContent = (window.STRINGS || {}).bench_testing || 'Testing...';
+        const s = window.STRINGS || {};
+        if (isBenchmarking) {
+          await window.api.stopBenchmark();
+          return;
+        }
+        const confirmMsg = [s.bench_confirm_msg, s.bench_warn_f5].filter(Boolean).join('\n\n');
+        if (confirmMsg && !window.confirm(confirmMsg)) return;
+        isBenchmarking = true;
+        runBtn.textContent = s.bench_testing || 'Testing...';
         await window.api.runBenchmark();
       });
     }
@@ -138,16 +146,19 @@ class AppController {
     window.api.on('benchmark_status', (data) => {
       const runBtn = document.getElementById('btn-run-benchmark');
       const progressElem = document.getElementById('bench-progress-bar');
+      const s = window.STRINGS || {};
       if (data.status === 'running') {
         if (progressElem) progressElem.style.width = `${data.progress || 30}%`;
-      } else if (data.status === 'completed') {
-        if (progressElem) progressElem.style.width = '100%';
-        if (runBtn) {
-          runBtn.disabled = false;
-          runBtn.textContent = (window.STRINGS || {}).btn_run_benchmark || 'Run test';
-        }
-        this.refreshBenchmarkData();
+        return;
       }
+      isBenchmarking = false;
+      if (data.status === 'restore_pending') {
+        if (runBtn) { runBtn.disabled = true; runBtn.textContent = s.restore_pending || 'Restore pending'; }
+        return;
+      }
+      if (progressElem) progressElem.style.width = data.status === 'completed' ? '100%' : '0%';
+      if (runBtn) { runBtn.disabled = false; runBtn.textContent = s.btn_run_benchmark || 'Run test'; }
+      if (data.status === 'completed' || data.status === 'restore_done') this.refreshBenchmarkData();
     });
   }
 

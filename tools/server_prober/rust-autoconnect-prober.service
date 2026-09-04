@@ -1,0 +1,37 @@
+[Unit]
+Description=Rust AutoConnect A2S prober (keeps the shared server cache fresh)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=claude-hypixel-bot
+WorkingDirectory=/opt/rust-autoconnect-prober/app
+# Secrets live in a root-owned 0600 file, never in this unit or in git.
+EnvironmentFile=/opt/rust-autoconnect-prober/prober.env
+# The app's logger writes under $APPDATA/RustAutoConnect; point that at our
+# own directory so it can never land in someone else's home or in cwd.
+Environment=APPDATA=/opt/rust-autoconnect-prober/state
+ExecStart=/opt/rust-autoconnect-prober/venv/bin/python -u tools/server_prober/prober.py
+Restart=always
+RestartSec=15
+
+# This box is shared with other projects and already runs at 3-4x load.
+# These caps mean the prober physically cannot make that worse.
+MemoryMax=192M
+CPUQuota=15%
+Nice=10
+IOSchedulingClass=idle
+
+# It only needs outbound UDP/HTTPS and its own directory.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/rust-autoconnect-prober/state
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

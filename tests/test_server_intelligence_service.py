@@ -92,6 +92,26 @@ def test_snapshot_parses_safe_game_monitoring_card_fields_and_query_port():
     assert payload["query_port"] == 28015
 
 
+def test_snapshot_parses_discord_rules_and_rustmaps_fields():
+    """These fields were added after the backend learned to parse bare-domain
+    community links ("Discord: discord.gg/x") out of the server's own
+    description, and to resolve a real per-seed RustMaps.com link - both were
+    previously always empty on the client no matter what the backend sent."""
+    service = configured_service()
+    with patch("urllib.request.urlopen", return_value=FakeResponse({
+        "status": "ready", "discord": "https://discord.gg/RealCommunity",
+        "rules": "https://real-community.example/rules",
+        "rustmaps_url": "https://rustmaps.com/map/abc123",
+        "rustmaps_image_url": "https://data.rustmaps.com/maps/abc123/map.png",
+    })):
+        snapshot = service.observe_endpoint("203.0.113.11:28015", active=True)
+
+    assert snapshot.discord == "https://discord.gg/RealCommunity"
+    assert snapshot.rules == "https://real-community.example/rules"
+    assert snapshot.rustmaps_url == "https://rustmaps.com/map/abc123"
+    assert snapshot.rustmaps_image_url == "https://data.rustmaps.com/maps/abc123/map.png"
+
+
 def test_share_deduplicates_and_limits_addresses():
     service = configured_service()
     endpoints = ["example.test:28015"] * 2 + [f"s{i}.test:28015" for i in range(30)]

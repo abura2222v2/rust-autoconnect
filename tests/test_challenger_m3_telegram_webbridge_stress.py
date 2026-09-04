@@ -569,21 +569,30 @@ class TestWebSocketConcurrencyAndBroadcastStress:
             flush_future = asyncio.run_coroutine_threadsafe(asyncio.sleep(0.1), loop)
             flush_future.result(timeout=5.0)
 
-            assert len(test_client.messages) == 3
-            parsed_1 = json.loads(test_client.messages[0])
-            assert parsed_1["data"]["telegram"]["is_linked"] is True
-            assert parsed_1["data"]["telegram"]["display_name"] == "@SchemaTest"
-            assert parsed_1["data"]["telegram"]["link_code"] is None
+            # A background monitoring loop (e.g. server/telegram status) may fire an
+            # extra state_updated broadcast in this window, so match by content instead
+            # of a strict count/index — the 3 explicit broadcasts must still be present.
+            assert len(test_client.messages) >= 3
+            parsed = [json.loads(m) for m in test_client.messages]
 
-            parsed_2 = json.loads(test_client.messages[1])
-            assert parsed_2["data"]["telegram"]["is_linked"] is False
-            assert parsed_2["data"]["telegram"]["display_name"] is None
-            assert parsed_2["data"]["telegram"]["link_code"] == "ABCD8888"
-
-            parsed_3 = json.loads(test_client.messages[2])
-            assert parsed_3["data"]["telegram"]["is_linked"] is False
-            assert parsed_3["data"]["telegram"]["display_name"] is None
-            assert parsed_3["data"]["telegram"]["link_code"] is None
+            assert any(
+                p["data"]["telegram"]["is_linked"] is True
+                and p["data"]["telegram"]["display_name"] == "@SchemaTest"
+                and p["data"]["telegram"]["link_code"] is None
+                for p in parsed
+            )
+            assert any(
+                p["data"]["telegram"]["is_linked"] is False
+                and p["data"]["telegram"]["display_name"] is None
+                and p["data"]["telegram"]["link_code"] == "ABCD8888"
+                for p in parsed
+            )
+            assert any(
+                p["data"]["telegram"]["is_linked"] is False
+                and p["data"]["telegram"]["display_name"] is None
+                and p["data"]["telegram"]["link_code"] is None
+                for p in parsed
+            )
         finally:
             loop.call_soon_threadsafe(loop.stop)
 
@@ -651,5 +660,7 @@ class TestWebSocketConcurrencyAndBroadcastStress:
 
         assert len(errors) == 0, f"Encountered errors during concurrent action dispatch: {errors}"
         assert len(results) == 20
-        assert len(client.messages) == 20
+        # Background monitoring loops may add extra state_updated broadcasts on top
+        # of the 20 explicit ones triggered by the workers.
+        assert len(client.messages) >= 20
         assert elapsed < 3.0

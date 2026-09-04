@@ -41,6 +41,7 @@ class ServerSnapshot:
     map_revision: Optional[int] = None
     map_url: str = ""
     rustmaps_url: str = ""
+    rustmaps_image_url: str = ""
     banner_url: str = ""
     version: str = ""
     fps: Optional[int] = None
@@ -50,6 +51,8 @@ class ServerSnapshot:
     city: str = ""
     description: str = ""
     website: str = ""
+    discord: str = ""
+    rules: str = ""
     links: tuple[str, ...] = ()
     last_wipe_at: Optional[int] = None
     pve: Optional[bool] = None
@@ -123,10 +126,12 @@ class ServerIntelligenceService:
             name=text("name", limit=160), map_name=text("map_name", "map", limit=160),
             map_seed=positive_int("map_seed", "seed"), map_size=positive_int("map_size"),
             map_revision=positive_int("map_revision"), map_url=text("map_url", limit=512),
+            rustmaps_url=text("rustmaps_url", limit=512), rustmaps_image_url=text("rustmaps_image_url", limit=512),
             banner_url=text("banner_url", limit=512),
             version=text("version", limit=64), fps=positive_int("fps"), fps_avg=positive_int("fps_avg"),
             entities_count=positive_int("entities_count", "entity_count"), country=text("country", limit=80), city=text("city", limit=80),
             description=text("description"), website=text("website", limit=512),
+            discord=text("discord", limit=512), rules=text("rules", limit=512),
             last_wipe_at=positive_int("last_wipe_at", "last_wipe"),
             pve=payload.get("pve") if isinstance(payload.get("pve"), bool) else None,
             links=tuple(item for item in payload.get("links", []) if isinstance(item, str) and len(item) <= 512) if isinstance(payload.get("links"), list) else (),

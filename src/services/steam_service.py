@@ -16,6 +16,27 @@ def build_connect_url(endpoint: str, app_id: int = 252490) -> str:
         raise ValueError("invalid endpoint")
     return f"steam://run/{app_id}//+connect {endpoint}"
 
+
+def dispatch_launch(endpoint: str, app_id: int) -> None:
+    """Send Rust to `endpoint`, launching the game first if it isn't running.
+
+    Verified empirically against a real Rust client (2026-09-04): the same
+    steam://run//+connect URL works in BOTH states - it launches a closed
+    Rust and connects it, and it also redirects an already-running client
+    that sits in the main menu (the log answers with "Connecting: ip:port"
+    about a second later). An earlier measurement (2026-09-03) concluded the
+    opposite and made this function refuse to send anything while Rust was
+    open; that reading was wrong - it was taken while the log-path bug was
+    still present, so the client's reaction was being written to a file
+    nobody was reading.
+    """
+    url = build_connect_url(endpoint, app_id)
+    if os.name == "nt":
+        os.startfile(url)
+    else:
+        import webbrowser
+        webbrowser.open(url)
+
 def get_steam_path() -> str:
     steam_path = r"C:\Program Files (x86)\Steam"
     try:

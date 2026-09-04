@@ -137,6 +137,11 @@ async def handle_run_benchmark(request: web.Request) -> web.Response:
     return web.json_response(res)
 
 
+async def handle_stop_benchmark(request: web.Request) -> web.Response:
+    res = web_bridge.stop_benchmark()
+    return web.json_response(res)
+
+
 async def handle_leaderboard(request: web.Request) -> web.Response:
     board = web_bridge.get_leaderboard()
     return web.json_response(board)
@@ -235,6 +240,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/export_servers", handle_export_servers)
     app.router.add_get("/api/benchmark_info", handle_benchmark_info)
     app.router.add_post("/api/run_benchmark", handle_run_benchmark)
+    app.router.add_post("/api/stop_benchmark", handle_stop_benchmark)
     app.router.add_get("/api/leaderboard", handle_leaderboard)
     app.router.add_post("/api/telegram_link", handle_telegram_link)
     app.router.add_post("/api/telegram_unlink", handle_telegram_unlink)
@@ -309,8 +315,8 @@ def start_tray_icon(url: str):
         os._exit(0)
 
     menu = pystray.Menu(
-        pystray.MenuItem("Показать окно", on_show, default=True),
-        pystray.MenuItem("Выйти", on_quit),
+        pystray.MenuItem("Show window", on_show, default=True),
+        pystray.MenuItem("Quit", on_quit),
     )
     icon = pystray.Icon("RustAutoConnect", _create_tray_image(), "Rust AutoConnect", menu)
     icon.run_detached()
@@ -325,6 +331,7 @@ def run_web_app(port: int = 0, open_window: bool = True):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     web_bridge.set_event_loop(loop)
+    web_bridge.start_global_watcher()
 
     app = create_app()
     runner = web.AppRunner(app)
@@ -333,7 +340,7 @@ def run_web_app(port: int = 0, open_window: bool = True):
     loop.run_until_complete(site.start())
 
     url = f"http://127.0.0.1:{port}"
-    web_bridge.log(f"Rust AutoConnect Web UI запущен на {url}", level="success")
+    web_bridge.log(f"Rust AutoConnect Web UI started at {url}", level="success")
 
     if open_window:
         threading.Thread(
@@ -348,6 +355,7 @@ def run_web_app(port: int = 0, open_window: bool = True):
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
+        web_bridge._restore_pending_benchmark_on_shutdown()
         loop.run_until_complete(runner.cleanup())
         loop.close()
 

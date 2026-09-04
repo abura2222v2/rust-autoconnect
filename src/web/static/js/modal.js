@@ -2,6 +2,23 @@
  * Rust AutoConnect - Modals & Overlays Controller
  */
 
+// Real server descriptions almost always open with a `![name](url)` banner
+// image line meant for a different renderer than this plain-text panel - it
+// never displays as a picture here, only as literal markdown noise, and it
+// duplicates the server name already shown as the modal title.
+function cleanServerDescription(text) {
+  if (!text) return text;
+  return text
+    .replace(/^!\[[^\]]*\]\([^)]*\)\s*/, '')
+    .replace(/\r\n/g, '\n')
+    // Some operators type a literal backslash-t/backslash-n as a visual
+    // bullet marker for a different renderer (e.g. Discord); left as-is here
+    // it prints as the two raw characters instead of any spacing.
+    .replace(/\\t/g, ' ')
+    .replace(/\\n/g, '\n')
+    .trim();
+}
+
 class ModalManager {
   constructor() {
     this.serverModal = document.getElementById('server-card-modal');
@@ -65,20 +82,25 @@ class ModalManager {
       sizeVal.textContent = (typeof raw === 'number' && raw > 100) ? `${(raw / 1000).toFixed(1)} km` : raw;
     }
     if (descElem) {
-      descElem.textContent = server.description || (window.STRINGS || {}).modal_desc_default
+      descElem.textContent = cleanServerDescription(server.description) || (window.STRINGS || {}).modal_desc_default
         || 'A classic Rust server. Weekly wipe on Fridays. Active community, a good balance between survival and PvP. Good luck and have fun!';
     }
 
-    // Community Link Handlers
-    const discordUrl = server.discord || 'https://discord.gg';
-    const websiteUrl = server.website || 'https://rustafied.com';
-    const rulesUrl = server.rules || 'https://rustafied.com/rules';
-    const mapUrl = server.rustmaps_url || 'https://rustmaps.com';
-
-    if (discordBtn) discordBtn.onclick = () => window.open(discordUrl, '_blank');
-    if (websiteBtn) websiteBtn.onclick = () => window.open(websiteUrl, '_blank');
-    if (rulesBtn) rulesBtn.onclick = () => window.open(rulesUrl, '_blank');
-    if (mapBtn) mapBtn.onclick = () => window.open(mapUrl, '_blank');
+    // Community links are real, per-server data (or empty) - never a
+    // guessed placeholder that would point at an unrelated server's page.
+    // Hide a button entirely when we genuinely don't have that link.
+    // .btn-link/.btn-icon both set display:flex at the same specificity as
+    // the [hidden] user-agent rule, so toggling the `hidden` property alone
+    // would silently lose that tie - set the inline style directly instead.
+    const setLinkButton = (btn, url) => {
+      if (!btn) return;
+      btn.style.display = url ? '' : 'none';
+      btn.onclick = url ? () => window.open(url, '_blank') : null;
+    };
+    setLinkButton(discordBtn, server.discord);
+    setLinkButton(websiteBtn, server.website);
+    setLinkButton(rulesBtn, server.rules);
+    setLinkButton(mapBtn, server.rustmaps_url);
 
     if (copyBtn) {
       copyBtn.onclick = () => {

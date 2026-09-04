@@ -8,6 +8,7 @@ import threading
 
 import a2s
 
+from .config import config
 from .logger import app_logger
 
 
@@ -28,7 +29,12 @@ class ServerStatus:
 class A2SClient:
     """Bounded A2S server probe with a per-server successful-port cache."""
 
-    def __init__(self, timeout: float = 0.6, offsets: tuple[int, ...] = (0, 15, 2, 3, 1, 5, 10, 123), discovery_cooldown: float = 15.0):
+    def __init__(
+        self,
+        timeout: float = config.A2S_TIMEOUT,
+        offsets: tuple[int, ...] = config.PORT_OFFSETS,
+        discovery_cooldown: float = 15.0,
+    ):
         self.timeout = timeout
         self.offsets = offsets
         self._cached_ports: dict[tuple[str, int], int] = {}

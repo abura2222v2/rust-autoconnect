@@ -1,0 +1,398 @@
+2026-09-03T11:30:28.587Z|0x34f8|Input System module state changed to: Initialized.
+2026-09-03T11:30:28.613Z|0x34f8|[Physics::Module] Initialized fallback backend.
+2026-09-03T11:30:28.613Z|0x34f8|[Physics::Module] Id: 0xdecafbad
+2026-09-03T11:30:28.726Z|0x34f8|Initialize engine version: 6000.3.15x1-8 (85d38ff9011b)
+2026-09-03T11:30:28.726Z|0x34f8|[Subsystems] Discovering subsystems at path C:/Program Files (x86)/Steam/steamapps/common/Rust/RustClient_Data/UnitySubsystems
+2026-09-03T11:30:29.392Z|0x34f8|[D3D12 Device Filter] Vendor Name: NVIDIA
+2026-09-03T11:30:29.392Z|0x34f8|[D3D12 Device Filter] Device Name: NVIDIA GeForce RTX 5070 Ti
+2026-09-03T11:30:29.392Z|0x34f8|[D3D12 Device Filter] Driver Version: 32.0.16.1656
+2026-09-03T11:30:29.392Z|0x34f8|[D3D12 Device Filter] Feature Level: 12.2
+2026-09-03T11:30:29.392Z|0x34f8|[D3D12 Device Filter] Graphics Memory: 15995 MB
+2026-09-03T11:30:29.392Z|0x34f8|[D3D12 Device Filter] Processor Count: 16
+2026-09-03T11:30:29.392Z|0x34f8|[D3D12 Device Filter] Device Type: Discrete
+2026-09-03T11:30:29.419Z|0x34f8|GfxDevice: creating device client; kGfxThreadingModeClientWorkerJobs
+2026-09-03T11:30:29.879Z|0x34f8|Direct3D:
+2026-09-03T11:30:29.879Z|0x34f8|    Version:  Direct3D 11.0 [level 11.1]
+2026-09-03T11:30:29.879Z|0x34f8|    Renderer: NVIDIA GeForce RTX 5070 Ti (ID=0x2c05)
+2026-09-03T11:30:29.879Z|0x34f8|    Vendor:   NVIDIA
+2026-09-03T11:30:29.879Z|0x34f8|    VRAM:     15995 MB
+2026-09-03T11:30:29.879Z|0x34f8|    Driver:   32.0.16.1656
+2026-09-03T11:30:30.002Z|0x34f8|[Physics::Module] Selected backend.
+2026-09-03T11:30:30.002Z|0x34f8|[Physics::Module] Name: PhysX
+2026-09-03T11:30:30.002Z|0x34f8|[Physics::Module] Id: 0xf2b8ea05
+2026-09-03T11:30:30.002Z|0x34f8|[Physics::Module] SDK Version: 4.1.2
+2026-09-03T11:30:30.002Z|0x34f8|[Physics::Module] Integration Version: 1.0.0
+2026-09-03T11:30:30.002Z|0x34f8|[Physics::Module] Threading Mode: Multi-Threaded
+2026-09-03T11:30:30.225Z|0x34f8|Shader 'Soft Mask/TextMeshPro/Distance Field': fallback shader 'TextMeshPro/Mobile/Distance Field' not found
+2026-09-03T11:30:30.259Z|0x34f8|<RI> Initializing input.
+2026-09-03T11:30:30.297Z|0x34f8|Using Windows.Gaming.Input
+2026-09-03T11:30:30.416Z|0x34f8|Shader 'TextMeshPro/Distance Field': fallback shader 'TextMeshPro/Mobile/Distance Field' not found
+2026-09-03T11:30:30.417Z|0x34f8|UnloadTime: 0.466500 ms
+2026-09-03T11:30:30.566Z|0x34f8|Bootstrap Startup
+2026-09-03T11:30:30.579Z|0x34f8|[Bootstrap] Opening Bundles
+2026-09-03T11:30:30.628Z|0x34f8|Loading maps/maps.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:30.684Z|0x34f8|Loading shared/assetscenes.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.035Z|0x34f8|Loading shared/audio.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.051Z|0x34f8|Loading shared/content.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.665Z|0x34f8|Loading shared/items.preload.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.677Z|0x34f8|Loading shared/monuments.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.685Z|0x34f8|Loading shared/skinnables.preload.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.709Z|0x34f8|Loading shared/textures.0.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.726Z|0x34f8|Loading shared/textures.1.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.740Z|0x34f8|Loading shared/textures.2.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.752Z|0x34f8|Loading shared/textures.3.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.759Z|0x34f8|Loading shared/textures.4.bundle
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%a6c26ef90453e442ca5ea6e9cab70e542aff78e4:%9bba35c5c9ff49720068e512e59a2091b36d762e(String)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:31.858Z|0x34f8|[Bootstrap] Opening Bundles done in 1.28s
+2026-09-03T11:30:31.858Z|0x34f8|[Bootstrap] Loading Menu Prefabs
+2026-09-03T11:30:38.146Z|0x34f8|Shader 'TextMeshPro/Distance Field': fallback shader 'TextMeshPro/Mobile/Distance Field' not found
+2026-09-03T11:30:38.159Z|0x34f8|Shader 'TextMeshPro/Distance Field - Depth Offset': fallback shader 'TextMeshPro/Mobile/Distance Field' not found
+2026-09-03T11:30:38.159Z|0x34f8|Shader 'Particles/FXVille Blood World Lighting': fallback shader 'Paricles/Alpha Blended' not found
+2026-09-03T11:30:39.054Z|0x34f8|System
+	Name: ABURA2222
+	OS:   Windows 11  (10.0.26100)
+
+CPU
+	Model:  AMD Ryzen 7 9800X3D 8-Core Processor 
+	Cores:  16
+	Memory: 65081 MB
+
+GPU
+	Model:  NVIDIA GeForce RTX 5070 Ti
+	API:    Direct3D 11.0 [level 11.1]
+	Memory: 15995 MB
+	SM:     50
+
+Process
+	Memory:   3256 MB
+
+Mono
+	Collects: 33
+	Memory:   205 MB
+
+
+2026-09-03T11:30:39.055Z|0x34f8|Threaded texture creation has been disabled!
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+TextureStreaming:%72cc05f2e0f46682ad63ae711c382bc8658efb2e(Boolean)
+TextureStreaming:%bf506e08693c8018a841f20ec11e21123a4cfb9f()
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:39.055Z|0x34f8|[Bootstrap] Loading Menu Prefabs done in 7.20s
+2026-09-03T11:30:39.055Z|0x34f8|[Bootstrap] Initializing Steam
+2026-09-03T11:30:39.237Z|0x34f8|SteamID: 76561198826083897 (abura2222)
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%439b0092285d82d959bc7f8df6528ecfb5f54cb8:%c4129a9a601685b99f3191f35733c0510397d913(%337bf5ca1c2bcb247e746f9b97912d47e372abfd)
+%fe3cf2a9b6b5dd184ae92580a54a79b4a5487e29:%c4129a9a601685b99f3191f35733c0510397d913(%337bf5ca1c2bcb247e746f9b97912d47e372abfd)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:39.238Z|0x34f8|[Bootstrap] Initializing Steam done in 0.18s
+2026-09-03T11:30:39.238Z|0x34f8|[Bootstrap] Loading Game Manifest
+2026-09-03T11:30:39.286Z|0x34f8|Manifest Metadata Loaded
+	41061 pooled strings
+	16968 prefab properties
+	423 effect categories
+	2359 entity names
+2026-09-03T11:30:39.286Z|0x34f8|[Bootstrap] Loading Game Manifest done in 0.05s
+2026-09-03T11:30:39.286Z|0x34f8|[Bootstrap] DONE!
+2026-09-03T11:30:39.288Z|0x34f8|[Bootstrap] DONE! done in 0.00s
+2026-09-03T11:30:39.288Z|0x34f8|[Bootstrap] Running Self Check
+2026-09-03T11:30:39.289Z|0x34f8|[Bootstrap] Running Self Check done in 0.00s
+2026-09-03T11:30:39.289Z|0x34f8|[Bootstrap] Bootstrap Tier0
+2026-09-03T11:30:39.351Z|0x34f8|Protocol: 2632.287.1
+Build Date: 08/20/2026 14:26:19
+Unity Version: 6000.3.15x1-8
+Changeset: 161541
+Branch: release
+2026-09-03T11:30:39.426Z|0x34f8|Command Line: "C:\Program Files (x86)\Steam\steamapps\common\Rust\RustClient.exe" "-logfile" "output_log.txt" "-timestamps" "-disable-gpu-skinning" "-graphics.shadowmode" "2" 
+2026-09-03T11:30:39.428Z|0x34f8|Setup unity update hooks
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Start>d__26:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:39.428Z|0x34f8|Command 'logfile' not found
+2026-09-03T11:30:39.428Z|0x34f8|Command 'timestamps' not found
+2026-09-03T11:30:39.428Z|0x34f8|Command 'disable-gpu-skinning' not found
+2026-09-03T11:30:39.428Z|0x34f8|graphics.shadowmode: "2"
+2026-09-03T11:30:39.428Z|0x34f8|[Bootstrap] Bootstrap Tier0 done in 0.14s
+2026-09-03T11:30:39.428Z|0x34f8|[Bootstrap] Bootstrap Systems
+2026-09-03T11:30:39.476Z|0x34f8|[Bootstrap] Bootstrap Systems done in 0.05s
+2026-09-03T11:30:39.476Z|0x34f8|[Bootstrap] Bootstrap Config
+2026-09-03T11:30:39.840Z|0x34f8|Command 'logfile' not found
+2026-09-03T11:30:39.840Z|0x34f8|Command 'timestamps' not found
+2026-09-03T11:30:39.840Z|0x34f8|Command 'disable-gpu-skinning' not found
+2026-09-03T11:30:39.840Z|0x34f8|graphics.shadowmode: "2"
+2026-09-03T11:30:40.222Z|0x34f8|Config Loaded
+2026-09-03T11:30:40.224Z|0x34f8|Command 'logfile' not found
+2026-09-03T11:30:40.224Z|0x34f8|Command 'timestamps' not found
+2026-09-03T11:30:40.224Z|0x34f8|Command 'disable-gpu-skinning' not found
+2026-09-03T11:30:40.224Z|0x34f8|graphics.shadowmode: "2"
+2026-09-03T11:30:40.224Z|0x34f8|[Bootstrap] Bootstrap Config done in 0.75s
+2026-09-03T11:30:40.224Z|0x34f8|[Bootstrap] Loading Items
+2026-09-03T11:30:40.265Z|0x34f8|[Bootstrap] Loading Items done in 0.04s
+2026-09-03T11:30:40.265Z|0x34f8|[Bootstrap] Initializing Items
+2026-09-03T11:30:40.273Z|0x34f8|[Bootstrap] Initializing Items done in 0.01s
+2026-09-03T11:30:40.273Z|0x34f8|[Bootstrap] Reading Menu Data
+2026-09-03T11:30:40.287Z|0x34f8|[Bootstrap] Reading Menu Data done in 0.01s
+2026-09-03T11:30:40.288Z|0x34f8|[Bootstrap] Loading Client
+2026-09-03T11:30:40.303Z|0x34f8|There can be only one active Event System.
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:LogWarning(Object)
+UnityEngine.UIElements.UIElementsRuntimeUtility:RegisterEventSystem(Object)
+UnityEngine.UIElements.UIToolkitInteroperabilityBridge:OnEnable()
+%49b9703ee93bdfc837d0c0a1e31d160e65ecc215:%cc74e347d3f145062831bc5ec6e51b4a5c834d2d(String, Boolean)
+<ClientStartup>d__56:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:30:40.305Z|0x34f8|[Bootstrap] Loading Client done in 0.02s
+2026-09-03T11:30:40.305Z|0x34f8|[Bootstrap] Loading Performance System
+2026-09-03T11:30:40.340Z|0x34f8|[Bootstrap] Loading Performance System done in 0.04s
+2026-09-03T11:30:40.340Z|0x34f8|[Bootstrap] Loading Sound System
+2026-09-03T11:30:40.373Z|0x34f8|[Bootstrap] Loading Sound System done in 0.03s
+2026-09-03T11:30:40.373Z|0x34f8|[Bootstrap] Loading Music System
+2026-09-03T11:30:40.407Z|0x34f8|[Bootstrap] Loading Music System done in 0.03s
+2026-09-03T11:30:40.407Z|0x34f8|[Bootstrap] Loading Streaming System
+2026-09-03T11:30:40.439Z|0x34f8|[Bootstrap] Loading Streaming System done in 0.03s
+2026-09-03T11:30:40.439Z|0x34f8|[Bootstrap] Loading External Systems
+2026-09-03T11:30:40.457Z|0x34f8|[EAC] Loading EasyAntiCheat
+2026-09-03T11:30:40.569Z|0x34f8|[Bootstrap] Loading External Systems done in 0.13s
+2026-09-03T11:30:40.569Z|0x34f8|[Bootstrap] Loading Game UI
+2026-09-03T11:30:40.716Z|0x34f8|[Bootstrap] Loading Game UI done in 0.15s
+2026-09-03T11:30:40.716Z|0x34f8|[Bootstrap] Loading Engine UI
+2026-09-03T11:30:41.202Z|0x34f8|[Bootstrap] Loading Engine UI done in 0.49s
+2026-09-03T11:30:41.202Z|0x34f8|[Bootstrap] Loading Manifest Assets
+2026-09-03T11:30:43.754Z|0x34f8|Manifest Assets Loaded
+161 skinnable objects
+2026-09-03T11:30:43.754Z|0x34f8|[Bootstrap] Loading Manifest Assets done in 2.55s
+2026-09-03T11:30:43.754Z|0x34f8|[Bootstrap] Loading Menu UI
+2026-09-03T11:30:44.221Z|0x3ba0|Color primaries 0 is unknown or unsupported by WindowsMediaFoundation. Falling back to default may result in color shift. archive:/BuildPlayer-AssetScene-monument.23/BuildPlayer-AssetScene-bootstrap.resource
+2026-09-03T11:30:45.104Z|0x34f8|[Bootstrap] Loading Menu UI done in 1.35s
+2026-09-03T11:30:45.104Z|0x34f8|[Bootstrap] Loading Menu Background
+2026-09-03T11:30:45.112Z|0x34f8|[EAC] Logging in with Steam ticket...
+2026-09-03T11:30:45.286Z|0x34f8|[Bootstrap] Loading Menu Background done in 0.18s
+2026-09-03T11:30:45.286Z|0x34f8|[Bootstrap] Loading Asset Scenes
+2026-09-03T11:30:45.314Z|0x34f8|[Bootstrap] Loading Asset Scenes done in 0.03s
+2026-09-03T11:30:45.314Z|0x34f8|[Bootstrap] Waiting For Background Video
+2026-09-03T11:30:45.411Z|0x34f8|[Bootstrap] Waiting For Background Video done in 0.10s
+2026-09-03T11:30:45.411Z|0x34f8|[Bootstrap] Finalizing
+2026-09-03T11:30:52.978Z|0x34f8|Shader 'Effects/Explosions/Distortion/CullBack': fallback shader 'Effects/Distortion/Free/CullOff' not found
+2026-09-03T11:30:52.986Z|0x34f8|Shader 'TextMeshPro/Distance Field NoZTest': fallback shader 'TextMeshPro/Mobile/Distance Field' not found
+2026-09-03T11:30:55.551Z|0x34f8|[Bootstrap] Finalizing done in 10.14s
+2026-09-03T11:30:55.551Z|0x34f8|[Bootstrap] Done
+2026-09-03T11:30:56.575Z|0x34f8|Connecting: 127.0.0.1:28015 (Raknet)
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<Connect>d__53:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback(ContextCallback, Object, Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run(Task, Boolean)
+System.Threading.Tasks.Task:FinishContinuations()
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1:SetResult(TResult)
+Steamworks.ServerList.<RunQueryAsync>d__16:MoveNext()
+System.Threading.ExecutionContext:RunInternal(ExecutionContext, ContextCallback, Object, Boolean)
+System.Runtime.CompilerServices.MoveNextRunner:Run()
+UnityEngine.WorkRequest:Invoke()
+UnityEngine.UnitySynchronizationContext:Exec()
+
+2026-09-03T11:30:56.683Z|0x34f8|[Bootstrap] completed in 26.12s
+2026-09-03T11:31:00.520Z|0x34f8|[0.9s] asset_warmup
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%7eeb49cc31046e9e2302fbf01dbd283ce004f493:%00ea4d9d150d0f9b391395d958d895c976a20111()
+<Run>d__5:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:31:02.262Z|0x34f8|CommandBuffer: temporary render texture  not found while executing CommandBufferManager_0ADF8BA0 (SetComputeTextureParam)
+2026-09-03T11:31:02.297Z|0x34f8|Loading custom map from https://files.facepunch.com/rust/maps/e345a36be4fdedc0a9e206f90933fb2516cac11c945714d337b9f76e5f3984fd/proceduralmap.2000.1786388114190.287_e345a36be4fdedc0a9e206f90933fb25.map
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<InitCoroutine>d__20:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:31:03.149Z|0x34f8|[0.9s] Downloading World
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%7eeb49cc31046e9e2302fbf01dbd283ce004f493:%00ea4d9d150d0f9b391395d958d895c976a20111()
+<DownloadWorld>d__21:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:31:10.131Z|0x34f8|[6.9s] Spawning World
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%7eeb49cc31046e9e2302fbf01dbd283ce004f493:%00ea4d9d150d0f9b391395d958d895c976a20111()
+<InitCoroutine>d__20:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:31:10.709Z|0x34f8|[0.6s] Processing World
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%7eeb49cc31046e9e2302fbf01dbd283ce004f493:%00ea4d9d150d0f9b391395d958d895c976a20111()
+<InitCoroutine>d__20:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:31:11.695Z|0x9e80|Unloading 5 Unused Serialized files (Serialized files now loaded: 136)
+2026-09-03T11:31:11.695Z|0x34f8|[0.7s] Cleaning Up
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%7eeb49cc31046e9e2302fbf01dbd283ce004f493:%00ea4d9d150d0f9b391395d958d895c976a20111()
+<InitCoroutine>d__20:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:31:12.271Z|0x34f8|Unloading 341812 unused Assets to reduce memory usage. Loaded Objects now: 2406134.
+2026-09-03T11:31:12.271Z|0x34f8|Total: 555.537500 ms (FindLiveObjects: 169.816300 ms CreateObjectMapping: 60.605400 ms MarkObjects: 217.982000 ms  DeleteObjects: 107.133300 ms)
+
+2026-09-03T11:31:12.383Z|0x34f8|Destroyed 1160 map networkables
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+<DoClientConnected>d__55:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:31:14.328Z|0x34f8|[1.9s] prefab_warmup
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+%7eeb49cc31046e9e2302fbf01dbd283ce004f493:%00ea4d9d150d0f9b391395d958d895c976a20111()
+<Run>d__1:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+
+2026-09-03T11:31:14.335Z|0x34f8|Threaded texture creation has been enabled!
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+UnityEngine.DebugLogHandler:LogFormat(LogType, Object, String, Object[])
+UnityEngine.Logger:Log(LogType, Object)
+UnityEngine.Debug:Log(Object)
+TextureStreaming:%72cc05f2e0f46682ad63ae711c382bc8658efb2e(Boolean)
+<DoClientConnected>d__55:MoveNext()
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr)
+

@@ -7,7 +7,7 @@ echo ===================================================
 echo.
 
 :: Check if Python is installed
-python --version >nul 2>&1
+py --version >nul 2>&1
 if %errorlevel% neq 0 (
     color 0C
     echo [ERROR] Python is not installed or not in PATH!
@@ -18,7 +18,7 @@ if %errorlevel% neq 0 (
 )
 
 :: Install requirements
-pip install -r requirements.txt
+py -m pip install -r requirements.txt
 if %errorlevel% neq 0 (
     color 0C
     echo.

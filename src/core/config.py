@@ -6,7 +6,10 @@ import os
 class AppConfig:
     STEAM_APP_ID: int = 252490
     POLL_INTERVAL: float = 3.0
-    A2S_TIMEOUT: float = 0.6
+    # A 0.6s timeout is indistinguishable from "server is down" on a busy
+    # server - exactly the case during a wipe rush, when a merely-slow reply
+    # matters most. Raised after observing this against a real public server.
+    A2S_TIMEOUT: float = 1.5
     BENCHMARK_VERSION: str = "rust-load-v1"
     PORT_OFFSETS: tuple = (0, 15, 2, 3, 1, 5, 10, 123)
     DISCONNECT_KEYWORDS: tuple = (

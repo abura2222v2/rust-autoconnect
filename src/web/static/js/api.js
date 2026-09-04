@@ -105,6 +105,7 @@ class ApiService {
   async updateSetting(key, value) { return await this.post('/api/setting', { key, value }); }
   async getBenchmarkInfo() { return await this.get('/api/benchmark_info'); }
   async runBenchmark() { return await this.post('/api/run_benchmark'); }
+  async stopBenchmark() { return await this.post('/api/stop_benchmark'); }
   async getLeaderboard() { return await this.get('/api/leaderboard'); }
   async getTelegramLink() { return await this.post('/api/telegram_link'); }
   async unlinkTelegram() { return await this.post('/api/telegram_unlink'); }

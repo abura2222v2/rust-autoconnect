@@ -82,7 +82,15 @@ class LogWatcher:
             return Path(self.target_log_path)
         log_path = config.rust_log_path
         from ..core.history_store import history_store
+        # Some Rust installs/sessions write only to output_log.txt in the
+        # install directory and never touch Player.log at all (verified
+        # against a real client). rust_path is normally only saved by the
+        # benchmark flow, so most users would never get the alternate path
+        # checked below without this fallback auto-detection.
         rust_path = history_store.get_rust_path()
+        if not rust_path:
+            from ..services import steam_service
+            rust_path = steam_service.find_rust_install_path() or ""
         if rust_path:
             alternate = Path(rust_path) / "output_log.txt"
             if alternate.exists() and (not log_path.exists() or alternate.stat().st_mtime > log_path.stat().st_mtime):
