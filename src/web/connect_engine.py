@@ -87,6 +87,17 @@ _OBSERVATION_LIMIT_SECONDS = 600.0
 # Rust's own queue can legitimately take a very long time.
 _QUEUE_OBSERVATION_LIMIT_SECONDS = 3600.0
 
+# Redirecting an already-open Rust client is not as reliable as launching a
+# closed one (measured live, 2026-09-04): the same steam://+connect command
+# sometimes lands instantly and sometimes does nothing at all - no new log
+# line, no visible attempt, as if the client silently dropped it (possibly a
+# client-side command cooldown). A fresh launch does not have this problem,
+# so only the "already running" redirect case gets a bounded number of
+# resends; spaced apart, not spammed, in case that guess about a cooldown is
+# right and a rapid resend would just be ignored too.
+_REDIRECT_RESEND_INTERVAL_SECONDS = 20.0
+_MAX_REDIRECT_RESENDS = 2
+
 
 def _log_confirms_connection(event: str, target: str, session: Optional[ConnectionSession]) -> bool:
     expected = {target.lower()}
@@ -274,11 +285,15 @@ class WebConnectController:
             while self._is_current(operation_id, session):
                 now = self.network_clock.now()
 
-                # Steam is opened only once, below. Rust may take tens of
-                # seconds to load, while the server can still restart or
-                # disappear in the meantime. Keep lightly observing A2S -
-                # never re-launching - until this session's own log watcher
-                # confirms the connection.
+                # Steam is opened once for a closed Rust, below. Rust may take
+                # tens of seconds to load, while the server can still restart
+                # or disappear in the meantime. Keep lightly observing A2S -
+                # never re-launching a closed client twice - until this
+                # session's own log watcher confirms the connection. The one
+                # exception is a bounded resend of the same redirect command
+                # when it targeted an already-open client (see
+                # _REDIRECT_RESEND_INTERVAL_SECONDS for why that case alone
+                # needs it).
                 if session.launched_by_app:
                     # Observation is not endless. If confirmation never
                     # arrives (a log format change, a join that quietly
@@ -293,6 +308,23 @@ class WebConnectController:
                         self.bridge._session_status = "idle"
                         self.bridge.broadcast("state_updated", self.bridge.get_state())
                         return
+                    if (
+                        session.relaunch_was_already_running
+                        and session.redirect_resend_count < _MAX_REDIRECT_RESENDS
+                        and session.last_launch_sent_at is not None
+                        and (time.monotonic() - session.last_launch_sent_at) >= _REDIRECT_RESEND_INTERVAL_SECONDS
+                    ):
+                        steam_service.dispatch_launch(canonical_target, config.STEAM_APP_ID)
+                        session.last_launch_sent_at = time.monotonic()
+                        session.redirect_resend_count += 1
+                        self.bridge.log(
+                            i18n.t(
+                                "log_redirect_resend",
+                                attempt=session.redirect_resend_count,
+                                attempts=_MAX_REDIRECT_RESENDS,
+                            ),
+                            level="info",
+                        )
                     obs_status = a2s_client.check_server_status(real_ip, port, session.stop_event)
                     if not self._is_current(operation_id, session):
                         return
@@ -507,6 +539,9 @@ class WebConnectController:
             session.launched_by_app = True
             session.steam_url_dispatched = True
             session.steam_request_started_at = time.monotonic()
+            session.relaunch_was_already_running = rust_already_running
+            session.last_launch_sent_at = session.steam_request_started_at
+            session.redirect_resend_count = 0
             queue_suffix = i18n.t("log_launch_sent_queue_suffix") if queue_mode else ""
             sent_key = "log_connect_sent_rust_running" if rust_already_running else "log_launch_sent"
             self.bridge.log(i18n.t(sent_key) + queue_suffix, level="success")

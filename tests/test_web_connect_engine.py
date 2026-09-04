@@ -432,6 +432,33 @@ def test_connect_command_is_sent_even_when_rust_is_already_running(bridge, monke
         bridge.connect_engine.stop(explicit=True)
 
 
+def test_redirect_into_already_running_rust_is_resent_if_unconfirmed(bridge, monkeypatch):
+    """Measured live (2026-09-04): redirecting into an already-open Rust
+    client is not as reliable as launching a closed one - the same
+    steam://+connect command sometimes lands and sometimes silently does
+    nothing (no new log line at all). A fresh launch does not have this
+    problem, so only the already-running case gets a few bounded, spaced
+    resends instead of a single shot that might have been dropped."""
+    monkeypatch.setattr("src.web.connect_engine.process_monitor.is_rust_running", lambda: True)
+    monkeypatch.setattr("src.web.connect_engine._REDIRECT_RESEND_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr("src.web.connect_engine._OBSERVATION_LIMIT_SECONDS", 30.0)
+    server = MockA2SServer(players=1, max_players=10)
+    port = server.start()
+    try:
+        with patch("src.services.steam_service.os.startfile") as mock_startfile:
+            # No log confirmation will ever arrive in this test - the engine
+            # must keep resending (bounded) rather than send just once.
+            bridge.connect_engine.connect(f"127.0.0.1:{port}")
+            assert _wait_until(lambda: mock_startfile.call_count >= 3, timeout=15.0)
+            # Bounded: it must not keep resending forever either.
+            import time as _time
+            _time.sleep(0.5)
+            assert mock_startfile.call_count == 3
+    finally:
+        server.stop()
+        bridge.connect_engine.stop(explicit=True)
+
+
 def test_observation_stops_instead_of_watching_forever(bridge, monkeypatch):
     """Once launched, the engine observes A2S until the log confirms the
     join. If confirmation never comes (log format change, silently failed

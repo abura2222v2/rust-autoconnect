@@ -58,6 +58,12 @@ class ConnectionSession:
     launched_by_app: bool = False
     steam_url_dispatched: bool = False
     steam_request_started_at: Optional[float] = None
+    # Set when this dispatch redirected an already-open Rust client rather
+    # than launching a closed one - that redirect is the unreliable case that
+    # gets bounded resends (see _REDIRECT_RESEND_INTERVAL_SECONDS).
+    relaunch_was_already_running: bool = False
+    last_launch_sent_at: Optional[float] = None
+    redirect_resend_count: int = 0
     target_connection_attempt_seen: bool = False
     queue_requested: bool = False
     menu_ready: bool = False

@@ -191,6 +191,7 @@
   "log_map_change_detected": "Map change detected - the server just wiped.",
   "log_mon": "[*] Reading Rust logs. Will instantly reconnect on disconnect!",
   "log_read_log_error": "Error reading log: {err}",
+  "log_redirect_resend": "No response from the running client yet - resending the connect command (attempt {attempt} of {attempts})...",
   "log_resolving_ip": "Resolving IP for {host}...",
   "log_rust_closed_unexpectedly": "Rust closed unexpectedly. Reconnecting to the armed server...",
   "log_server_full": "Server is full ({player_count}/{max_players}). Waiting for a free slot...",
