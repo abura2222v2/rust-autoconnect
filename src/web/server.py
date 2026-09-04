@@ -298,6 +298,22 @@ def _create_tray_image():
     return image
 
 
+def _launch_window_and_watch(url: str) -> None:
+    """Open the Edge app-mode window and exit the whole app once it closes,
+    unless the player opted into "Minimize to system tray". Edge's app-mode
+    window is a dedicated process (no other tabs), so its exit means the
+    window was actually closed - and the tray icon underneath (started
+    unconditionally, since Python can't see Edge's own minimize button)
+    would otherwise keep the app running in the background forever,
+    including while that setting defaults to off."""
+    process = launch_edge_app_mode(url)
+    if process is None:
+        return
+    process.wait()
+    if not web_bridge.history_store.get_minimize_to_tray():
+        os._exit(0)
+
+
 def start_tray_icon(url: str):
     """Persistent system-tray icon so the app is reachable even if the Edge
     window was closed. Python cannot detect Edge's own minimize button (it's
@@ -308,7 +324,9 @@ def start_tray_icon(url: str):
         return None
 
     def on_show(icon, item):
-        launch_edge_app_mode(url)
+        threading.Thread(
+            target=_launch_window_and_watch, args=(url,), daemon=True, name="reopen-app-window"
+        ).start()
 
     def on_quit(icon, item):
         icon.stop()
@@ -344,7 +362,7 @@ def run_web_app(port: int = 0, open_window: bool = True):
 
     if open_window:
         threading.Thread(
-            target=lambda: (time.sleep(0.5), launch_edge_app_mode(url)),
+            target=lambda: (time.sleep(0.5), _launch_window_and_watch(url)),
             daemon=True,
             name="launch-app-window",
         ).start()
