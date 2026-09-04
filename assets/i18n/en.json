@@ -311,6 +311,8 @@
   "server_name_col": "Server Name",
   "server_restart_turbo": "[!] Server stopped replying after it was online. Turbo search is active for up to five minutes.",
   "server_timeout": "[x] Server not responding yet (maybe offline).",
+  "server_wipe_countdown_label": "Server's own wipe (estimated): {parts}",
+  "server_wipe_now": "Server wipe: expected any time now",
   "servers_title": "Servers",
   "setting_lang_desc": "Choose the preferred language for all labels",
   "setting_lang_title": "Interface language",

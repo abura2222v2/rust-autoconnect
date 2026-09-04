@@ -167,6 +167,32 @@ def test_get_state_shows_real_community_links_not_fabricated_ones():
         history_store.remove_from_history(target)
 
 
+def test_get_state_exposes_per_server_wipe_estimate_when_known():
+    """The server card shows this server's own posted wipe schedule (from
+    the shared listing cache) separately from the official force-wipe date -
+    None until a real snapshot with a wipe_at has been cached."""
+    from src.core.history_store import history_store
+    from src.services.server_intelligence_service import ServerSnapshot
+    from src.web.bridge import WebBridge
+
+    target = "203.0.113.45:28015"
+    try:
+        history_store.add_to_history(target, "Wipe Estimate Test Server", target)
+        bridge = WebBridge()
+
+        state = bridge.get_state()
+        entry = next(s for s in state["servers"] if s["ip"] == target)
+        assert entry["wipe_at"] is None
+
+        with bridge._intel_lock:
+            bridge._intel_cache[target] = ServerSnapshot(wipe_at=1234567890)
+        state = bridge.get_state()
+        entry = next(s for s in state["servers"] if s["ip"] == target)
+        assert entry["wipe_at"] == 1234567890
+    finally:
+        history_store.remove_from_history(target)
+
+
 def test_rustmaps_fallback_degrades_gracefully_without_rules_support():
     """MockA2SServer only implements A2S_INFO, not A2S_RULES - the rustmaps
     lookup must fail closed (cache an empty string) rather than hang or crash."""

@@ -23,8 +23,39 @@ class ModalManager {
   constructor() {
     this.serverModal = document.getElementById('server-card-modal');
     this.telegramModal = document.getElementById('telegram-link-modal');
+    this.serverWipeRow = document.getElementById('m-server-wipe-countdown');
+    this.serverWipeLabel = this.serverWipeRow ? this.serverWipeRow.querySelector('span') : null;
+    this.serverWipeAt = null;
+    setInterval(() => this.tickServerWipe(), 1000);
 
     this.initEvents();
+  }
+
+  // This server's own posted wipe schedule, distinct from the official
+  // force-wipe countdown (app.js) which is the same for every server.
+  tickServerWipe() {
+    if (!this.serverWipeRow || !this.serverWipeLabel) return;
+    if (!this.serverWipeAt) {
+      this.serverWipeRow.style.display = 'none';
+      return;
+    }
+    this.serverWipeRow.style.display = '';
+    const s = window.STRINGS || {};
+    const remainingMs = this.serverWipeAt.getTime() - Date.now();
+    if (remainingMs <= 0) {
+      this.serverWipeLabel.textContent = s.server_wipe_now || 'Server wipe: expected any time now';
+      return;
+    }
+    const totalSeconds = Math.floor(remainingMs / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const parts = [];
+    if (days > 0) parts.push((s.wipe_days_suffix || '{days}d').replace('{days}', days));
+    parts.push((s.wipe_hours_suffix || '{hours}h').replace('{hours}', hours));
+    parts.push((s.wipe_minutes_suffix || '{minutes}m').replace('{minutes}', minutes));
+    this.serverWipeLabel.textContent = (s.server_wipe_countdown_label || "Server's own wipe (estimated): {parts}")
+      .replace('{parts}', parts.join(' '));
   }
 
   initEvents() {
@@ -85,6 +116,9 @@ class ModalManager {
       descElem.textContent = cleanServerDescription(server.description) || (window.STRINGS || {}).modal_desc_default
         || 'A classic Rust server. Weekly wipe on Fridays. Active community, a good balance between survival and PvP. Good luck and have fun!';
     }
+
+    this.serverWipeAt = server.wipe_at ? new Date(server.wipe_at * 1000) : null;
+    this.tickServerWipe();
 
     // Community links are real, per-server data (or empty) - never a
     // guessed placeholder that would point at an unrelated server's page.

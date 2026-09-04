@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from threading import Event, Lock
-import time
+from threading import Event
 from typing import Optional
 
 
@@ -59,8 +58,6 @@ class ConnectionSession:
     launched_by_app: bool = False
     steam_url_dispatched: bool = False
     steam_request_started_at: Optional[float] = None
-    post_dispatch_log_activity_seen: bool = False
-    steam_handoff_warning_reported: bool = False
     target_connection_attempt_seen: bool = False
     queue_requested: bool = False
     menu_ready: bool = False
@@ -84,26 +81,10 @@ class ConnectionSession:
     provider_query_port: Optional[int] = None
     provider_wipe_baseline: Optional[tuple[object, ...]] = None
     provider_wipe_change_detected: bool = False
-    provider_wipe_offline_seen: bool = False
     watch_until: Optional[datetime] = None
     stop_event: Event = field(default_factory=Event)
-    diagnostic_started_at: float = field(default_factory=time.monotonic)
-    diagnostic_stage: str = ""
-    diagnostic_events: list[tuple[str, float]] = field(default_factory=list)
-    dns_refresh_attempted: bool = False
-    _diagnostic_lock: Lock = field(default_factory=Lock, repr=False, compare=False)
 
-    def record_stage(self, stage: str) -> tuple[float, bool]:
-        """Record a user-visible connection stage using a monotonic clock."""
-        elapsed = max(0.0, time.monotonic() - self.diagnostic_started_at)
-        with self._diagnostic_lock:
-            changed = stage != self.diagnostic_stage
-            if changed:
-                self.diagnostic_stage = stage
-                self.diagnostic_events.append((stage, elapsed))
-        return elapsed, changed
-
-    def select_phase(self, now: Optional[datetime] = None, swarm_hint: bool = False) -> ConnectionPhase:
+    def select_phase(self, now: Optional[datetime] = None) -> ConnectionPhase:
         now = now or datetime.now(timezone.utc)
         if self.stop_event.is_set():
             self.phase = ConnectionPhase.IDLE
@@ -226,16 +207,6 @@ class ConnectionSession:
             return True
         return False
 
-    def observe_provider_wipe_availability(self, online: Optional[bool]) -> bool:
-        """Require an observed provider offline-to-online transition for a wipe restart."""
-        if online is False:
-            self.provider_wipe_offline_seen = True
-            return False
-        if online is True and self.provider_wipe_offline_seen:
-            self.provider_wipe_offline_seen = False
-            return True
-        return False
-
     def observe_query_result(self, alive: bool, now: Optional[datetime] = None) -> bool:
         """Record an A2S result and return whether a restart is confirmed.
 
@@ -284,8 +255,8 @@ class ConnectionSession:
     def consume_hint(self) -> None:
         self.swarm_hint_pending = False
 
-    def interval_seconds(self, now: Optional[datetime] = None, swarm_hint: bool = False) -> float:
-        phase = self.select_phase(now, swarm_hint)
+    def interval_seconds(self, now: Optional[datetime] = None) -> float:
+        phase = self.select_phase(now)
         policy = PollingPolicy()
         if phase == ConnectionPhase.TURBO:
             return policy.turbo_seconds

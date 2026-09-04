@@ -71,6 +71,7 @@ WEB_STRING_KEYS = [
     "confirm_delete_server", "confirm_delete_server_ctx", "tg_status_linked_modal",
     "tg_user_fallback", "tg_copy_done", "no_servers_found",
     "bench_confirm_msg", "bench_warn_f5", "restore_pending",
+    "server_wipe_now", "server_wipe_countdown_label",
 ]
 
 
@@ -514,6 +515,10 @@ class WebBridge:
                 "rules": intel.rules if intel else "",
                 "rustmaps_url": raw_rustmaps_url,
                 "rustmaps_image_url": intel.rustmaps_image_url if intel else "",
+                # This server's own posted wipe schedule (from the shared
+                # listing cache), independent of the official force-wipe
+                # date - None when the catalogue doesn't know it.
+                "wipe_at": intel.wipe_at if intel else None,
                 "status": self._status_for(final_ip),
                 "is_favorite": is_fav,
                 "is_armed": is_armed,
