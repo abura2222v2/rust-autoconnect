@@ -93,10 +93,13 @@ _QUEUE_OBSERVATION_LIMIT_SECONDS = 3600.0
 # line, no visible attempt, as if the client silently dropped it (possibly a
 # client-side command cooldown). A fresh launch does not have this problem,
 # so only the "already running" redirect case gets a bounded number of
-# resends; spaced apart, not spammed, in case that guess about a cooldown is
-# right and a rapid resend would just be ignored too.
+# resends - each one gated on A2S actually seeing the server up (a resend
+# against a server that is mid-restart is a wasted attempt, also measured
+# live: both resends fired while the server was still down for a real wipe,
+# so the budget was already spent by the time it came back). Spaced apart,
+# not spammed, in case the cooldown guess above is right.
 _REDIRECT_RESEND_INTERVAL_SECONDS = 20.0
-_MAX_REDIRECT_RESENDS = 2
+_MAX_REDIRECT_RESENDS = 3
 
 
 def _log_confirms_connection(event: str, target: str, session: Optional[ConnectionSession]) -> bool:
@@ -308,11 +311,33 @@ class WebConnectController:
                         self.bridge._session_status = "idle"
                         self.bridge.broadcast("state_updated", self.bridge.get_state())
                         return
+                    obs_status = a2s_client.check_server_status(real_ip, port, session.stop_event)
+                    if not self._is_current(operation_id, session):
+                        return
+                    # A resend while the server is confirmed down is wasted -
+                    # measured live during a real wipe (2026-09-04): both
+                    # resends fired on a fixed timer while the server was
+                    # still restarting, so the budget was already spent by
+                    # the time it actually came back and could have joined.
+                    # Only resend when A2S says the server is reachable right
+                    # now, and fire the instant it flips from down to up
+                    # (the highest-value moment) rather than waiting out the
+                    # interval - the interval only paces the fallback case
+                    # where the server was never down at all but the client
+                    # still silently dropped the command.
+                    just_came_online = obs_status.alive and session.redirect_last_seen_alive is False
+                    session.redirect_last_seen_alive = obs_status.alive
                     if (
                         session.relaunch_was_already_running
                         and session.redirect_resend_count < _MAX_REDIRECT_RESENDS
-                        and session.last_launch_sent_at is not None
-                        and (time.monotonic() - session.last_launch_sent_at) >= _REDIRECT_RESEND_INTERVAL_SECONDS
+                        and obs_status.alive
+                        and (
+                            just_came_online
+                            or (
+                                session.last_launch_sent_at is not None
+                                and (time.monotonic() - session.last_launch_sent_at) >= _REDIRECT_RESEND_INTERVAL_SECONDS
+                            )
+                        )
                     ):
                         steam_service.dispatch_launch(canonical_target, config.STEAM_APP_ID)
                         session.last_launch_sent_at = time.monotonic()
@@ -325,9 +350,6 @@ class WebConnectController:
                             ),
                             level="info",
                         )
-                    obs_status = a2s_client.check_server_status(real_ip, port, session.stop_event)
-                    if not self._is_current(operation_id, session):
-                        return
                     rust_running = process_monitor.is_rust_running()
                     outcome = ("rust_open_" if rust_running else "launch_") + ("online" if obs_status.alive else "offline")
                     if outcome != last_probe_outcome:
@@ -542,6 +564,9 @@ class WebConnectController:
             session.relaunch_was_already_running = rust_already_running
             session.last_launch_sent_at = session.steam_request_started_at
             session.redirect_resend_count = 0
+            # We only ever dispatch when a prior check just confirmed the
+            # server reachable, so this is the true starting state.
+            session.redirect_last_seen_alive = True
             queue_suffix = i18n.t("log_launch_sent_queue_suffix") if queue_mode else ""
             sent_key = "log_connect_sent_rust_running" if rust_already_running else "log_launch_sent"
             self.bridge.log(i18n.t(sent_key) + queue_suffix, level="success")

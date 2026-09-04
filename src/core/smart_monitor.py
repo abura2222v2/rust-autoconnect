@@ -64,6 +64,11 @@ class ConnectionSession:
     relaunch_was_already_running: bool = False
     last_launch_sent_at: Optional[float] = None
     redirect_resend_count: int = 0
+    # True at dispatch time (the server was just confirmed reachable, or we
+    # would not have launched) - tracked afterwards so a resend can fire the
+    # instant A2S flips back from down to up, instead of on a blind timer
+    # that can fire while the server is still down and waste the attempt.
+    redirect_last_seen_alive: Optional[bool] = None
     target_connection_attempt_seen: bool = False
     queue_requested: bool = False
     menu_ready: bool = False

@@ -447,13 +447,54 @@ def test_redirect_into_already_running_rust_is_resent_if_unconfirmed(bridge, mon
     try:
         with patch("src.services.steam_service.os.startfile") as mock_startfile:
             # No log confirmation will ever arrive in this test - the engine
-            # must keep resending (bounded) rather than send just once.
+            # must keep resending (bounded) rather than send just once. The
+            # mock server stays alive throughout, so every tick is eligible.
             bridge.connect_engine.connect(f"127.0.0.1:{port}")
-            assert _wait_until(lambda: mock_startfile.call_count >= 3, timeout=15.0)
+            # Each resend can only be noticed once per 5s observation tick
+            # regardless of the interval override, so 3 resends need ~15-20s.
+            assert _wait_until(lambda: mock_startfile.call_count >= 4, timeout=25.0)
             # Bounded: it must not keep resending forever either.
             import time as _time
             _time.sleep(0.5)
-            assert mock_startfile.call_count == 3
+            assert mock_startfile.call_count == 4
+    finally:
+        server.stop()
+        bridge.connect_engine.stop(explicit=True)
+
+
+def test_redirect_resend_fires_the_instant_the_server_comes_back(bridge, monkeypatch):
+    """The bug behind a real missed wipe (2026-09-04): resends used to fire
+    on a fixed timer regardless of whether the server was actually reachable.
+    Live, both resends landed while the server was still down for the wipe,
+    so the whole budget was spent before it came back and could have joined.
+    A resend must never fire while A2S reports the server down, and must
+    fire promptly once it flips back up - not wait out the full interval."""
+    monkeypatch.setattr("src.web.connect_engine.process_monitor.is_rust_running", lambda: True)
+    # Deliberately long - if a resend appears well before this elapses, it
+    # can only be explained by the down-to-up transition, not the timer.
+    monkeypatch.setattr("src.web.connect_engine._REDIRECT_RESEND_INTERVAL_SECONDS", 30.0)
+    monkeypatch.setattr("src.web.connect_engine._OBSERVATION_LIMIT_SECONDS", 60.0)
+    server = MockA2SServer(players=1, max_players=10)
+    port = server.start()
+    server.requested_port = port  # so a later start() rebinds the same port
+    try:
+        with patch("src.services.steam_service.os.startfile") as mock_startfile:
+            bridge.connect_engine.connect(f"127.0.0.1:{port}")
+            assert _wait_until(lambda: mock_startfile.call_count >= 1, timeout=6.0)
+
+            # Simulate the server going down for a wipe. Give the observation
+            # loop several full ticks (5s cadence) to see it down.
+            server.stop()
+            import time as _time
+            _time.sleep(7.0)
+            assert mock_startfile.call_count == 1, "must not resend against a server A2S reports as down"
+
+            # Server comes back - a resend must follow quickly, well inside
+            # the 30s interval, proving the transition triggered it.
+            started_waiting = _time.monotonic()
+            server.start()
+            assert _wait_until(lambda: mock_startfile.call_count >= 2, timeout=10.0)
+            assert _time.monotonic() - started_waiting < 20.0
     finally:
         server.stop()
         bridge.connect_engine.stop(explicit=True)
