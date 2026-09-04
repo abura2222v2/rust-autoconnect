@@ -4,6 +4,7 @@
 !.env.example
 
 # AI agent configuration
+.claude/
 .agents/
 .gemini/
 .geminiignore
@@ -16,10 +17,14 @@ PROJECT.md
 README_RU.md
 SECURITY_SETUP_RU.md
 TEST_INFRA.md
+master_prompt.txt
 
 # User data created at runtime
 data.json
 history.json
+
+# Local manual-test diagnostics (logs, captured Player.log snapshots) - never push
+diagnostics/
 
 # Distribution output
 RustAutoConnect.exe
@@ -30,6 +35,7 @@ __pycache__/
 *$py.class
 .pytest_cache/
 .pytest_tmp*/
+.pytest_temp*/
 temp_pytest_run/
 *.egg-info/
 
