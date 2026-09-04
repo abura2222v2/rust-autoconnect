@@ -71,7 +71,7 @@ WEB_STRING_KEYS = [
     "confirm_delete_server", "confirm_delete_server_ctx", "tg_status_linked_modal",
     "tg_user_fallback", "tg_copy_done", "no_servers_found",
     "bench_confirm_msg", "bench_warn_f5", "restore_pending",
-    "server_wipe_now", "server_wipe_countdown_label",
+    "server_wipe_now", "server_wipe_countdown_label", "lang_wip_tooltip",
 ]
 
 

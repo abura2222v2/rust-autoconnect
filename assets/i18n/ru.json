@@ -136,6 +136,7 @@
   "ip_entry_placeholder": "IP:PORT (например, 127.0.0.1:28015)",
   "ip_input_placeholder": "IP:PORT (например, 127.0.0.1:28015)",
   "lang_lbl": "Язык (Language):",
+  "lang_wip_tooltip": "Язык в разработке",
   "last_connected_lbl": "Последнее подключение:",
   "last_connected_status": "Последнее подключение: {time}",
   "launch": "[>] Выполнение команды: {url}",

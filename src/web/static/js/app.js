@@ -195,13 +195,42 @@ class AppController {
   // ==========================================
   // SETTINGS PANEL
   // ==========================================
-  initSettings() {
-    const langSelect = document.getElementById('select-lang');
-    if (langSelect) {
-      langSelect.addEventListener('change', (e) => {
-        window.api.setLanguage(e.target.value);
+  // Custom dropdown for the language setting: a native <select> can't show a
+  // hover tooltip or a click message on a disabled <option>, and the
+  // work-in-progress languages need both (see CLAUDE.md - only RU/EN are
+  // kept translated; the rest stay visible but blurred and non-selectable).
+  initLangPicker() {
+    const picker = document.getElementById('lang-picker');
+    const btn = document.getElementById('lang-picker-btn');
+    const menu = document.getElementById('lang-picker-menu');
+    if (!picker || !btn || !menu) return;
+
+    btn.addEventListener('click', () => {
+      menu.style.display = menu.style.display === 'none' ? '' : 'none';
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!picker.contains(e.target)) menu.style.display = 'none';
+    });
+
+    menu.querySelectorAll('.lang-picker-option').forEach((option) => {
+      option.addEventListener('click', () => {
+        if (option.classList.contains('lang-picker-option--wip')) {
+          // Flash the "in development" message right on the row the player
+          // clicked, instead of silently doing nothing.
+          const original = option.textContent;
+          option.textContent = (window.STRINGS || {}).lang_wip_tooltip || 'Language in development';
+          setTimeout(() => { option.textContent = original; }, 1600);
+          return;
+        }
+        window.api.setLanguage(option.dataset.lang);
+        menu.style.display = 'none';
       });
-    }
+    });
+  }
+
+  initSettings() {
+    this.initLangPicker();
 
     const trayToggle = document.getElementById('chk-tray');
     if (trayToggle) {
@@ -301,8 +330,13 @@ class AppController {
     }
 
     if (state.lang) {
-      const langSel = document.getElementById('select-lang');
-      if (langSel) langSel.value = state.lang;
+      const menu = document.getElementById('lang-picker-menu');
+      const currentLabel = document.getElementById('lang-picker-current');
+      if (menu) {
+        const active = menu.querySelector(`.lang-picker-option[data-lang="${state.lang}"]`);
+        menu.querySelectorAll('.lang-picker-option').forEach((opt) => opt.classList.toggle('active', opt === active));
+        if (active && currentLabel) currentLabel.textContent = active.dataset.label;
+      }
     }
 
     // Apply Rust Status (3-State Dot)

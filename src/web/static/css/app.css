@@ -953,6 +953,54 @@ input:checked + .checkbox-slider::before {
   cursor: pointer;
 }
 
+/* Custom language picker - a native <select> can't show a tooltip or a
+   click message on a disabled <option>, so the work-in-progress languages
+   need a real (div-based) dropdown instead. */
+.lang-picker {
+  position: relative;
+}
+.lang-picker-btn {
+  min-width: 170px;
+  text-align: left;
+}
+.lang-picker-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: #1A1E27;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  z-index: 300;
+  min-width: 170px;
+}
+.lang-picker-option {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+  transition: background-color 0.12s;
+}
+.lang-picker-option:hover {
+  background-color: var(--accent);
+  color: #FFFFFF;
+}
+.lang-picker-option.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+.lang-picker-option--wip {
+  filter: blur(1.2px) grayscale(60%);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lang-picker-option--wip:hover {
+  background-color: transparent;
+  color: var(--text);
+}
+
 /* Leaderboard Ranking Table */
 .ranking-table {
   width: 100%;

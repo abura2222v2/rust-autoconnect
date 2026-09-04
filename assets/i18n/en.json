@@ -136,6 +136,7 @@
   "ip_entry_placeholder": "IP:PORT (e.g. 127.0.0.1:28015)",
   "ip_input_placeholder": "IP:PORT (e.g. 127.0.0.1:28015)",
   "lang_lbl": "Language:",
+  "lang_wip_tooltip": "Language in development",
   "last_connected_lbl": "Last Connected:",
   "last_connected_status": "Last connection: {time}",
   "launch": "[>] Executing command: {url}",

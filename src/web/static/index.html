@@ -289,15 +289,23 @@
             <div class="setting-title" data-i18n="setting_lang_title">Язык интерфейса</div>
             <div class="setting-desc" data-i18n="setting_lang_desc">Выберите предпочтительный язык для всех надписей</div>
           </div>
-          <select id="select-lang" class="select-box">
-            <option value="RU">Русский (RU)</option>
-            <option value="EN">English (EN)</option>
-            <option value="UK">Українська (UK)</option>
-            <option value="DE">Deutsch (DE)</option>
-            <option value="FR">Français (FR)</option>
-            <option value="ES">Español (ES)</option>
-            <option value="ZH">中文 (ZH)</option>
-          </select>
+          <div class="lang-picker" id="lang-picker">
+            <button type="button" id="lang-picker-btn" class="select-box lang-picker-btn">
+              <span id="lang-picker-current">Русский (RU)</span>
+            </button>
+            <div id="lang-picker-menu" class="lang-picker-menu" style="display:none;">
+              <div class="lang-picker-option" data-lang="RU" data-label="Русский (RU)">Русский (RU)</div>
+              <div class="lang-picker-option" data-lang="EN" data-label="English (EN)">English (EN)</div>
+              <!-- Only RU/EN are actively maintained (see CLAUDE.md) - the rest
+                   stay visible so players can see the language exists, but
+                   blurred and non-selectable until translated. -->
+              <div class="lang-picker-option lang-picker-option--wip" data-lang="UK" data-label="Українська (UK)" data-i18n-title="lang_wip_tooltip" title="Language in development">Українська (UK)</div>
+              <div class="lang-picker-option lang-picker-option--wip" data-lang="DE" data-label="Deutsch (DE)" data-i18n-title="lang_wip_tooltip" title="Language in development">Deutsch (DE)</div>
+              <div class="lang-picker-option lang-picker-option--wip" data-lang="FR" data-label="Français (FR)" data-i18n-title="lang_wip_tooltip" title="Language in development">Français (FR)</div>
+              <div class="lang-picker-option lang-picker-option--wip" data-lang="ES" data-label="Español (ES)" data-i18n-title="lang_wip_tooltip" title="Language in development">Español (ES)</div>
+              <div class="lang-picker-option lang-picker-option--wip" data-lang="ZH" data-label="中文 (ZH)" data-i18n-title="lang_wip_tooltip" title="Language in development">中文 (ZH)</div>
+            </div>
+          </div>
         </div>
 
         <!-- Tray -->
